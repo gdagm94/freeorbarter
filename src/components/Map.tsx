@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Circle, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Circle, useMap, Marker } from 'react-leaflet';
 import { OpenStreetMapProvider } from 'leaflet-geosearch';
 import { Search } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
@@ -15,24 +15,72 @@ L.Icon.Default.mergeOptions({
 
 interface MapProps {
   onRadiusChange: (radius: number) => void;
-  onLocationChange: (lat: number, lng: number) => void;
+  onLocationSelect: (location: {
+    label: string;
+    city: string;
+    state: string;
+    zipcode: string;
+    latitude: number;
+    longitude: number;
+  }) => void;
+  selectedLocation?: {
+    latitude: number;
+    longitude: number;
+  };
 }
 
-function SearchControl({ onLocationChange }: { onLocationChange: (lat: number, lng: number) => void }) {
+function SearchControl({ onLocationSelect }: { 
+  onLocationSelect: MapProps['onLocationSelect']
+}) {
   const map = useMap();
   const provider = new OpenStreetMapProvider();
   const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSearch = async () => {
+    if (!searchQuery.trim()) return;
+
     try {
-      const results = await provider.search({ query: searchQuery });
-      if (results.length > 0) {
-        const { x, y } = results[0];
-        map.setView([y, x], 13);
-        onLocationChange(y, x);
+      setLoading(true);
+      setError(null);
+      const results = await provider.search({ query: searchQuery + ' USA' });
+      
+      if (results.length === 0) {
+        setError('No locations found');
+        return;
       }
+
+      const result = results[0];
+      const { x, y, raw } = result;
+      
+      // Extract address components
+      const address = raw.address || {};
+      const city = address.city || address.town || address.village || address.municipality || '';
+      const state = address.state || '';
+      const zipcode = address.postcode || '';
+
+      if (!city || !state) {
+        setError('Could not find complete address information');
+        return;
+      }
+
+      const label = `${city}, ${state}${zipcode ? ` ${zipcode}` : ''}`;
+      
+      map.setView([y, x], 13);
+      onLocationSelect({
+        label,
+        city,
+        state,
+        zipcode,
+        latitude: y,
+        longitude: x
+      });
     } catch (error) {
       console.error('Search failed:', error);
+      setError('Search failed. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -43,22 +91,36 @@ function SearchControl({ onLocationChange }: { onLocationChange: (lat: number, l
           <input
             type="text"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setError(null);
+            }}
             onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
             placeholder="Search location..."
             className="w-64 pl-10 pr-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white shadow-md"
           />
-          <Search 
-            className="absolute left-3 top-2.5 text-gray-400 w-5 h-5 cursor-pointer" 
-            onClick={handleSearch}
-          />
+          {loading ? (
+            <div className="absolute left-3 top-2.5">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-600"></div>
+            </div>
+          ) : (
+            <Search 
+              className="absolute left-3 top-2.5 text-gray-400 w-5 h-5 cursor-pointer" 
+              onClick={handleSearch}
+            />
+          )}
         </div>
+        {error && (
+          <div className="mt-1 text-sm text-red-600 bg-white px-2 py-1 rounded shadow-sm">
+            {error}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-export function Map({ onRadiusChange, onLocationChange }: MapProps) {
+export function Map({ onRadiusChange, onLocationSelect, selectedLocation }: MapProps) {
   const [radius, setRadius] = useState(10);
   const [center, setCenter] = useState<[number, number]>([51.505, -0.09]); // Default to London
 
@@ -68,14 +130,43 @@ export function Map({ onRadiusChange, onLocationChange }: MapProps) {
         (position) => {
           const { latitude, longitude } = position.coords;
           setCenter([latitude, longitude]);
-          onLocationChange(latitude, longitude);
+          // Only call onLocationSelect if we don't have a selected location
+          if (!selectedLocation) {
+            // Reverse geocode to get address details
+            fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`)
+              .then(response => response.json())
+              .then(data => {
+                const address = data.address || {};
+                const city = address.city || address.town || address.village || address.municipality || '';
+                const state = address.state || '';
+                const zipcode = address.postcode || '';
+                
+                if (city && state) {
+                  onLocationSelect({
+                    label: `${city}, ${state}${zipcode ? ` ${zipcode}` : ''}`,
+                    city,
+                    state,
+                    zipcode,
+                    latitude,
+                    longitude
+                  });
+                }
+              })
+              .catch(error => console.error('Error reverse geocoding:', error));
+          }
         },
         () => {
           console.log('Error: The Geolocation service failed.');
         }
       );
     }
-  }, [onLocationChange]);
+  }, [onLocationSelect, selectedLocation]);
+
+  useEffect(() => {
+    if (selectedLocation) {
+      setCenter([selectedLocation.latitude, selectedLocation.longitude]);
+    }
+  }, [selectedLocation]);
 
   const handleRadiusChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newRadius = parseInt(e.target.value);
@@ -113,7 +204,10 @@ export function Map({ onRadiusChange, onLocationChange }: MapProps) {
             radius={radius * 1000}
             pathOptions={{ color: 'blue', fillColor: 'blue', fillOpacity: 0.1 }}
           />
-          <SearchControl onLocationChange={onLocationChange} />
+          {selectedLocation && (
+            <Marker position={[selectedLocation.latitude, selectedLocation.longitude]} />
+          )}
+          <SearchControl onLocationSelect={onLocationSelect} />
         </MapContainer>
       </div>
     </div>

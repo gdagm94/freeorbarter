@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ImageUpload } from '../components/ImageUpload';
 import { LocationSearch } from '../components/LocationSearch';
+import { Map } from '../components/Map';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { CheckCircle2 } from 'lucide-react';
+import { validateLocationData } from '../utils/validation';
 
 interface LocationData {
   label: string;
@@ -32,6 +34,7 @@ function NewListing() {
   const [success, setSuccess] = useState(false);
   const [createdItemId, setCreatedItemId] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(5);
+  const [searchRadius, setSearchRadius] = useState(10);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -54,6 +57,13 @@ function NewListing() {
     }
     if (!selectedLocation) {
       setError('Please select a valid location');
+      return;
+    }
+
+    // Validate location data
+    const locationValidation = validateLocationData(selectedLocation);
+    if (!locationValidation.isValid) {
+      setError(locationValidation.error || 'Invalid location data');
       return;
     }
     
@@ -254,10 +264,17 @@ function NewListing() {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Location <span className="text-red-500">*</span>
             </label>
-            <LocationSearch
-              onLocationSelect={setSelectedLocation}
-              placeholder="Enter city, state, or ZIP code"
-            />
+            <div className="space-y-4">
+              <LocationSearch
+                onLocationSelect={setSelectedLocation}
+                placeholder="Enter city, state, or ZIP code"
+              />
+              <Map
+                onRadiusChange={setSearchRadius}
+                onLocationSelect={setSelectedLocation}
+                selectedLocation={selectedLocation || undefined}
+              />
+            </div>
           </div>
 
           <button
