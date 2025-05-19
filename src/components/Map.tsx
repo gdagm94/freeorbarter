@@ -130,11 +130,17 @@ export function Map({ onRadiusChange, onLocationSelect, selectedLocation }: MapP
         (position) => {
           const { latitude, longitude } = position.coords;
           setCenter([latitude, longitude]);
+          
           // Only call onLocationSelect if we don't have a selected location
-          if (!selectedLocation) {
+          if (!selectedLocation && typeof onLocationSelect === 'function') {
             // Reverse geocode to get address details
             fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`)
-              .then(response => response.json())
+              .then(response => {
+                if (!response.ok) {
+                  throw new Error('Network response was not ok');
+                }
+                return response.json();
+              })
               .then(data => {
                 const address = data.address || {};
                 const city = address.city || address.town || address.village || address.municipality || '';
@@ -152,11 +158,15 @@ export function Map({ onRadiusChange, onLocationSelect, selectedLocation }: MapP
                   });
                 }
               })
-              .catch(error => console.error('Error reverse geocoding:', error));
+              .catch(error => {
+                console.error('Error reverse geocoding:', error);
+                // Handle the error gracefully - the map will still show but without location details
+              });
           }
         },
-        () => {
-          console.log('Error: The Geolocation service failed.');
+        (error) => {
+          console.error('Geolocation error:', error);
+          // Handle geolocation error gracefully
         }
       );
     }
