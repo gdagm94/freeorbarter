@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ImageUpload } from '../components/ImageUpload';
 import { LocationSearch } from '../components/LocationSearch';
+import { Map } from '../components/Map';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { CheckCircle2 } from 'lucide-react';
@@ -32,6 +33,8 @@ function NewListing() {
   const [success, setSuccess] = useState(false);
   const [createdItemId, setCreatedItemId] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(5);
+  const [showMap, setShowMap] = useState(false);
+  const [searchRadius, setSearchRadius] = useState(10);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -45,17 +48,38 @@ function NewListing() {
     return () => clearInterval(timer);
   }, [success, countdown, createdItemId, navigate]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) return;
+  const validateForm = (): boolean => {
     if (images.length === 0) {
       setError('Please upload at least one image');
-      return;
+      return false;
     }
     if (!selectedLocation) {
       setError('Please select a valid location');
-      return;
+      return false;
     }
+    if (!formData.title.trim()) {
+      setError('Please enter a title');
+      return false;
+    }
+    if (!formData.description.trim()) {
+      setError('Please enter a description');
+      return false;
+    }
+    if (!formData.condition) {
+      setError('Please select a condition');
+      return false;
+    }
+    if (!formData.category) {
+      setError('Please select a category');
+      return false;
+    }
+    return true;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    if (!validateForm()) return;
     
     setLoading(true);
     setError(null);
@@ -71,7 +95,7 @@ function NewListing() {
             condition: formData.condition,
             category: formData.category,
             user_id: user.id,
-            location: `${selectedLocation.city}, ${selectedLocation.state}`,
+            location: selectedLocation.label,
             latitude: selectedLocation.latitude,
             longitude: selectedLocation.longitude,
             type: listingType,
@@ -93,6 +117,11 @@ function NewListing() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleLocationSelect = (location: LocationData) => {
+    setSelectedLocation(location);
+    setShowMap(true);
   };
 
   // Success message display
@@ -255,10 +284,23 @@ function NewListing() {
               Location <span className="text-red-500">*</span>
             </label>
             <LocationSearch
-              onLocationSelect={setSelectedLocation}
+              onLocationSelect={handleLocationSelect}
               placeholder="Enter city, state, or ZIP code"
             />
           </div>
+
+          {showMap && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Refine Location
+              </label>
+              <Map
+                onLocationSelect={handleLocationSelect}
+                onRadiusChange={setSearchRadius}
+                initialLocation={selectedLocation}
+              />
+            </div>
+          )}
 
           <button
             type="submit"
