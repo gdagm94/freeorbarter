@@ -34,3 +34,5 @@ const fetchItems = async () => {
     setLoading(false);
   }
 };
+
+export default fetchItems
