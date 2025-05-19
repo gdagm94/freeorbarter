@@ -1,45 +1,72 @@
-import React, { useState, useEffect } from 'react';
-import { Search } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Search, AlertCircle, MapPin } from 'lucide-react';
 import { debounce } from 'throttle-debounce';
 
+interface LocationData {
+  label: string;
+  city: string;
+  state: string;
+  zipcode: string;
+  latitude: number;
+  longitude: number;
+  confidence?: number; // Adding confidence score
+}
+
 interface LocationSearchProps {
-  onLocationSelect: (location: {
-    label: string;
-    city: string;
-    state: string;
-    zipcode: string;
-    latitude: number;
-    longitude: number;
-  }) => void;
+  onLocationSelect: (location: LocationData) => void;
   initialValue?: string;
   placeholder?: string;
 }
 
-export function LocationSearch({ onLocationSelect, initialValue = '', placeholder = 'Enter location...' }: LocationSearchProps) {
+export function LocationSearch({ 
+  onLocationSelect, 
+  initialValue = '', 
+  placeholder = 'Enter location...' 
+}: LocationSearchProps) {
   const [searchQuery, setSearchQuery] = useState(initialValue);
-  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [suggestions, setSuggestions] = useState<LocationData[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState<LocationData | null>(null);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setSearchQuery(initialValue);
   }, [initialValue]);
 
-  // Debounced search function to prevent too many API calls
+  useEffect(() => {
+    // Handle clicks outside the component to close suggestions
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // Improved search function with better error handling and validation
   const debouncedSearch = debounce(500, async (input: string) => {
     if (!input.trim()) {
       setSuggestions([]);
       setShowSuggestions(false);
+      setError(null);
+      setWarning(null);
       return;
     }
 
     setLoading(true);
     setError(null);
+    setWarning(null);
 
     try {
       // Special handling for ZIP codes
-      const zipCodeRegex = /^\d{5}$/;
+      const zipCodeRegex = /^\d{5}(-\d{4})?$/;
       const isZipCode = zipCodeRegex.test(input.trim());
       
       if (!isZipCode && input.length < 3) {
@@ -55,13 +82,13 @@ export function LocationSearch({ onLocationSelect, initialValue = '', placeholde
         addressdetails: '1',
         'accept-language': 'en',
         countrycodes: 'us',
-        limit: '10'
+        limit: '15' // Increased from 10 to get more options
       });
 
       if (isZipCode) {
         params.set('postalcode', input);
       } else {
-        params.set('q', input);
+        params.set('q', input + ' USA'); // Add USA to improve results for US locations
       }
 
       const response = await fetch(
@@ -79,42 +106,37 @@ export function LocationSearch({ onLocationSelect, initialValue = '', placeholde
 
       const results = await response.json();
 
-      // Process and format the results
+      // Better processing and validation of results
       const formattedResults = results
         .map((result: any) => {
           const address = result.address || {};
           
           // Extract city, state, and ZIP from the address data
-          const city = address.city || address.town || address.village || address.municipality || '';
-          const state = address.state || '';
+          // Improved handling of different address formats
+          const city = address.city || address.town || address.village || address.hamlet || 
+                      address.municipality || address.suburb || '';
+          const state = address.state || address.province || '';
           const zipcode = address.postcode || '';
           
-          // For ZIP code searches, prioritize exact matches
-          if (isZipCode && zipcode !== input) {
+          // Skip invalid entries but don't filter too aggressively
+          if ((!city && !state) || !zipcode) {
             return null;
           }
           
-          // Only include results with all required fields
-          if (!city || !state || !zipcode) {
-            return null;
-          }
-          
-          // Format the display label
-          const parts = [];
-          if (address.neighbourhood) {
-            parts.push(address.neighbourhood);
-          }
-          if (city) {
-            parts.push(city);
-          }
-          if (state) {
-            parts.push(state);
-          }
-          if (zipcode) {
-            parts.push(zipcode);
-          }
-          
-          const label = parts.join(', ');
+          // Format the display label with more info for clarity
+          const label = [
+            city,
+            state,
+            zipcode,
+            address.country === 'United States' ? '' : address.country
+          ].filter(Boolean).join(', ');
+
+          // Calculate a confidence score based on completeness and match quality
+          let confidence = 0;
+          if (city) confidence += 0.3;
+          if (state) confidence += 0.3;
+          if (zipcode) confidence += 0.4;
+          if (isZipCode && zipcode === input) confidence = 1; // Exact ZIP match
 
           return {
             label,
@@ -123,34 +145,35 @@ export function LocationSearch({ onLocationSelect, initialValue = '', placeholde
             zipcode,
             latitude: parseFloat(result.lat),
             longitude: parseFloat(result.lon),
-            raw: address,
-            // Add a score for sorting
-            score: isZipCode ? (zipcode === input ? 1 : 0) : 1
+            confidence
           };
         })
-        .filter((result): result is NonNullable<typeof result> => result !== null)
-        // Sort results to prioritize exact ZIP matches and more complete addresses
+        .filter((result): result is LocationData => result !== null)
+        // Sort results with improved logic
         .sort((a, b) => {
-          // First, sort by score (ZIP match)
-          if (a.score !== b.score) {
-            return b.score - a.score;
+          // First by confidence
+          if (a.confidence !== b.confidence) {
+            return b.confidence - a.confidence;
           }
+          
           // Then by completeness of address
-          const aComplete = Object.keys(a.raw).length;
-          const bComplete = Object.keys(b.raw).length;
+          const aComplete = (a.city ? 1 : 0) + (a.state ? 1 : 0) + (a.zipcode ? 1 : 0);
+          const bComplete = (b.city ? 1 : 0) + (b.state ? 1 : 0) + (b.zipcode ? 1 : 0);
           return bComplete - aComplete;
         });
 
       setSuggestions(formattedResults);
       setShowSuggestions(formattedResults.length > 0);
       
-      // If no results found for ZIP code
-      if (isZipCode && formattedResults.length === 0) {
-        setError('No location found for this ZIP code. Please try another or enter a city name.');
+      // Improved feedback for the user
+      if (formattedResults.length === 0) {
+        setError('No locations found. Please try a different search term or format.');
+      } else if (formattedResults.length > 0 && formattedResults[0].confidence < 0.7) {
+        setWarning('Location might not be precise. Please select the best match from the list.');
       }
     } catch (err) {
       console.error('Error fetching location suggestions:', err);
-      setError('Unable to fetch location suggestions. Please try again.');
+      setError('Unable to fetch location suggestions. Please try again or enter location manually.');
       setSuggestions([]);
     } finally {
       setLoading(false);
@@ -160,29 +183,36 @@ export function LocationSearch({ onLocationSelect, initialValue = '', placeholde
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchQuery(value);
+    setSelectedLocation(null);
     debouncedSearch(value);
   };
 
-  const handleSuggestionClick = (suggestion: any) => {
+  const handleSuggestionClick = (suggestion: LocationData) => {
     setSearchQuery(suggestion.label);
+    setSelectedLocation(suggestion);
     setShowSuggestions(false);
     onLocationSelect(suggestion);
+    
+    // Clear any errors/warnings when a location is selected
+    setError(null);
+    setWarning(null);
   };
 
   return (
-    <div className="relative">
+    <div className="relative" ref={searchContainerRef}>
       <div className="relative">
         <input
           type="text"
           value={searchQuery}
           onChange={handleInputChange}
-          onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
-          onBlur={() => {
-            // Delay hiding suggestions to allow for clicks
-            setTimeout(() => setShowSuggestions(false), 200);
+          onFocus={() => {
+            if (suggestions.length > 0 && !selectedLocation) {
+              setShowSuggestions(true);
+            }
           }}
           placeholder={placeholder}
-          className="w-full rounded-lg border border-gray-300 pl-10 pr-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          className={`w-full rounded-lg border ${error ? 'border-red-300' : warning ? 'border-yellow-300' : 'border-gray-300'} pl-10 pr-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent`}
+          aria-invalid={!!error}
         />
         <Search className="absolute left-3 top-2.5 text-gray-400 w-5 h-5" />
         {loading && (
@@ -193,8 +223,16 @@ export function LocationSearch({ onLocationSelect, initialValue = '', placeholde
       </div>
       
       {error && (
-        <div className="mt-1 text-sm text-red-600">
+        <div className="mt-1 text-sm text-red-600 flex items-center">
+          <AlertCircle className="w-4 h-4 mr-1" />
           {error}
+        </div>
+      )}
+      
+      {warning && !error && (
+        <div className="mt-1 text-sm text-yellow-600 flex items-center">
+          <AlertCircle className="w-4 h-4 mr-1" />
+          {warning}
         </div>
       )}
       
@@ -205,16 +243,37 @@ export function LocationSearch({ onLocationSelect, initialValue = '', placeholde
               key={index}
               type="button"
               onClick={() => handleSuggestionClick(suggestion)}
-              className="w-full text-left px-4 py-2 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none first:rounded-t-lg last:rounded-b-lg"
+              className="w-full text-left px-4 py-2 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-gray-100 last:border-0"
             >
-              <div className="font-medium">{suggestion.label}</div>
-              {suggestion.raw.neighbourhood && (
-                <div className="text-sm text-gray-500">
-                  Neighborhood: {suggestion.raw.neighbourhood}
+              <div className="flex items-start">
+                <MapPin className="w-4 h-4 mt-0.5 mr-2 text-gray-500 flex-shrink-0" />
+                <div>
+                  <div className="font-medium">{suggestion.label}</div>
+                  <div className="text-xs text-gray-500 mt-0.5">
+                    {suggestion.confidence >= 0.9 
+                      ? 'Exact match' 
+                      : suggestion.confidence >= 0.7 
+                        ? 'Good match' 
+                        : 'Possible match'}
+                  </div>
                 </div>
-              )}
+              </div>
             </button>
           ))}
+        </div>
+      )}
+      
+      {selectedLocation && (
+        <div className="mt-2 text-xs text-gray-500">
+          <div className="flex items-center">
+            <MapPin className="w-3.5 h-3.5 mr-1 text-gray-400" />
+            <span>Selected: {selectedLocation.label}</span>
+          </div>
+          <div className="mt-1 pl-5">
+            <div>City: {selectedLocation.city || 'Not available'}</div>
+            <div>State: {selectedLocation.state || 'Not available'}</div>
+            <div>ZIP: {selectedLocation.zipcode || 'Not available'}</div>
+          </div>
         </div>
       )}
     </div>
