@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .nav-link {
+    @apply flex items-center space-x-1 text-gray-600 hover:text-indigo-600 transition-colors;
+  }
+  
+  .btn-primary {
+    @apply bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors;
+  }
+  
+  .btn-secondary {
+    @apply bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors;
+  }
+}
+
+/* Leaflet styles */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+}
