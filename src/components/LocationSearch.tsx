@@ -9,7 +9,7 @@ interface LocationData {
   zipcode: string;
   latitude: number;
   longitude: number;
-  confidence?: number; // Adding confidence score
+  confidence?: number;
 }
 
 interface LocationSearchProps {
