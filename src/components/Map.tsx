@@ -27,6 +27,33 @@ interface MapProps {
     latitude: number;
     longitude: number;
   };
+  onMarkerDrag?: (lat: number, lng: number) => void;
+}
+
+function DraggableMarker({ position, onDragEnd }: { 
+  position: [number, number];
+  onDragEnd?: (lat: number, lng: number) => void;
+}) {
+  const [markerPosition, setMarkerPosition] = useState(position);
+
+  useEffect(() => {
+    setMarkerPosition(position);
+  }, [position]);
+
+  return (
+    <Marker
+      position={markerPosition}
+      draggable={true}
+      eventHandlers={{
+        dragend: (e) => {
+          const marker = e.target;
+          const pos = marker.getLatLng();
+          setMarkerPosition([pos.lat, pos.lng]);
+          onDragEnd?.(pos.lat, pos.lng);
+        },
+      }}
+    />
+  );
 }
 
 function SearchControl({ onLocationSelect }: { 
@@ -120,7 +147,7 @@ function SearchControl({ onLocationSelect }: {
   );
 }
 
-export function Map({ onRadiusChange, onLocationSelect, selectedLocation }: MapProps) {
+export function Map({ onRadiusChange, onLocationSelect, selectedLocation, onMarkerDrag }: MapProps) {
   const [radius, setRadius] = useState(10);
   const [center, setCenter] = useState<[number, number]>([51.505, -0.09]); // Default to London
 
@@ -215,7 +242,10 @@ export function Map({ onRadiusChange, onLocationSelect, selectedLocation }: MapP
             pathOptions={{ color: 'blue', fillColor: 'blue', fillOpacity: 0.1 }}
           />
           {selectedLocation && (
-            <Marker position={[selectedLocation.latitude, selectedLocation.longitude]} />
+            <DraggableMarker 
+              position={[selectedLocation.latitude, selectedLocation.longitude]}
+              onDragEnd={onMarkerDrag}
+            />
           )}
           <SearchControl onLocationSelect={onLocationSelect} />
         </MapContainer>

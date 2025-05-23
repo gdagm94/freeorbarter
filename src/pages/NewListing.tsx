@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ImageUpload } from '../components/ImageUpload';
 import { LocationSearch } from '../components/LocationSearch';
+import { Map } from '../components/Map';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, MapPin } from 'lucide-react';
 import { validateLocationData } from '../utils/validation';
 
 interface LocationData {
@@ -33,6 +34,8 @@ function NewListing() {
   const [success, setSuccess] = useState(false);
   const [createdItemId, setCreatedItemId] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(5);
+  const [searchRadius, setSearchRadius] = useState(10);
+  const [useCurrentLocation, setUseCurrentLocation] = useState(false);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -45,6 +48,56 @@ function NewListing() {
     }
     return () => clearInterval(timer);
   }, [success, countdown, createdItemId, navigate]);
+
+  useEffect(() => {
+    if (useCurrentLocation && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const { latitude, longitude } = position.coords;
+          try {
+            const response = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+            );
+            const data = await response.json();
+            const address = data.address || {};
+            
+            const location: LocationData = {
+              label: `${address.city || address.town}, ${address.state}`,
+              city: address.city || address.town || '',
+              state: address.state || '',
+              zipcode: address.postcode || '',
+              latitude,
+              longitude
+            };
+            
+            setSelectedLocation(location);
+          } catch (error) {
+            console.error('Error getting location details:', error);
+            setError('Could not get your current location details');
+          }
+        },
+        (error) => {
+          console.error('Geolocation error:', error);
+          setError('Could not get your current location');
+          setUseCurrentLocation(false);
+        }
+      );
+    }
+  }, [useCurrentLocation]);
+
+  const handleLocationSelect = (location: LocationData) => {
+    setSelectedLocation(location);
+  };
+
+  const handleMarkerDrag = (lat: number, lng: number) => {
+    if (selectedLocation) {
+      setSelectedLocation({
+        ...selectedLocation,
+        latitude: lat,
+        longitude: lng
+      });
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -262,10 +315,28 @@ function NewListing() {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Location <span className="text-red-500">*</span>
             </label>
-            <LocationSearch
-              onLocationSelect={setSelectedLocation}
-              placeholder="Enter city, state, or ZIP code"
-            />
+            <div className="space-y-4">
+              <LocationSearch
+                onLocationSelect={handleLocationSelect}
+                placeholder="Enter city, state, or ZIP code"
+              />
+              
+              <button
+                type="button"
+                onClick={() => setUseCurrentLocation(true)}
+                className="flex items-center text-sm text-indigo-600 hover:text-indigo-800"
+              >
+                <MapPin className="w-4 h-4 mr-1" />
+                Use my current location
+              </button>
+
+              <Map
+                onRadiusChange={setSearchRadius}
+                onLocationSelect={handleLocationSelect}
+                selectedLocation={selectedLocation || undefined}
+                onMarkerDrag={handleMarkerDrag}
+              />
+            </div>
           </div>
 
           <button
