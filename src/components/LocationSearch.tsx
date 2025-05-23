@@ -21,7 +21,7 @@ interface LocationSearchProps {
 export function LocationSearch({ 
   onLocationSelect, 
   initialValue = '', 
-  placeholder = 'Enter location...' 
+  placeholder = 'Enter city, state or ZIP code...' 
 }: LocationSearchProps) {
   const [searchQuery, setSearchQuery] = useState(initialValue);
   const [suggestions, setSuggestions] = useState<LocationData[]>([]);
