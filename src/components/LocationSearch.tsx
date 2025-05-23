@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, AlertCircle, MapPin } from 'lucide-react';
+import { Search, AlertCircle, MapPin, RotateCcw, PenSquare } from 'lucide-react';
 import { debounce } from 'throttle-debounce';
 
 interface LocationData {
@@ -18,6 +18,27 @@ interface LocationSearchProps {
   placeholder?: string;
 }
 
+const CACHE_PREFIX = 'location_search_';
+const CACHE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
+const MAX_RETRIES = 3;
+const INITIAL_RETRY_DELAY = 100; // ms
+
+const stateAbbreviations: { [key: string]: string } = {
+  'AL': 'Alabama', 'AK': 'Alaska', 'AZ': 'Arizona', 'AR': 'Arkansas',
+  'CA': 'California', 'CO': 'Colorado', 'CT': 'Connecticut', 'DE': 'Delaware',
+  'FL': 'Florida', 'GA': 'Georgia', 'HI': 'Hawaii', 'ID': 'Idaho',
+  'IL': 'Illinois', 'IN': 'Indiana', 'IA': 'Iowa', 'KS': 'Kansas',
+  'KY': 'Kentucky', 'LA': 'Louisiana', 'ME': 'Maine', 'MD': 'Maryland',
+  'MA': 'Massachusetts', 'MI': 'Michigan', 'MN': 'Minnesota', 'MS': 'Mississippi',
+  'MO': 'Missouri', 'MT': 'Montana', 'NE': 'Nebraska', 'NV': 'Nevada',
+  'NH': 'New Hampshire', 'NJ': 'New Jersey', 'NM': 'New Mexico', 'NY': 'New York',
+  'NC': 'North Carolina', 'ND': 'North Dakota', 'OH': 'Ohio', 'OK': 'Oklahoma',
+  'OR': 'Oregon', 'PA': 'Pennsylvania', 'RI': 'Rhode Island', 'SC': 'South Carolina',
+  'SD': 'South Dakota', 'TN': 'Tennessee', 'TX': 'Texas', 'UT': 'Utah',
+  'VT': 'Vermont', 'VA': 'Virginia', 'WA': 'Washington', 'WV': 'West Virginia',
+  'WI': 'Wisconsin', 'WY': 'Wyoming'
+};
+
 export function LocationSearch({ 
   onLocationSelect, 
   initialValue = '', 
@@ -30,14 +51,20 @@ export function LocationSearch({
   const [warning, setWarning] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<LocationData | null>(null);
+  const [showManualEntry, setShowManualEntry] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const searchContainerRef = useRef<HTMLDivElement>(null);
+  const [manualFormData, setManualFormData] = useState({
+    city: '',
+    state: '',
+    zipcode: ''
+  });
 
   useEffect(() => {
     setSearchQuery(initialValue);
   }, [initialValue]);
 
   useEffect(() => {
-    // Handle clicks outside the component to close suggestions
     const handleClickOutside = (event: MouseEvent) => {
       if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
         setShowSuggestions(false);
@@ -50,9 +77,77 @@ export function LocationSearch({
     };
   }, []);
 
-  // Improved search function with better error handling and validation
+  const getCachedResults = (query: string): LocationData[] | null => {
+    const cached = localStorage.getItem(CACHE_PREFIX + query);
+    if (cached) {
+      const { data, timestamp } = JSON.parse(cached);
+      if (Date.now() - timestamp < CACHE_EXPIRY) {
+        return data;
+      }
+      localStorage.removeItem(CACHE_PREFIX + query);
+    }
+    return null;
+  };
+
+  const setCachedResults = (query: string, data: LocationData[]) => {
+    localStorage.setItem(CACHE_PREFIX + query, JSON.stringify({
+      data,
+      timestamp: Date.now()
+    }));
+  };
+
+  const normalizeInput = (input: string): string => {
+    // Remove extra spaces and trim
+    let normalized = input.replace(/\s+/g, ' ').trim();
+
+    // Check for state abbreviation
+    const stateRegex = /,?\s*([A-Z]{2})$/i;
+    const match = normalized.match(stateRegex);
+    if (match && stateAbbreviations[match[1].toUpperCase()]) {
+      normalized = normalized.replace(
+        stateRegex,
+        `, ${stateAbbreviations[match[1].toUpperCase()]}`
+      );
+    }
+
+    return normalized;
+  };
+
+  const searchWithRetry = async (input: string, retryCount = 0): Promise<any> => {
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?${input}&format=json`,
+        {
+          headers: {
+            'User-Agent': 'FreeorBarter/1.0'
+          }
+        }
+      );
+
+      if (response.status === 429) {
+        if (retryCount < MAX_RETRIES) {
+          const delay = INITIAL_RETRY_DELAY * Math.pow(2, retryCount);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          return searchWithRetry(input, retryCount + 1);
+        }
+        throw new Error('Rate limit exceeded. Please try again later.');
+      }
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return response.json();
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('Rate limit')) {
+        throw error;
+      }
+      throw new Error('Connection problem, please try again');
+    }
+  };
+
   const debouncedSearch = debounce(500, async (input: string) => {
-    if (!input.trim()) {
+    if (!input.trim() || input.length < 3) {
       setSuggestions([]);
       setShowSuggestions(false);
       setError(null);
@@ -65,81 +160,57 @@ export function LocationSearch({
     setWarning(null);
 
     try {
-      // Special handling for ZIP codes
-      const zipCodeRegex = /^\d{5}(-\d{4})?$/;
-      const isZipCode = zipCodeRegex.test(input.trim());
-      
-      if (!isZipCode && input.length < 3) {
-        setSuggestions([]);
-        setShowSuggestions(false);
+      // Check cache first
+      const cachedResults = getCachedResults(input);
+      if (cachedResults) {
+        setSuggestions(cachedResults);
+        setShowSuggestions(true);
         setLoading(false);
         return;
       }
 
-      // For ZIP codes, use postalcode search
+      const normalizedInput = normalizeInput(input);
+      const isZipCode = /^\d{5}(-\d{4})?$/.test(normalizedInput);
+      
       const params = new URLSearchParams({
         format: 'json',
         addressdetails: '1',
         'accept-language': 'en',
         countrycodes: 'us',
-        limit: '15' // Increased from 10 to get more options
+        limit: '5'
       });
 
       if (isZipCode) {
-        params.set('postalcode', input);
+        params.set('postalcode', normalizedInput);
       } else {
-        params.set('q', input + ' USA'); // Add USA to improve results for US locations
+        params.set('q', normalizedInput + ' USA');
       }
 
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?${params}`,
-        {
-          headers: {
-            'User-Agent': 'FreeorBarter/1.0'
-          }
-        }
-      );
+      const results = await searchWithRetry(params.toString());
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (results.length === 0) {
+        setError('No locations found. Try searching for just the city name');
+        setSuggestions([]);
+        setShowSuggestions(false);
+        return;
       }
 
-      const results = await response.json();
-
-      // Better processing and validation of results
       const formattedResults = results
         .map((result: any) => {
           const address = result.address || {};
-          
-          // Extract city, state, and ZIP from the address data
-          // Improved handling of different address formats
-          const city = address.city || address.town || address.village || address.hamlet || 
+          const city = address.city || address.town || address.village || 
                       address.municipality || address.suburb || '';
-          const state = address.state || address.province || '';
+          const state = address.state || '';
           const zipcode = address.postcode || '';
           
-          // Skip invalid entries but don't filter too aggressively
           if ((!city && !state) || !zipcode) {
             return null;
           }
+
+          const confidence = parseFloat(result.importance || 0);
           
-          // Format the display label with more info for clarity
-          const label = [
-            city,
-            state,
-            zipcode,
-            address.country === 'United States' ? '' : address.country
-          ].filter(Boolean).join(', ');
-
-          // Calculate a confidence score based on completeness and match quality
-          let confidence = 0;
-          if (city) confidence += 0.3;
-          if (state) confidence += 0.3;
-          if (zipcode) confidence += 0.4;
-          if (isZipCode && zipcode === input) confidence = 1; // Exact ZIP match
-
           return {
-            label,
+            label: `${city}, ${state}`,
             city,
             state,
             zipcode,
@@ -149,53 +220,79 @@ export function LocationSearch({
           };
         })
         .filter((result): result is LocationData => result !== null)
-        // Sort results with improved logic
-        .sort((a, b) => {
-          // First by confidence
-          if (a.confidence !== b.confidence) {
-            return b.confidence - a.confidence;
-          }
-          
-          // Then by completeness of address
-          const aComplete = (a.city ? 1 : 0) + (a.state ? 1 : 0) + (a.zipcode ? 1 : 0);
-          const bComplete = (b.city ? 1 : 0) + (b.state ? 1 : 0) + (b.zipcode ? 1 : 0);
-          return bComplete - aComplete;
-        });
+        .sort((a, b) => b.confidence - a.confidence)
+        .slice(0, 5);
 
+      // Cache the results
+      setCachedResults(input, formattedResults);
+      
       setSuggestions(formattedResults);
       setShowSuggestions(formattedResults.length > 0);
       
-      // Improved feedback for the user
       if (formattedResults.length === 0) {
-        setError('No locations found. Please try a different search term or format.');
-      } else if (formattedResults.length > 0 && formattedResults[0].confidence < 0.7) {
-        setWarning('Location might not be precise. Please select the best match from the list.');
+        setError('No locations found. Try searching for just the city name');
       }
     } catch (err) {
-      console.error('Error fetching location suggestions:', err);
-      setError('Unable to fetch location suggestions. Please try again or enter location manually.');
+      console.error('Error in location search:', err);
+      setError(err instanceof Error ? err.message : 'An error occurred');
       setSuggestions([]);
+      setShowSuggestions(false);
     } finally {
       setLoading(false);
     }
   });
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setSearchQuery(value);
-    setSelectedLocation(null);
-    debouncedSearch(value);
+  const handleManualSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    const { city, state, zipcode } = manualFormData;
+    
+    if (!city || !state || !zipcode) {
+      setError('All fields are required for manual entry');
+      return;
+    }
+
+    if (!/^\d{5}(-\d{4})?$/.test(zipcode)) {
+      setError('Please enter a valid ZIP code');
+      return;
+    }
+
+    // For manual entry, we'll use a default confidence of 0.5
+    const location: LocationData = {
+      label: `${city}, ${state}`,
+      city,
+      state,
+      zipcode,
+      latitude: 0, // These will need to be populated by a separate geocoding call
+      longitude: 0,
+      confidence: 0.5
+    };
+
+    // Geocode the manually entered location
+    fetch(`https://nominatim.openstreetmap.org/search?city=${encodeURIComponent(city)}&state=${encodeURIComponent(state)}&postalcode=${zipcode}&country=usa&format=json`)
+      .then(response => response.json())
+      .then(data => {
+        if (data && data[0]) {
+          location.latitude = parseFloat(data[0].lat);
+          location.longitude = parseFloat(data[0].lon);
+          onLocationSelect(location);
+          setSelectedLocation(location);
+          setShowManualEntry(false);
+          setManualFormData({ city: '', state: '', zipcode: '' });
+        } else {
+          setError('Could not geocode the entered location');
+        }
+      })
+      .catch(() => {
+        setError('Error geocoding location. Please try again');
+      });
   };
 
-  const handleSuggestionClick = (suggestion: LocationData) => {
-    setSearchQuery(suggestion.label);
-    setSelectedLocation(suggestion);
-    setShowSuggestions(false);
-    onLocationSelect(suggestion);
-    
-    // Clear any errors/warnings when a location is selected
-    setError(null);
-    setWarning(null);
+  const handleRetry = () => {
+    if (searchQuery.trim()) {
+      setRetryCount(prev => prev + 1);
+      debouncedSearch(searchQuery);
+    }
   };
 
   return (
@@ -204,14 +301,21 @@ export function LocationSearch({
         <input
           type="text"
           value={searchQuery}
-          onChange={handleInputChange}
+          onChange={(e) => {
+            setSearchQuery(e.target.value);
+            debouncedSearch(e.target.value);
+          }}
           onFocus={() => {
             if (suggestions.length > 0 && !selectedLocation) {
               setShowSuggestions(true);
             }
           }}
           placeholder={placeholder}
-          className={`w-full rounded-lg border ${error ? 'border-red-300' : warning ? 'border-yellow-300' : 'border-gray-300'} pl-10 pr-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent`}
+          className={`w-full rounded-lg border ${
+            error ? 'border-red-300' : 
+            warning ? 'border-yellow-300' : 
+            'border-gray-300'
+          } pl-10 pr-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent`}
           aria-invalid={!!error}
         />
         <Search className="absolute left-3 top-2.5 text-gray-400 w-5 h-5" />
@@ -221,28 +325,37 @@ export function LocationSearch({
           </div>
         )}
       </div>
-      
+
       {error && (
-        <div className="mt-1 text-sm text-red-600 flex items-center">
-          <AlertCircle className="w-4 h-4 mr-1" />
-          {error}
+        <div className="mt-1 flex items-center justify-between">
+          <div className="flex items-center text-sm text-red-600">
+            <AlertCircle className="w-4 h-4 mr-1" />
+            <span>{error}</span>
+          </div>
+          {error.includes('Connection problem') || error.includes('Rate limit') ? (
+            <button
+              onClick={handleRetry}
+              className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center"
+            >
+              <RotateCcw className="w-4 h-4 mr-1" />
+              Retry
+            </button>
+          ) : null}
         </div>
       )}
-      
-      {warning && !error && (
-        <div className="mt-1 text-sm text-yellow-600 flex items-center">
-          <AlertCircle className="w-4 h-4 mr-1" />
-          {warning}
-        </div>
-      )}
-      
+
       {showSuggestions && suggestions.length > 0 && (
         <div className="absolute z-10 w-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 max-h-60 overflow-y-auto">
           {suggestions.map((suggestion, index) => (
             <button
               key={index}
               type="button"
-              onClick={() => handleSuggestionClick(suggestion)}
+              onClick={() => {
+                setSelectedLocation(suggestion);
+                setSearchQuery(suggestion.label);
+                setShowSuggestions(false);
+                onLocationSelect(suggestion);
+              }}
               className="w-full text-left px-4 py-2 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-gray-100 last:border-0"
             >
               <div className="flex items-start">
@@ -250,11 +363,7 @@ export function LocationSearch({
                 <div>
                   <div className="font-medium">{suggestion.label}</div>
                   <div className="text-xs text-gray-500 mt-0.5">
-                    {suggestion.confidence >= 0.9 
-                      ? 'Exact match' 
-                      : suggestion.confidence >= 0.7 
-                        ? 'Good match' 
-                        : 'Possible match'}
+                    {suggestion.zipcode}
                   </div>
                 </div>
               </div>
@@ -262,7 +371,69 @@ export function LocationSearch({
           ))}
         </div>
       )}
-      
+
+      {!showManualEntry && (
+        <button
+          onClick={() => setShowManualEntry(true)}
+          className="mt-2 text-sm text-indigo-600 hover:text-indigo-800 flex items-center"
+        >
+          <PenSquare className="w-4 h-4 mr-1" />
+          Can't find your location? Enter manually
+        </button>
+      )}
+
+      {showManualEntry && (
+        <form onSubmit={handleManualSubmit} className="mt-4 space-y-4 bg-gray-50 p-4 rounded-lg">
+          <div>
+            <label className="block text-sm font-medium text-gray-700">City</label>
+            <input
+              type="text"
+              value={manualFormData.city}
+              onChange={(e) => setManualFormData(prev => ({ ...prev, city: e.target.value }))}
+              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">State</label>
+            <select
+              value={manualFormData.state}
+              onChange={(e) => setManualFormData(prev => ({ ...prev, state: e.target.value }))}
+              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            >
+              <option value="">Select a state</option>
+              {Object.entries(stateAbbreviations).map(([abbr, name]) => (
+                <option key={abbr} value={name}>{name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">ZIP Code</label>
+            <input
+              type="text"
+              value={manualFormData.zipcode}
+              onChange={(e) => setManualFormData(prev => ({ ...prev, zipcode: e.target.value }))}
+              placeholder="12345"
+              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            />
+          </div>
+          <div className="flex justify-end space-x-2">
+            <button
+              type="button"
+              onClick={() => setShowManualEntry(false)}
+              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+            >
+              Save Location
+            </button>
+          </div>
+        </form>
+      )}
+
       {selectedLocation && (
         <div className="mt-2 text-xs text-gray-500">
           <div className="flex items-center">
