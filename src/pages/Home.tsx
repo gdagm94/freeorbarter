@@ -7,6 +7,42 @@ import { supabase } from '../lib/supabase';
 import { Item } from '../types';
 import { useAuth } from '../hooks/useAuth';
 
+// Constants for Earth's radius and conversion
+const EARTH_RADIUS_KM = 6371; // Earth's radius in kilometers
+const DEG_TO_RAD = Math.PI / 180;
+
+function calculateBoundingBox(lat: number, lon: number, radiusKm: number) {
+  // Convert latitude and longitude to radians
+  const latRad = lat * DEG_TO_RAD;
+  const lonRad = lon * DEG_TO_RAD;
+
+  // Angular distance in radians on a great circle
+  const radDist = radiusKm / EARTH_RADIUS_KM;
+
+  // Calculate min and max latitudes
+  let minLat = latRad - radDist;
+  let maxLat = latRad + radDist;
+
+  // Calculate min and max longitudes
+  let deltaLon;
+  if (minLat > -Math.PI/2 && maxLat < Math.PI/2) {
+    deltaLon = Math.asin(Math.sin(radDist) / Math.cos(latRad));
+  } else {
+    deltaLon = Math.PI;
+  }
+
+  let minLon = lonRad - deltaLon;
+  let maxLon = lonRad + deltaLon;
+
+  // Convert back to degrees
+  return {
+    minLat: (minLat * 180) / Math.PI,
+    maxLat: (maxLat * 180) / Math.PI,
+    minLon: (minLon * 180) / Math.PI,
+    maxLon: (maxLon * 180) / Math.PI
+  };
+}
+
 function Home() {
   const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
@@ -66,12 +102,24 @@ function Home() {
   useEffect(() => {
     const fetchItems = async () => {
       try {
-        // Fetch available items
-        const { data: availableItems, error: availableError } = await supabase
+        let query = supabase
           .from('items')
           .select('*')
           .eq('status', 'available')
           .order('created_at', { ascending: false });
+
+        // Apply location-based filtering if coordinates are available
+        if (filters.latitude && filters.longitude && filters.radius) {
+          const bbox = calculateBoundingBox(filters.latitude, filters.longitude, filters.radius);
+          
+          query = query
+            .gte('latitude', bbox.minLat)
+            .lte('latitude', bbox.maxLat)
+            .gte('longitude', bbox.minLon)
+            .lte('longitude', bbox.maxLon);
+        }
+
+        const { data: availableItems, error: availableError } = await query;
 
         if (availableError) {
           console.error('Error fetching available items:', availableError);
@@ -143,7 +191,7 @@ function Home() {
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [filters.latitude, filters.longitude, filters.radius]);
 
   // Filter and sort items based on search query and filters
   const filteredItems = useMemo(() => {
