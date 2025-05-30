@@ -28,6 +28,7 @@ function NewListing() {
     category: '',
   });
   const [selectedLocation, setSelectedLocation] = useState<LocationData | null>(null);
+  const [locationInputText, setLocationInputText] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -59,16 +60,22 @@ function NewListing() {
             const data = await response.json();
             const address = data.address || {};
             
+            const city = address.city || address.town || address.village || '';
+            const state = address.state || '';
+            const zipcode = address.postcode || '';
+            const label = `${city}, ${state}`;
+            
             const location: LocationData = {
-              label: `${address.city || address.town}, ${address.state}`,
-              city: address.city || address.town || '',
-              state: address.state || '',
-              zipcode: address.postcode || '',
+              label,
+              city,
+              state,
+              zipcode,
               latitude,
               longitude
             };
             
             setSelectedLocation(location);
+            setLocationInputText(label);
           } catch (error) {
             console.error('Error getting location details:', error);
             setError('Could not get your current location details');
@@ -85,6 +92,7 @@ function NewListing() {
 
   const handleLocationSelect = (location: LocationData) => {
     setSelectedLocation(location);
+    setLocationInputText(location.label);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -306,6 +314,7 @@ function NewListing() {
             <div className="space-y-4">
               <LocationSearch
                 onLocationSelect={handleLocationSelect}
+                initialValue={locationInputText}
                 placeholder="Enter city, state, or ZIP code"
               />
               
