@@ -70,7 +70,7 @@ function Home() {
       const defaultFilters = {
         category: '',
         condition: '',
-        radius: 5, // Changed default from 10 to 5 miles
+        radius: 5,
         latitude: 0,
         longitude: 0,
       };
@@ -79,7 +79,7 @@ function Home() {
       return {
         category: '',
         condition: '',
-        radius: 5, // Changed default from 10 to 5 miles
+        radius: 5,
         latitude: 0,
         longitude: 0,
       };
@@ -247,8 +247,10 @@ function Home() {
 
   // Split filtered items into sections
   const sections = useMemo(() => {
-    if (searchQuery || filters.category || filters.condition) {
-      // If searching or filtering, just show all matching items in one section
+    const isFiltering = searchQuery || filters.category || filters.condition || (filters.latitude && filters.longitude);
+
+    if (isFiltering) {
+      // If filtering, just show all matching items in one section
       return [
         {
           id: 'search-results',
@@ -258,16 +260,12 @@ function Home() {
       ];
     }
 
-    // Otherwise, split into sections
-    const nearbyItems = filteredItems.slice(0, 2);
-    const recommendedItems = filteredItems.slice(2, 6);
-    const newItems = filteredItems;
-
+    // Otherwise, show all sections
     return [
-      { id: 'nearby', title: 'Near You', items: nearbyItems },
-      { id: 'recommended', title: 'Recommended', items: recommendedItems },
+      { id: 'nearby', title: 'Near You', items: filteredItems.slice(0, 2) },
+      { id: 'recommended', title: 'Recommended', items: filteredItems.slice(2, 6) },
       { id: 'bartered', title: 'Recently Bartered', items: barteredItems },
-      { id: 'new', title: 'New Listings', items: newItems }
+      { id: 'new', title: 'New Listings', items: filteredItems }
     ];
   }, [filteredItems, searchQuery, filters, barteredItems]);
 
@@ -295,7 +293,7 @@ function Home() {
     setFilters({
       category: '',
       condition: '',
-      radius: 5, // Changed default from 10 to 5 miles
+      radius: 5,
       latitude: 0,
       longitude: 0,
     });
