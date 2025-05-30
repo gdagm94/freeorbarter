@@ -70,7 +70,7 @@ function Home() {
       const defaultFilters = {
         category: '',
         condition: '',
-        radius: 10,
+        radius: 5, // Changed default from 10 to 5 miles
         latitude: 0,
         longitude: 0,
       };
@@ -79,7 +79,7 @@ function Home() {
       return {
         category: '',
         condition: '',
-        radius: 10,
+        radius: 5, // Changed default from 10 to 5 miles
         latitude: 0,
         longitude: 0,
       };
@@ -295,7 +295,7 @@ function Home() {
     setFilters({
       category: '',
       condition: '',
-      radius: 10,
+      radius: 5, // Changed default from 10 to 5 miles
       latitude: 0,
       longitude: 0,
     });

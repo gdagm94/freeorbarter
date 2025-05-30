@@ -104,7 +104,7 @@ function ItemMarker({ item }: { item: Item }) {
 }
 
 export function Map({ onRadiusChange, onLocationSelect, selectedLocation, onMarkerDrag, items = [] }: MapProps) {
-  const [radius, setRadius] = useState(10); // Default 10 miles
+  const [radius, setRadius] = useState(5); // Changed default from 10 to 5 miles
   const [center, setCenter] = useState<[number, number]>([39.8283, -98.5795]); // Default to center of USA
   const [zoom, setZoom] = useState(13);
   const [isLocating, setIsLocating] = useState(false);
