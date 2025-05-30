@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ImageUpload } from '../components/ImageUpload';
 import { LocationSearch } from '../components/LocationSearch';
-import { Map } from '../components/Map';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { CheckCircle2, MapPin } from 'lucide-react';
@@ -34,7 +33,6 @@ function NewListing() {
   const [success, setSuccess] = useState(false);
   const [createdItemId, setCreatedItemId] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(5);
-  const [searchRadius, setSearchRadius] = useState(10);
   const [useCurrentLocation, setUseCurrentLocation] = useState(false);
 
   useEffect(() => {
@@ -87,16 +85,6 @@ function NewListing() {
 
   const handleLocationSelect = (location: LocationData) => {
     setSelectedLocation(location);
-  };
-
-  const handleMarkerDrag = (lat: number, lng: number) => {
-    if (selectedLocation) {
-      setSelectedLocation({
-        ...selectedLocation,
-        latitude: lat,
-        longitude: lng
-      });
-    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -329,13 +317,6 @@ function NewListing() {
                 <MapPin className="w-4 h-4 mr-1" />
                 Use my current location
               </button>
-
-              <Map
-                onRadiusChange={setSearchRadius}
-                onLocationSelect={handleLocationSelect}
-                selectedLocation={selectedLocation || undefined}
-                onMarkerDrag={handleMarkerDrag}
-              />
             </div>
           </div>
 
