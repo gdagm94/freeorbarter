@@ -228,6 +228,11 @@ export function ProfileSetup({ onComplete, onClose, initialData }: ProfileSetupP
               Location <span className="text-red-500">*</span>
             </label>
             <div className="space-y-2">
+              <LocationSearch
+                onLocationSelect={setSelectedLocation}
+                initialValue={locationInputText}
+                placeholder="Enter your location"
+              />
               <button
                 type="button"
                 onClick={() => setUseCurrentLocation(true)}
@@ -241,11 +246,6 @@ export function ProfileSetup({ onComplete, onClose, initialData }: ProfileSetupP
                 <MapPin className="w-4 h-4 mr-1" />
                 {isLocating ? 'Getting location...' : 'Use my current location'}
               </button>
-              <LocationSearch
-                onLocationSelect={setSelectedLocation}
-                initialValue={locationInputText}
-                placeholder="Enter your location"
-              />
             </div>
           </div>
 
