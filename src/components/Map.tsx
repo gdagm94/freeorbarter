@@ -38,6 +38,17 @@ interface MapProps {
   items?: Item[];
 }
 
+// New MapUpdater component to handle view updates
+function MapUpdater({ center, zoom }: { center: [number, number]; zoom: number }) {
+  const map = useMap();
+
+  useEffect(() => {
+    map.setView(center, zoom);
+  }, [map, center, zoom]);
+
+  return null;
+}
+
 function ItemMarker({ item }: { item: Item }) {
   if (!item.latitude || !item.longitude) return null;
 
@@ -88,6 +99,7 @@ function ItemMarker({ item }: { item: Item }) {
 export function Map({ onRadiusChange, onLocationSelect, selectedLocation, onMarkerDrag, items = [] }: MapProps) {
   const [radius, setRadius] = useState(10); // Default 10 miles
   const [center, setCenter] = useState<[number, number]>([39.8283, -98.5795]); // Default to center of USA
+  const [zoom, setZoom] = useState(13);
   const [isLocating, setIsLocating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -106,6 +118,7 @@ export function Map({ onRadiusChange, onLocationSelect, selectedLocation, onMark
         try {
           const { latitude, longitude } = position.coords;
           setCenter([latitude, longitude]);
+          setZoom(13); // Reset zoom when changing location
           
           // Reverse geocode to get address details
           const response = await fetch(
@@ -156,6 +169,7 @@ export function Map({ onRadiusChange, onLocationSelect, selectedLocation, onMark
   useEffect(() => {
     if (selectedLocation) {
       setCenter([selectedLocation.latitude, selectedLocation.longitude]);
+      setZoom(13); // Reset zoom when location is selected
     }
   }, [selectedLocation]);
 
@@ -207,9 +221,10 @@ export function Map({ onRadiusChange, onLocationSelect, selectedLocation, onMark
       <div className="h-[400px] rounded-lg overflow-hidden">
         <MapContainer
           center={center}
-          zoom={13}
+          zoom={zoom}
           style={{ height: '100%', width: '100%' }}
         >
+          <MapUpdater center={center} zoom={zoom} />
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
