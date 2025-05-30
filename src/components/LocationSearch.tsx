@@ -59,6 +59,7 @@ export function LocationSearch({
     state: '',
     zipcode: ''
   });
+  const [isLocating, setIsLocating] = useState(false);
 
   useEffect(() => {
     setSearchQuery(initialValue);
@@ -97,10 +98,7 @@ export function LocationSearch({
   };
 
   const normalizeInput = (input: string): string => {
-    // Remove extra spaces and trim
     let normalized = input.replace(/\s+/g, ' ').trim();
-
-    // Check for state abbreviation
     const stateRegex = /,?\s*([A-Z]{2})$/i;
     const match = normalized.match(stateRegex);
     if (match && stateAbbreviations[match[1].toUpperCase()]) {
@@ -109,7 +107,6 @@ export function LocationSearch({
         `, ${stateAbbreviations[match[1].toUpperCase()]}`
       );
     }
-
     return normalized;
   };
 
@@ -146,6 +143,72 @@ export function LocationSearch({
     }
   };
 
+  const handleUseCurrentLocation = () => {
+    setIsLocating(true);
+    setError(null);
+
+    if (!navigator.geolocation) {
+      setError('Geolocation is not supported by your browser');
+      setIsLocating(false);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const { latitude, longitude } = position.coords;
+          
+          // Perform reverse geocoding
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+          );
+          
+          if (!response.ok) throw new Error('Failed to get location details');
+          
+          const data = await response.json();
+          const address = data.address || {};
+          
+          const city = address.city || address.town || address.village || '';
+          const state = address.state || '';
+          const zipcode = address.postcode || '';
+          
+          if (!city || !state) {
+            throw new Error('Could not determine your location');
+          }
+
+          const location: LocationData = {
+            label: `${city}, ${state}`,
+            city,
+            state,
+            zipcode,
+            latitude,
+            longitude,
+            confidence: 1
+          };
+
+          setSelectedLocation(location);
+          setSearchQuery(location.label);
+          onLocationSelect(location);
+        } catch (err) {
+          console.error('Error getting location details:', err);
+          setError('Could not determine your location. Please enter it manually.');
+        } finally {
+          setIsLocating(false);
+        }
+      },
+      (error) => {
+        console.error('Geolocation error:', error);
+        setError('Could not access your location. Please check your browser settings.');
+        setIsLocating(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 5000,
+        maximumAge: 0
+      }
+    );
+  };
+
   const debouncedSearch = debounce(500, async (input: string) => {
     if (!input.trim() || input.length < 3) {
       setSuggestions([]);
@@ -160,7 +223,6 @@ export function LocationSearch({
     setWarning(null);
 
     try {
-      // Check cache first
       const cachedResults = getCachedResults(input);
       if (cachedResults) {
         setSuggestions(cachedResults);
@@ -223,9 +285,7 @@ export function LocationSearch({
         .sort((a, b) => b.confidence - a.confidence)
         .slice(0, 5);
 
-      // Cache the results
       setCachedResults(input, formattedResults);
-      
       setSuggestions(formattedResults);
       setShowSuggestions(formattedResults.length > 0);
       
@@ -257,18 +317,16 @@ export function LocationSearch({
       return;
     }
 
-    // For manual entry, we'll use a default confidence of 0.5
     const location: LocationData = {
       label: `${city}, ${state}`,
       city,
       state,
       zipcode,
-      latitude: 0, // These will need to be populated by a separate geocoding call
+      latitude: 0,
       longitude: 0,
       confidence: 0.5
     };
 
-    // Geocode the manually entered location
     fetch(`https://nominatim.openstreetmap.org/search?city=${encodeURIComponent(city)}&state=${encodeURIComponent(state)}&postalcode=${zipcode}&country=usa&format=json`)
       .then(response => response.json())
       .then(data => {
@@ -371,6 +429,17 @@ export function LocationSearch({
           ))}
         </div>
       )}
+
+      <button
+        onClick={handleUseCurrentLocation}
+        disabled={isLocating}
+        className={`mt-2 flex items-center text-sm ${
+          isLocating ? 'text-gray-400 cursor-not-allowed' : 'text-indigo-600 hover:text-indigo-800'
+        }`}
+      >
+        <MapPin className="w-4 h-4 mr-1" />
+        {isLocating ? 'Getting location...' : 'Use my current location'}
+      </button>
 
       {!showManualEntry && (
         <button

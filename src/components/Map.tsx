@@ -68,11 +68,13 @@ function ItemMarker({ item }: { item: Item }) {
               <h3 className="font-semibold text-gray-900 mb-1 line-clamp-1">
                 {item.title}
               </h3>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="inline-block px-2 py-1 text-xs rounded-full bg-indigo-100 text-indigo-800">
                   {item.condition}
                 </span>
-                <span className="text-sm text-gray-600">{item.location}</span>
+                <span className="text-sm text-gray-600 flex-1 min-w-0 truncate">
+                  {item.location}
+                </span>
               </div>
             </div>
           </div>
