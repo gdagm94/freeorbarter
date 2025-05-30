@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Circle, useMap, Marker, Popup } from 'react-leaflet';
 import { OpenStreetMapProvider } from 'leaflet-geosearch';
+import { Link } from 'react-router-dom';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { Item } from '../types';
@@ -42,22 +43,40 @@ function ItemMarker({ item }: { item: Item }) {
   return (
     <Marker position={[item.latitude, item.longitude]} icon={itemIcon}>
       <Popup>
-        <div className="p-2">
-          <img 
-            src={item.images[0]} 
-            alt={item.title}
-            className="w-32 h-32 object-cover rounded mb-2"
-          />
-          <h3 className="font-semibold">{item.title}</h3>
-          <p className="text-sm text-gray-600">{item.location}</p>
-          <span className={`inline-block px-2 py-1 text-xs rounded-full mt-1 ${
-            item.type === 'free' 
-              ? 'bg-green-100 text-green-800' 
-              : 'bg-purple-100 text-purple-800'
-          }`}>
-            {item.type === 'free' ? 'Free' : 'Barter'}
-          </span>
-        </div>
+        <Link 
+          to={`/items/${item.id}`}
+          className="block hover:opacity-90 transition-opacity"
+        >
+          <div className="w-64">
+            <div className="relative">
+              <img 
+                src={item.images[0]} 
+                alt={item.title}
+                className="w-full h-48 object-cover rounded-t-lg"
+              />
+              <div className="absolute top-2 right-2">
+                <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                  item.type === 'free' 
+                    ? 'bg-green-100 text-green-800' 
+                    : 'bg-purple-100 text-purple-800'
+                }`}>
+                  {item.type === 'free' ? 'Free' : 'Barter'}
+                </span>
+              </div>
+            </div>
+            <div className="bg-white p-3 rounded-b-lg shadow-sm">
+              <h3 className="font-semibold text-gray-900 mb-1 line-clamp-1">
+                {item.title}
+              </h3>
+              <div className="flex items-center justify-between">
+                <span className="inline-block px-2 py-1 text-xs rounded-full bg-indigo-100 text-indigo-800">
+                  {item.condition}
+                </span>
+                <span className="text-sm text-gray-600">{item.location}</span>
+              </div>
+            </div>
+          </div>
+        </Link>
       </Popup>
     </Marker>
   );
