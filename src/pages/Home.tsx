@@ -10,6 +10,7 @@ import { useAuth } from '../hooks/useAuth';
 // Constants for Earth's radius and conversion
 const EARTH_RADIUS_KM = 6371; // Earth's radius in kilometers
 const DEG_TO_RAD = Math.PI / 180;
+const MAP_FILTER_STATE_KEY = 'map_filter_state';
 
 function calculateBoundingBox(lat: number, lon: number, radiusMiles: number) {
   // Convert miles to kilometers
@@ -48,20 +49,52 @@ function calculateBoundingBox(lat: number, lon: number, radiusMiles: number) {
 
 function Home() {
   const { user } = useAuth();
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(() => {
+    try {
+      const savedState = sessionStorage.getItem(MAP_FILTER_STATE_KEY);
+      return savedState ? JSON.parse(savedState).searchQuery || '' : '';
+    } catch {
+      return '';
+    }
+  });
+
   const [showFilters, setShowFilters] = useState(false);
   const [items, setItems] = useState<Item[]>([]);
   const [barteredItems, setBarteredItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showChangelog, setShowChangelog] = useState(false);
-  const [filters, setFilters] = useState({
-    category: '',
-    condition: '',
-    radius: 10, // Default 10 miles
-    latitude: 0,
-    longitude: 0,
+  const [filters, setFilters] = useState(() => {
+    try {
+      const savedState = sessionStorage.getItem(MAP_FILTER_STATE_KEY);
+      const defaultFilters = {
+        category: '',
+        condition: '',
+        radius: 10,
+        latitude: 0,
+        longitude: 0,
+      };
+      return savedState ? { ...defaultFilters, ...JSON.parse(savedState).filters } : defaultFilters;
+    } catch {
+      return {
+        category: '',
+        condition: '',
+        radius: 10,
+        latitude: 0,
+        longitude: 0,
+      };
+    }
   });
+
+  // Save filter state to sessionStorage whenever it changes
+  useEffect(() => {
+    const filterState = {
+      searchQuery,
+      filters,
+      showFilters,
+    };
+    sessionStorage.setItem(MAP_FILTER_STATE_KEY, JSON.stringify(filterState));
+  }, [searchQuery, filters, showFilters]);
 
   useEffect(() => {
     const checkChangelogDismissal = async () => {
@@ -267,6 +300,7 @@ function Home() {
       longitude: 0,
     });
     setSearchQuery('');
+    sessionStorage.removeItem(MAP_FILTER_STATE_KEY);
   };
 
   const renderItemSection = (title: string, items: Item[], sectionId: string) => (
