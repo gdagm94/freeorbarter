@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { X, Upload } from 'lucide-react';
+import { X, Upload, MapPin } from 'lucide-react';
 import { LocationSearch } from './LocationSearch';
 
 interface ProfileSetupProps {
@@ -33,6 +33,76 @@ export function ProfileSetup({ onComplete, onClose, initialData }: ProfileSetupP
   const [selectedLocation, setSelectedLocation] = useState<LocationData | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(initialData?.avatar_url || null);
+  const [useCurrentLocation, setUseCurrentLocation] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
+  const [locationInputText, setLocationInputText] = useState(initialData?.zipcode || '');
+
+  useEffect(() => {
+    if (!useCurrentLocation) return;
+
+    if (!navigator.geolocation) {
+      setError('Geolocation is not supported by your browser');
+      setUseCurrentLocation(false);
+      return;
+    }
+
+    setIsLocating(true);
+    setError(null);
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const { latitude, longitude } = position.coords;
+          
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+          );
+          
+          if (!response.ok) throw new Error('Failed to get location details');
+          
+          const data = await response.json();
+          const address = data.address || {};
+          
+          const city = address.city || address.town || address.village || '';
+          const state = address.state || '';
+          const zipcode = address.postcode || '';
+          
+          if (!city || !state) {
+            throw new Error('Could not determine your location');
+          }
+
+          const location: LocationData = {
+            label: `${city}, ${state}`,
+            city,
+            state,
+            zipcode,
+            latitude,
+            longitude
+          };
+
+          setSelectedLocation(location);
+          setLocationInputText(`${city}, ${state}`);
+        } catch (err) {
+          console.error('Error getting location details:', err);
+          setError('Could not determine your location. Please enter it manually.');
+        } finally {
+          setIsLocating(false);
+          setUseCurrentLocation(false);
+        }
+      },
+      (error) => {
+        console.error('Geolocation error:', error);
+        setError('Could not access your location. Please enter it manually.');
+        setIsLocating(false);
+        setUseCurrentLocation(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 5000,
+        maximumAge: 0
+      }
+    );
+  }, [useCurrentLocation]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData({
@@ -65,7 +135,6 @@ export function ProfileSetup({ onComplete, onClose, initialData }: ProfileSetupP
     }
 
     try {
-      // Only include fields that have been filled out
       const updateData: Record<string, any> = {};
 
       if (formData.username.trim()) {
@@ -80,7 +149,6 @@ export function ProfileSetup({ onComplete, onClose, initialData }: ProfileSetupP
         updateData.gender = formData.gender;
       }
 
-      // Only handle avatar upload if a new file was selected
       if (avatarFile) {
         const fileExt = avatarFile.name.split('.').pop();
         const fileName = `${Math.random()}.${fileExt}`;
@@ -99,7 +167,6 @@ export function ProfileSetup({ onComplete, onClose, initialData }: ProfileSetupP
         updateData.avatar_url = publicUrl;
       }
 
-      // Only update if there are changes
       if (Object.keys(updateData).length > 0) {
         updateData.profile_completed = true;
 
@@ -160,11 +227,26 @@ export function ProfileSetup({ onComplete, onClose, initialData }: ProfileSetupP
             <label className="block text-sm font-medium text-gray-700">
               Location <span className="text-red-500">*</span>
             </label>
-            <LocationSearch
-              onLocationSelect={setSelectedLocation}
-              initialValue={initialData?.zipcode ? `${initialData.zipcode}` : ''}
-              placeholder="Enter your location"
-            />
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => setUseCurrentLocation(true)}
+                disabled={isLocating}
+                className={`flex items-center text-sm ${
+                  isLocating 
+                    ? 'text-gray-400 cursor-not-allowed' 
+                    : 'text-indigo-600 hover:text-indigo-800'
+                }`}
+              >
+                <MapPin className="w-4 h-4 mr-1" />
+                {isLocating ? 'Getting location...' : 'Use my current location'}
+              </button>
+              <LocationSearch
+                onLocationSelect={setSelectedLocation}
+                initialValue={locationInputText}
+                placeholder="Enter your location"
+              />
+            </div>
           </div>
 
           <div>
