@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { MapContainer, TileLayer, Circle, useMap, Marker, Popup } from 'react-leaflet';
 import { OpenStreetMapProvider } from 'leaflet-geosearch';
 import { Link } from 'react-router-dom';
@@ -38,12 +38,19 @@ interface MapProps {
   items?: Item[];
 }
 
-// New MapUpdater component to handle view updates
+// Updated MapUpdater component to handle view updates without auto-zooming
 function MapUpdater({ center, zoom }: { center: [number, number]; zoom: number }) {
   const map = useMap();
+  const prevCenter = useRef(center);
+  const prevZoom = useRef(zoom);
 
   useEffect(() => {
-    map.setView(center, zoom);
+    // Only update center if it has changed
+    if (prevCenter.current[0] !== center[0] || prevCenter.current[1] !== center[1]) {
+      map.setView(center, zoom);
+      prevCenter.current = center;
+      prevZoom.current = zoom;
+    }
   }, [map, center, zoom]);
 
   return null;
