@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Circle, useMap, Marker, Popup } from 'react-leaflet';
 import { OpenStreetMapProvider } from 'leaflet-geosearch';
 import { Link } from 'react-router-dom';
+import { MapPin } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { Item } from '../types';
@@ -87,52 +88,70 @@ function ItemMarker({ item }: { item: Item }) {
 export function Map({ onRadiusChange, onLocationSelect, selectedLocation, onMarkerDrag, items = [] }: MapProps) {
   const [radius, setRadius] = useState(10); // Default 10 miles
   const [center, setCenter] = useState<[number, number]>([39.8283, -98.5795]); // Default to center of USA
+  const [isLocating, setIsLocating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
+  const handleLocateMe = () => {
+    setIsLocating(true);
+    setError(null);
+
+    if (!navigator.geolocation) {
+      setError('Geolocation is not supported by your browser');
+      setIsLocating(false);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
           const { latitude, longitude } = position.coords;
           setCenter([latitude, longitude]);
           
-          // Only call onLocationSelect if we don't have a selected location
-          if (!selectedLocation && typeof onLocationSelect === 'function') {
-            // Reverse geocode to get address details
-            fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`)
-              .then(response => {
-                if (!response.ok) {
-                  throw new Error('Network response was not ok');
-                }
-                return response.json();
-              })
-              .then(data => {
-                const address = data.address || {};
-                const city = address.city || address.town || address.village || address.municipality || '';
-                const state = address.state || '';
-                const zipcode = address.postcode || '';
-                
-                if (city && state) {
-                  onLocationSelect({
-                    label: `${city}, ${state}${zipcode ? ` ${zipcode}` : ''}`,
-                    city,
-                    state,
-                    zipcode,
-                    latitude,
-                    longitude
-                  });
-                }
-              })
-              .catch(error => {
-                console.error('Error reverse geocoding:', error);
-              });
+          // Reverse geocode to get address details
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+          );
+          
+          if (!response.ok) throw new Error('Failed to get location details');
+          
+          const data = await response.json();
+          const address = data.address || {};
+          
+          const city = address.city || address.town || address.village || '';
+          const state = address.state || '';
+          const zipcode = address.postcode || '';
+          
+          if (!city || !state) {
+            throw new Error('Could not determine your location');
           }
-        },
-        (error) => {
-          console.error('Geolocation error:', error);
+
+          onLocationSelect({
+            label: `${city}, ${state}`,
+            city,
+            state,
+            zipcode,
+            latitude,
+            longitude
+          });
+        } catch (err) {
+          console.error('Error getting location details:', err);
+          setError('Could not determine your location');
+        } finally {
+          setIsLocating(false);
         }
-      );
-    }
-  }, [onLocationSelect, selectedLocation]);
+      },
+      (error) => {
+        console.error('Geolocation error:', error);
+        setError('Could not access your location');
+        setIsLocating(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 5000,
+        maximumAge: 0
+      }
+    );
+  };
 
   useEffect(() => {
     if (selectedLocation) {
@@ -151,19 +170,40 @@ export function Map({ onRadiusChange, onLocationSelect, selectedLocation, onMark
 
   return (
     <div className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Search Radius: {radius} miles
-        </label>
-        <input
-          type="range"
-          min="1"
-          max="50"
-          value={radius}
-          onChange={handleRadiusChange}
-          className="w-full"
-        />
+      <div className="flex items-center justify-between">
+        <div className="flex-1">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Search Radius: {radius} miles
+          </label>
+          <input
+            type="range"
+            min="1"
+            max="50"
+            value={radius}
+            onChange={handleRadiusChange}
+            className="w-full"
+          />
+        </div>
+        <button
+          onClick={handleLocateMe}
+          disabled={isLocating}
+          className={`ml-4 flex items-center px-3 py-2 rounded-lg ${
+            isLocating 
+              ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+              : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
+          }`}
+        >
+          <MapPin className="w-4 h-4 mr-1" />
+          {isLocating ? 'Locating...' : 'Use my location'}
+        </button>
       </div>
+
+      {error && (
+        <div className="text-sm text-red-600">
+          {error}
+        </div>
+      )}
+
       <div className="h-[400px] rounded-lg overflow-hidden">
         <MapContainer
           center={center}
