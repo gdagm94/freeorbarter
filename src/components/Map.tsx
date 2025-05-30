@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Circle, useMap, Marker } from 'react-leaflet';
+import { MapContainer, TileLayer, Circle, useMap, Marker, Popup } from 'react-leaflet';
 import { OpenStreetMapProvider } from 'leaflet-geosearch';
 import { Search } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import { Item } from '../types';
 
 // Fix Leaflet default icon issue
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -28,6 +29,7 @@ interface MapProps {
     longitude: number;
   };
   onMarkerDrag?: (lat: number, lng: number) => void;
+  items?: Item[];
 }
 
 function DraggableMarker({ position, onDragEnd }: { 
@@ -56,6 +58,33 @@ function DraggableMarker({ position, onDragEnd }: {
   );
 }
 
+function ItemMarker({ item }: { item: Item }) {
+  if (!item.latitude || !item.longitude) return null;
+
+  return (
+    <Marker position={[item.latitude, item.longitude]}>
+      <Popup>
+        <div className="p-2">
+          <img 
+            src={item.images[0]} 
+            alt={item.title}
+            className="w-32 h-32 object-cover rounded mb-2"
+          />
+          <h3 className="font-semibold">{item.title}</h3>
+          <p className="text-sm text-gray-600">{item.location}</p>
+          <span className={`inline-block px-2 py-1 text-xs rounded-full mt-1 ${
+            item.type === 'free' 
+              ? 'bg-green-100 text-green-800' 
+              : 'bg-purple-100 text-purple-800'
+          }`}>
+            {item.type === 'free' ? 'Free' : 'Barter'}
+          </span>
+        </div>
+      </Popup>
+    </Marker>
+  );
+}
+
 function SearchControl({ onLocationSelect }: { 
   onLocationSelect: MapProps['onLocationSelect']
 }) {
@@ -81,7 +110,6 @@ function SearchControl({ onLocationSelect }: {
       const result = results[0];
       const { x, y, raw } = result;
       
-      // Extract address components
       const address = raw.address || {};
       const city = address.city || address.town || address.village || address.municipality || '';
       const state = address.state || '';
@@ -147,9 +175,9 @@ function SearchControl({ onLocationSelect }: {
   );
 }
 
-export function Map({ onRadiusChange, onLocationSelect, selectedLocation, onMarkerDrag }: MapProps) {
-  const [radius, setRadius] = useState(10);
-  const [center, setCenter] = useState<[number, number]>([51.505, -0.09]); // Default to London
+export function Map({ onRadiusChange, onLocationSelect, selectedLocation, onMarkerDrag, items = [] }: MapProps) {
+  const [radius, setRadius] = useState(10); // Default 10 miles
+  const [center, setCenter] = useState<[number, number]>([39.8283, -98.5795]); // Default to center of USA
 
   useEffect(() => {
     if (navigator.geolocation) {
@@ -187,13 +215,11 @@ export function Map({ onRadiusChange, onLocationSelect, selectedLocation, onMark
               })
               .catch(error => {
                 console.error('Error reverse geocoding:', error);
-                // Handle the error gracefully - the map will still show but without location details
               });
           }
         },
         (error) => {
           console.error('Geolocation error:', error);
-          // Handle geolocation error gracefully
         }
       );
     }
@@ -211,11 +237,14 @@ export function Map({ onRadiusChange, onLocationSelect, selectedLocation, onMark
     onRadiusChange(newRadius);
   };
 
+  // Convert miles to meters for the Circle component
+  const radiusInMeters = radius * 1609.34; // 1 mile = 1609.34 meters
+
   return (
     <div className="space-y-4">
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
-          Search Radius: {radius} km
+          Search Radius: {radius} miles
         </label>
         <input
           type="range"
@@ -238,7 +267,7 @@ export function Map({ onRadiusChange, onLocationSelect, selectedLocation, onMark
           />
           <Circle
             center={center}
-            radius={radius * 1000}
+            radius={radiusInMeters}
             pathOptions={{ color: 'blue', fillColor: 'blue', fillOpacity: 0.1 }}
           />
           {selectedLocation && (
@@ -247,6 +276,9 @@ export function Map({ onRadiusChange, onLocationSelect, selectedLocation, onMark
               onDragEnd={onMarkerDrag}
             />
           )}
+          {items.map(item => (
+            <ItemMarker key={item.id} item={item} />
+          ))}
           <SearchControl onLocationSelect={onLocationSelect} />
         </MapContainer>
       </div>

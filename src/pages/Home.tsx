@@ -11,7 +11,10 @@ import { useAuth } from '../hooks/useAuth';
 const EARTH_RADIUS_KM = 6371; // Earth's radius in kilometers
 const DEG_TO_RAD = Math.PI / 180;
 
-function calculateBoundingBox(lat: number, lon: number, radiusKm: number) {
+function calculateBoundingBox(lat: number, lon: number, radiusMiles: number) {
+  // Convert miles to kilometers
+  const radiusKm = radiusMiles * 1.60934;
+  
   // Convert latitude and longitude to radians
   const latRad = lat * DEG_TO_RAD;
   const lonRad = lon * DEG_TO_RAD;
@@ -55,7 +58,7 @@ function Home() {
   const [filters, setFilters] = useState({
     category: '',
     condition: '',
-    radius: 10,
+    radius: 10, // Default 10 miles
     latitude: 0,
     longitude: 0,
   });
@@ -243,6 +246,14 @@ function Home() {
     setFilters(prev => ({ ...prev, radius }));
   };
 
+  const handleLocationSelect = (location: any) => {
+    setFilters(prev => ({
+      ...prev,
+      latitude: location.latitude,
+      longitude: location.longitude
+    }));
+  };
+
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(e.target.value);
   };
@@ -364,7 +375,16 @@ function Home() {
               </select>
             </div>
           </div>
-          <Map onLocationChange={handleLocationChange} onRadiusChange={handleRadiusChange} />
+          <Map 
+            onLocationChange={handleLocationChange} 
+            onRadiusChange={handleRadiusChange}
+            onLocationSelect={handleLocationSelect}
+            selectedLocation={filters.latitude && filters.longitude ? {
+              latitude: filters.latitude,
+              longitude: filters.longitude
+            } : undefined}
+            items={filteredItems}
+          />
         </div>
       )}
 
