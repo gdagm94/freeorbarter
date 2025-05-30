@@ -303,6 +303,11 @@ function Home() {
     sessionStorage.removeItem(MAP_FILTER_STATE_KEY);
   };
 
+  const handleCloseFilters = () => {
+    setShowFilters(false);
+    clearFilters();
+  };
+
   const renderItemSection = (title: string, items: Item[], sectionId: string) => (
     <div key={sectionId} className="mb-8 sm:mb-12">
       <div className="flex justify-between items-center mb-3 sm:mb-4 px-4 sm:px-0">
@@ -366,7 +371,7 @@ function Home() {
       {showFilters && (
         <div className="mb-6 sm:mb-8 bg-white p-4 sm:p-6 rounded-lg shadow-md relative mx-4 sm:mx-0">
           <button
-            onClick={() => setShowFilters(false)}
+            onClick={handleCloseFilters}
             className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
           >
             <X className="w-5 h-5 sm:w-6 sm:h-6" />
