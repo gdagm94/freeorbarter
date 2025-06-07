@@ -135,8 +135,9 @@ function NewListing() {
     );
   }, [useCurrentLocation]);
 
-  const handleManualSubmit = (e: React.FormEvent) => {
+  const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     
     const { city, state, zipcode } = manualFormData;
     
@@ -150,33 +151,30 @@ function NewListing() {
       return;
     }
 
-    const location: LocationData = {
-      label: `${city}, ${state}`,
-      city,
-      state,
-      zipcode,
-      latitude: 0,
-      longitude: 0,
-      confidence: 0.5
-    };
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?city=${encodeURIComponent(city)}&state=${encodeURIComponent(state)}&postalcode=${zipcode}&country=usa&format=json`
+      );
+      
+      const data = await response.json();
+      
+      const location: LocationData = {
+        label: `${city}, ${state}`,
+        city,
+        state,
+        zipcode,
+        latitude: data && data[0] ? parseFloat(data[0].lat) : 0,
+        longitude: data && data[0] ? parseFloat(data[0].lon) : 0
+      };
 
-    fetch(`https://nominatim.openstreetmap.org/search?city=${encodeURIComponent(city)}&state=${encodeURIComponent(state)}&postalcode=${zipcode}&country=usa&format=json`)
-      .then(response => response.json())
-      .then(data => {
-        if (data && data[0]) {
-          location.latitude = parseFloat(data[0].lat);
-          location.longitude = parseFloat(data[0].lon);
-          setSelectedLocation(location);
-          setShowManualEntry(false);
-          setManualFormData({ city: '', state: '', zipcode: '' });
-          setError(null);
-        } else {
-          setError('Could not geocode the entered location');
-        }
-      })
-      .catch(() => {
-        setError('Error geocoding location. Please try again');
-      });
+      setSelectedLocation(location);
+      setShowManualEntry(false);
+      setManualFormData({ city: '', state: '', zipcode: '' });
+      setError(null);
+    } catch (err) {
+      console.error('Error geocoding location:', err);
+      setError('Error geocoding location. Please try again');
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -428,7 +426,7 @@ function NewListing() {
             </div>
 
             {showManualEntry && (
-              <form onSubmit={handleManualSubmit} className="mt-4 space-y-4 bg-gray-50 p-4 rounded-lg">
+              <div className="mt-4 space-y-4 bg-gray-50 p-4 rounded-lg">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">City</label>
                   <input
@@ -470,13 +468,14 @@ function NewListing() {
                     Cancel
                   </button>
                   <button
-                    type="submit"
+                    type="button"
+                    onClick={handleManualSubmit}
                     className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
                   >
                     Save Location
                   </button>
                 </div>
-              </form>
+              </div>
             )}
 
             {!selectedLocation && (
