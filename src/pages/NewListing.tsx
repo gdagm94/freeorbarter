@@ -28,13 +28,13 @@ function NewListing() {
     category: '',
   });
   const [selectedLocation, setSelectedLocation] = useState<LocationData | null>(null);
-  const [locationInputText, setLocationInputText] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [createdItemId, setCreatedItemId] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(5);
   const [useCurrentLocation, setUseCurrentLocation] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -49,50 +49,73 @@ function NewListing() {
   }, [success, countdown, createdItemId, navigate]);
 
   useEffect(() => {
-    if (useCurrentLocation && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
+    if (!useCurrentLocation) return;
+
+    if (!navigator.geolocation) {
+      setError('Geolocation is not supported by your browser');
+      setUseCurrentLocation(false);
+      return;
+    }
+
+    setIsLocating(true);
+    setError(null);
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
           const { latitude, longitude } = position.coords;
-          try {
-            const response = await fetch(
-              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
-            );
-            const data = await response.json();
-            const address = data.address || {};
-            
-            const city = address.city || address.town || address.village || '';
-            const state = address.state || '';
-            const zipcode = address.postcode || '';
-            const label = `${city}, ${state}`;
-            
-            const location: LocationData = {
-              label,
-              city,
-              state,
-              zipcode,
-              latitude,
-              longitude
-            };
-            
-            setSelectedLocation(location);
-            setLocationInputText(label);
-          } catch (error) {
-            console.error('Error getting location details:', error);
-            setError('Could not get your current location details');
+          
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+          );
+          
+          if (!response.ok) throw new Error('Failed to get location details');
+          
+          const data = await response.json();
+          const address = data.address || {};
+          
+          const city = address.city || address.town || address.village || '';
+          const state = address.state || '';
+          const zipcode = address.postcode || '';
+          
+          if (!city || !state) {
+            throw new Error('Could not determine your location');
           }
-        },
-        (error) => {
-          console.error('Geolocation error:', error);
-          setError('Could not get your current location');
+
+          const location: LocationData = {
+            label: `${city}, ${state}`,
+            city,
+            state,
+            zipcode,
+            latitude,
+            longitude
+          };
+
+          setSelectedLocation(location);
+        } catch (err) {
+          console.error('Error getting location details:', err);
+          setError('Could not determine your location. Please enter it manually.');
+        } finally {
+          setIsLocating(false);
           setUseCurrentLocation(false);
         }
-      );
-    }
+      },
+      (error) => {
+        console.error('Geolocation error:', error);
+        setError('Could not access your location. Please enter it manually.');
+        setIsLocating(false);
+        setUseCurrentLocation(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 5000,
+        maximumAge: 0
+      }
+    );
   }, [useCurrentLocation]);
 
   const handleLocationSelect = (location: LocationData) => {
     setSelectedLocation(location);
-    setLocationInputText(location.label);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -307,32 +330,49 @@ function NewListing() {
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Location <span className="text-red-500">*</span>
-            </label>
-            <div className="space-y-4">
-              <LocationSearch
-                onLocationSelect={handleLocationSelect}
-                initialValue={locationInputText}
-                placeholder="Enter city, state, or ZIP code"
-              />
-              
+          {/* Location Section */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-medium text-gray-900">Location</h3>
+              {selectedLocation && (
+                <span className="text-sm text-green-600 font-medium">
+                  ✓ {selectedLocation.label}
+                </span>
+              )}
+            </div>
+            
+            <div className="flex flex-col sm:flex-row gap-3">
               <button
                 type="button"
                 onClick={() => setUseCurrentLocation(true)}
-                className="flex items-center text-sm text-indigo-600 hover:text-indigo-800"
+                disabled={isLocating}
+                className={`flex-1 flex items-center justify-center px-4 py-3 rounded-lg border transition-colors ${
+                  isLocating 
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200' 
+                    : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border-indigo-200'
+                }`}
               >
-                <MapPin className="w-4 h-4 mr-1" />
-                Use my current location
+                <MapPin className="w-5 h-5 mr-2" />
+                {isLocating ? 'Getting location...' : 'Use my current location'}
               </button>
+              
+              <LocationSearch
+                onLocationSelect={handleLocationSelect}
+                placeholder="Can't find your location? Enter manually"
+              />
             </div>
+
+            {!selectedLocation && (
+              <p className="text-sm text-red-500">
+                Please select your location using one of the options above
+              </p>
+            )}
           </div>
 
           <button
             type="submit"
             className="w-full btn-primary"
-            disabled={loading}
+            disabled={loading || !selectedLocation}
           >
             {loading ? 'Creating...' : 'Create Listing'}
           </button>
