@@ -46,7 +46,7 @@ function Navbar({ unreadCount, unreadOffers }: NavbarProps) {
             <div className="flex items-center space-x-4">
               {user ? (
                 <>
-                  <Link to="/messages" className="nav-link relative">
+                  <Link to="/messages\" className="nav-link relative">
                     <div className="relative">
                       <MessageCircle className="w-6 h-6" />
                       {totalUnread > 0 && (
