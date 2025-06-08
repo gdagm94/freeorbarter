@@ -57,6 +57,47 @@ export function ProfileSetup({ onComplete, onClose, initialData }: ProfileSetupP
     zipcode: ''
   });
 
+  // Pre-populate location data if zipcode exists
+  useEffect(() => {
+    const prePopulateLocation = async () => {
+      if (initialData?.zipcode) {
+        try {
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/search?postalcode=${initialData.zipcode}&country=usa&format=json&limit=1`
+          );
+          
+          if (!response.ok) return;
+          
+          const data = await response.json();
+          
+          if (data && data[0]) {
+            const address = data[0].address || {};
+            const city = address.city || address.town || address.village || '';
+            const state = address.state || '';
+            
+            if (city && state) {
+              const location: LocationData = {
+                label: `${city}, ${state}`,
+                city,
+                state,
+                zipcode: initialData.zipcode,
+                latitude: parseFloat(data[0].lat),
+                longitude: parseFloat(data[0].lon)
+              };
+              
+              setSelectedLocation(location);
+            }
+          }
+        } catch (err) {
+          console.error('Error pre-populating location:', err);
+          // Don't show error to user, just continue without pre-population
+        }
+      }
+    };
+
+    prePopulateLocation();
+  }, [initialData?.zipcode]);
+
   useEffect(() => {
     if (!useCurrentLocation) return;
 
@@ -285,9 +326,11 @@ export function ProfileSetup({ onComplete, onClose, initialData }: ProfileSetupP
           </div>
 
           {/* Location Section */}
-          <div className="space-y-4">
+          <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-medium text-gray-900">Location</h3>
+              <label className="block text-sm font-medium text-gray-700">
+                Location <span className="text-red-500">*</span>
+              </label>
               {selectedLocation && (
                 <span className="text-sm text-green-600 font-medium">
                   ✓ {selectedLocation.label}
@@ -295,33 +338,33 @@ export function ProfileSetup({ onComplete, onClose, initialData }: ProfileSetupP
               )}
             </div>
             
-            <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex flex-col gap-2">
               <button
                 type="button"
                 onClick={() => setUseCurrentLocation(true)}
                 disabled={isLocating}
-                className={`flex-1 flex items-center justify-center px-4 py-3 rounded-lg border transition-colors ${
+                className={`flex items-center justify-center px-3 py-2 rounded-lg border text-sm transition-colors ${
                   isLocating 
                     ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200' 
                     : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border-indigo-200'
                 }`}
               >
-                <MapPin className="w-5 h-5 mr-2" />
+                <MapPin className="w-4 h-4 mr-2" />
                 {isLocating ? 'Getting location...' : 'Use my current location'}
               </button>
               
               <button
                 type="button"
                 onClick={() => setShowManualEntry(true)}
-                className="flex-1 flex items-center justify-center px-4 py-3 rounded-lg border bg-gray-50 text-gray-600 hover:bg-gray-100 border-gray-200 transition-colors"
+                className="flex items-center justify-center px-3 py-2 rounded-lg border bg-gray-50 text-gray-600 hover:bg-gray-100 border-gray-200 transition-colors text-sm"
               >
-                <PenSquare className="w-5 h-5 mr-2" />
-                Can't find your location? Enter manually
+                <PenSquare className="w-4 h-4 mr-2" />
+                Enter manually
               </button>
             </div>
 
             {showManualEntry && (
-              <div className="mt-4 space-y-4 bg-gray-50 p-4 rounded-lg">
+              <div className="space-y-3 bg-gray-50 p-4 rounded-lg">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">City</label>
                   <input
