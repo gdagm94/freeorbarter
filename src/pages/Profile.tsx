@@ -567,8 +567,18 @@ function Profile() {
                 </div>
               </div>
             </div>
-            <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{profile?.username}</h1>
+            <div className="flex-1">
+              <div className="flex items-center space-x-2">
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{profile?.username}</h1>
+                <button
+                  onClick={() => setShowShareDialog(true)}
+                  className="p-3 bg-gray-100 rounded-full shadow-sm hover:bg-gray-200 transition-colors"
+                  title="Share Profile"
+                  aria-label="Share Profile"
+                >
+                  <Share2 className="w-5 h-5 text-gray-600" />
+                </button>
+              </div>
               <div className="flex items-center text-gray-600 mt-1">
                 <span>{profile?.zipcode}</span>
                 {profile?.gender && (
@@ -597,13 +607,6 @@ function Profile() {
             >
               <History className="w-4 h-4 mr-1" />
               <span>History</span>
-            </button>
-            <button
-              onClick={() => setShowShareDialog(true)}
-              className="flex-1 sm:flex-none btn-secondary flex items-center justify-center text-sm"
-            >
-              <Share2 className="w-4 h-4 mr-1" />
-              <span>Share</span>
             </button>
           </div>
         </div>
