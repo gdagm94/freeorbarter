@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Settings, Star, History, Upload, Edit, Trash2, Share2, Users, UserPlus, UserMinus, CheckCircle, XCircle, Clock, MessageCircle } from 'lucide-react';
+import { Settings, Star, History, Upload, Edit, Trash2, Share2, Users, UserPlus, UserMinus, CheckCircle, XCircle, Clock, MessageCircle, Eye } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import ItemCard from '../components/ItemCard';
 import { useAuth } from '../hooks/useAuth';
@@ -9,7 +9,6 @@ import { ProfileSetup } from '../components/ProfileSetup';
 import { EditListingDialog } from '../components/EditListingDialog';
 import { DeleteListingDialog } from '../components/DeleteListingDialog';
 import { UserShareDialog } from '../components/UserShareDialog';
-import { WatchedItems } from '../components/WatchedItems';
 import { FriendMessageDialog } from '../components/FriendMessageDialog';
 import { 
   getFriendsList, 
@@ -43,7 +42,7 @@ function Profile() {
   const navigate = useNavigate();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [showProfileSetup, setShowProfileSetup] = useState(false);
-  const [activeTab, setActiveTab] = useState<'free' | 'barter' | 'watched' | 'friends'>('free');
+  const [activeTab, setActiveTab] = useState<'free' | 'barter' | 'friends'>('free');
   const [items, setItems] = useState<Item[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [transactionHistory, setTransactionHistory] = useState<TransactionHistory[]>([]);
@@ -210,6 +209,10 @@ function Profile() {
 
   const handleHistoryClick = () => {
     navigate('/history');
+  };
+
+  const handleWatchlistClick = () => {
+    navigate('/watched-items');
   };
 
   const handleFriendAction = async (action: 'accept' | 'decline' | 'cancel' | 'unfriend', requestId: string, friendId?: string) => {
@@ -608,6 +611,13 @@ function Profile() {
               <History className="w-4 h-4 mr-1" />
               <span>History</span>
             </button>
+            <button
+              onClick={handleWatchlistClick}
+              className="flex-1 sm:flex-none btn-secondary flex items-center justify-center text-sm"
+            >
+              <Eye className="w-4 h-4 mr-1" />
+              <span>Watchlist</span>
+            </button>
           </div>
         </div>
       </div>
@@ -637,19 +647,6 @@ function Profile() {
             </button>
             <button
               className={`flex-1 py-2 sm:py-3 px-4 sm:px-6 text-center ${
-                activeTab === 'watched'
-                  ? 'border-b-2 border-indigo-600 text-indigo-600 font-semibold'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-              onClick={() => setActiveTab('watched')}
-            >
-              <div className="flex items-center justify-center space-x-1">
-                <Star className="w-4 h-4" />
-                <span>Watchlist</span>
-              </div>
-            </button>
-            <button
-              className={`flex-1 py-2 sm:py-3 px-4 sm:px-6 text-center ${
                 activeTab === 'friends'
                   ? 'border-b-2 border-indigo-600 text-indigo-600 font-semibold'
                   : 'text-gray-600 hover:text-gray-900'
@@ -670,9 +667,7 @@ function Profile() {
         </div>
 
         <div className="p-4 sm:p-6">
-          {activeTab === 'watched' ? (
-            user && <WatchedItems userId={user.id} />
-          ) : activeTab === 'friends' ? (
+          {activeTab === 'friends' ? (
             renderFriendsContent()
           ) : activeTab === 'free' ? (
             freeItems.length > 0 ? (
