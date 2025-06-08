@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { MessageCircle, Star, ArrowLeft, ChevronLeft, ChevronRight, User, Edit, Trash2, Tag, CheckCircle } from 'lucide-react';
+import { MessageCircle, Star, ArrowLeft, ChevronLeft, ChevronRight, User, Edit, Trash2, Tag, CheckCircle, Share2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Item } from '../types';
 import { MessageList } from '../components/MessageList';
@@ -11,6 +11,7 @@ import { EditListingDialog } from '../components/EditListingDialog';
 import { DeleteListingDialog } from '../components/DeleteListingDialog';
 import { StatusUpdateDialog } from '../components/StatusUpdateDialog';
 import { WatchButton } from '../components/WatchButton';
+import { ShareDialog } from '../components/ShareDialog';
 
 interface ItemUser {
   id: string;
@@ -39,6 +40,7 @@ function ItemDetails() {
   const [otherUserId, setOtherUserId] = useState<string | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [showStatusDialog, setShowStatusDialog] = useState(false);
+  const [showShareDialog, setShowShareDialog] = useState(false);
 
   // Scroll to top when component mounts
   useEffect(() => {
@@ -382,6 +384,14 @@ function ItemDetails() {
                     onAuthRequired={() => setShowAuth(true)}
                   />
                 )}
+                <button
+                  onClick={() => setShowShareDialog(true)}
+                  className="bg-gray-100 p-2 rounded-full shadow-sm hover:bg-gray-200 transition-colors"
+                  title="Share Item"
+                  aria-label="Share Item"
+                >
+                  <Share2 className="w-5 h-5 text-gray-600" />
+                </button>
                 {isOwnItem && (
                   <div className="flex space-x-2">
                     <button
@@ -522,6 +532,13 @@ function ItemDetails() {
           onConfirm={handleStatusUpdate}
           onClose={() => setShowStatusDialog(false)}
           loading={updatingStatus}
+        />
+      )}
+      {showShareDialog && (
+        <ShareDialog
+          itemId={item.id}
+          itemTitle={item.title}
+          onClose={() => setShowShareDialog(false)}
         />
       )}
     </div>
