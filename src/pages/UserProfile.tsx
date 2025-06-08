@@ -228,11 +228,10 @@ function UserProfile() {
           <button
             onClick={() => handleFriendAction('send')}
             disabled={isLoading}
-            className="flex items-center justify-center px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium transition-colors hover:bg-indigo-700 disabled:opacity-50 min-w-[100px]"
+            className="w-full sm:w-auto flex items-center justify-center px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium transition-colors hover:bg-indigo-700 disabled:opacity-50"
           >
             <UserPlus className="w-4 h-4 mr-1.5" />
-            <span className="hidden sm:inline">{isLoading ? 'Sending...' : 'Add Friend'}</span>
-            <span className="sm:hidden">{isLoading ? '...' : 'Add'}</span>
+            <span>{isLoading ? 'Sending...' : 'Add Friend'}</span>
           </button>
         );
 
@@ -241,57 +240,52 @@ function UserProfile() {
           <button
             onClick={() => handleFriendAction('cancel')}
             disabled={isLoading}
-            className="flex items-center justify-center px-3 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium transition-colors hover:bg-gray-200 disabled:opacity-50 min-w-[100px]"
+            className="w-full sm:w-auto flex items-center justify-center px-3 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium transition-colors hover:bg-gray-200 disabled:opacity-50"
           >
             <Clock className="w-4 h-4 mr-1.5" />
-            <span className="hidden sm:inline">{isLoading ? 'Canceling...' : 'Request Sent'}</span>
-            <span className="sm:hidden">{isLoading ? '...' : 'Sent'}</span>
+            <span>{isLoading ? 'Canceling...' : 'Request Sent'}</span>
           </button>
         );
 
       case 'pending_received':
         return (
-          <div className="flex space-x-1.5">
+          <div className="w-full sm:w-auto flex space-x-1.5">
             <button
               onClick={() => handleFriendAction('accept')}
               disabled={isLoading}
-              className="flex items-center justify-center px-2.5 py-2 bg-green-600 text-white rounded-lg text-sm font-medium transition-colors hover:bg-green-700 disabled:opacity-50 min-w-[70px]"
+              className="w-1/2 sm:w-auto flex items-center justify-center px-2.5 py-2 bg-green-600 text-white rounded-lg text-sm font-medium transition-colors hover:bg-green-700 disabled:opacity-50"
             >
               <CheckCircle className="w-4 h-4 mr-1" />
-              <span className="hidden sm:inline">{isLoading ? 'Accepting...' : 'Accept'}</span>
-              <span className="sm:hidden">✓</span>
+              <span>{isLoading ? 'Accepting...' : 'Accept'}</span>
             </button>
             <button
               onClick={() => handleFriendAction('decline')}
               disabled={isLoading}
-              className="flex items-center justify-center px-2.5 py-2 bg-red-600 text-white rounded-lg text-sm font-medium transition-colors hover:bg-red-700 disabled:opacity-50 min-w-[70px]"
+              className="w-1/2 sm:w-auto flex items-center justify-center px-2.5 py-2 bg-red-600 text-white rounded-lg text-sm font-medium transition-colors hover:bg-red-700 disabled:opacity-50"
             >
               <XCircle className="w-4 h-4 mr-1" />
-              <span className="hidden sm:inline">{isLoading ? 'Declining...' : 'Decline'}</span>
-              <span className="sm:hidden">✗</span>
+              <span>{isLoading ? 'Declining...' : 'Decline'}</span>
             </button>
           </div>
         );
 
       case 'friends':
         return (
-          <div className="flex space-x-1.5">
+          <div className="w-full sm:w-auto flex space-x-1.5">
             <button
               onClick={handleMessageUser}
-              className="flex items-center justify-center px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium transition-colors hover:bg-indigo-700 min-w-[80px]"
+              className="w-1/2 sm:w-auto flex items-center justify-center px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium transition-colors hover:bg-indigo-700"
             >
               <MessageCircle className="w-4 h-4 mr-1.5" />
-              <span className="hidden sm:inline">Message</span>
-              <span className="sm:hidden">Msg</span>
+              <span>Message</span>
             </button>
             <button
               onClick={() => handleFriendAction('unfriend')}
               disabled={isLoading}
-              className="flex items-center justify-center px-3 py-2 bg-green-100 text-green-800 rounded-lg text-sm font-medium transition-colors hover:bg-red-100 hover:text-red-800 disabled:opacity-50 min-w-[80px]"
+              className="w-1/2 sm:w-auto flex items-center justify-center px-3 py-2 bg-green-100 text-green-800 rounded-lg text-sm font-medium transition-colors hover:bg-red-100 hover:text-red-800 disabled:opacity-50"
             >
               <UserMinus className="w-4 h-4 mr-1.5" />
-              <span className="hidden sm:inline">{isLoading ? 'Unfriending...' : 'Friends'}</span>
-              <span className="sm:hidden">{isLoading ? '...' : '✓'}</span>
+              <span>{isLoading ? 'Unfriending...' : 'Friends'}</span>
             </button>
           </div>
         );
@@ -372,13 +366,13 @@ function UserProfile() {
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center justify-between space-x-2">
-            <div className="flex-1">
+          <div className="flex flex-wrap justify-end gap-2 sm:flex-nowrap sm:justify-between sm:space-x-2">
+            <div className="w-full sm:flex-1">
               {renderFriendButton()}
             </div>
             <button
               onClick={() => setShowShareDialog(true)}
-              className="flex items-center justify-center p-2.5 bg-gray-100 rounded-lg shadow-sm hover:bg-gray-200 transition-colors flex-shrink-0"
+              className="w-full sm:w-auto flex items-center justify-center px-3 py-2 bg-gray-100 rounded-lg shadow-sm hover:bg-gray-200 transition-colors"
               title="Share Profile"
               aria-label="Share Profile"
             >
