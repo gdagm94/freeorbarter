@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { MessageCircle, PlusCircle, User, BarChart2 } from 'lucide-react';
+import { MessageCircle, PlusCircle, User, BarChart2, LogOut } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Auth } from './Auth';
 import { NotificationBell } from './NotificationBell';
@@ -46,7 +46,7 @@ function Navbar({ unreadCount, unreadOffers }: NavbarProps) {
             <div className="flex items-center space-x-4">
               {user ? (
                 <>
-                  <Link to="/messages\" className="nav-link relative">
+                  <Link to="/messages" className="nav-link relative">
                     <div className="relative">
                       <MessageCircle className="w-6 h-6" />
                       {totalUnread > 0 && (
@@ -74,9 +74,11 @@ function Navbar({ unreadCount, unreadOffers }: NavbarProps) {
                   </Link>
                   <button
                     onClick={handleSignOut}
-                    className="text-sm text-gray-600 hover:text-indigo-600"
+                    className="nav-link"
+                    title="Sign Out"
                   >
-                    Sign Out
+                    <LogOut className="w-6 h-6" />
+                    <span className="hidden md:block">Sign Out</span>
                   </button>
                 </>
               ) : (
