@@ -127,7 +127,7 @@ export function NotificationDropdown({ onClose, onNotificationRead, onMarkAllAsR
   };
 
   return (
-    <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+    <div className="absolute left-1/2 -translate-x-1/2 md:left-auto md:translate-x-0 md:right-0 top-full mt-2 w-[calc(100vw-32px)] md:w-80 mx-4 md:mx-0 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
       <div className="p-4 border-b border-gray-200">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold text-gray-900">Notifications</h3>
