@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { X, Upload, MapPin } from 'lucide-react';
-import { LocationSearch } from './LocationSearch';
+import { X, Upload, MapPin, PenSquare } from 'lucide-react';
 
 interface ProfileSetupProps {
   onComplete: () => void;
@@ -23,6 +22,22 @@ interface LocationData {
   longitude: number;
 }
 
+const stateAbbreviations: { [key: string]: string } = {
+  'AL': 'Alabama', 'AK': 'Alaska', 'AZ': 'Arizona', 'AR': 'Arkansas',
+  'CA': 'California', 'CO': 'Colorado', 'CT': 'Connecticut', 'DE': 'Delaware',
+  'FL': 'Florida', 'GA': 'Georgia', 'HI': 'Hawaii', 'ID': 'Idaho',
+  'IL': 'Illinois', 'IN': 'Indiana', 'IA': 'Iowa', 'KS': 'Kansas',
+  'KY': 'Kentucky', 'LA': 'Louisiana', 'ME': 'Maine', 'MD': 'Maryland',
+  'MA': 'Massachusetts', 'MI': 'Michigan', 'MN': 'Minnesota', 'MS': 'Mississippi',
+  'MO': 'Missouri', 'MT': 'Montana', 'NE': 'Nebraska', 'NV': 'Nevada',
+  'NH': 'New Hampshire', 'NJ': 'New Jersey', 'NM': 'New Mexico', 'NY': 'New York',
+  'NC': 'North Carolina', 'ND': 'North Dakota', 'OH': 'Ohio', 'OK': 'Oklahoma',
+  'OR': 'Oregon', 'PA': 'Pennsylvania', 'RI': 'Rhode Island', 'SC': 'South Carolina',
+  'SD': 'South Dakota', 'TN': 'Tennessee', 'TX': 'Texas', 'UT': 'Utah',
+  'VT': 'Vermont', 'VA': 'Virginia', 'WA': 'Washington', 'WV': 'West Virginia',
+  'WI': 'Wisconsin', 'WY': 'Wyoming'
+};
+
 export function ProfileSetup({ onComplete, onClose, initialData }: ProfileSetupProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +50,12 @@ export function ProfileSetup({ onComplete, onClose, initialData }: ProfileSetupP
   const [avatarPreview, setAvatarPreview] = useState<string | null>(initialData?.avatar_url || null);
   const [useCurrentLocation, setUseCurrentLocation] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
-  const [locationInputText, setLocationInputText] = useState(initialData?.zipcode || '');
+  const [showManualEntry, setShowManualEntry] = useState(false);
+  const [manualFormData, setManualFormData] = useState({
+    city: '',
+    state: '',
+    zipcode: ''
+  });
 
   useEffect(() => {
     if (!useCurrentLocation) return;
@@ -81,7 +101,6 @@ export function ProfileSetup({ onComplete, onClose, initialData }: ProfileSetupP
           };
 
           setSelectedLocation(location);
-          setLocationInputText(`${city}, ${state}`);
         } catch (err) {
           console.error('Error getting location details:', err);
           setError('Could not determine your location. Please enter it manually.');
@@ -120,6 +139,48 @@ export function ProfileSetup({ onComplete, onClose, initialData }: ProfileSetupP
         setAvatarPreview(reader.result as string);
       };
       reader.readAsDataURL(file);
+    }
+  };
+
+  const handleManualSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const { city, state, zipcode } = manualFormData;
+    
+    if (!city || !state || !zipcode) {
+      setError('All fields are required for manual entry');
+      return;
+    }
+
+    if (!/^\d{5}(-\d{4})?$/.test(zipcode)) {
+      setError('Please enter a valid ZIP code');
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?city=${encodeURIComponent(city)}&state=${encodeURIComponent(state)}&postalcode=${zipcode}&country=usa&format=json`
+      );
+      
+      const data = await response.json();
+      
+      const location: LocationData = {
+        label: `${city}, ${state}`,
+        city,
+        state,
+        zipcode,
+        latitude: data && data[0] ? parseFloat(data[0].lat) : 0,
+        longitude: data && data[0] ? parseFloat(data[0].lon) : 0
+      };
+
+      setSelectedLocation(location);
+      setShowManualEntry(false);
+      setManualFormData({ city: '', state: '', zipcode: '' });
+      setError(null);
+    } catch (err) {
+      console.error('Error geocoding location:', err);
+      setError('Error geocoding location. Please try again');
     }
   };
 
@@ -223,30 +284,100 @@ export function ProfileSetup({ onComplete, onClose, initialData }: ProfileSetupP
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Location <span className="text-red-500">*</span>
-            </label>
-            <div className="space-y-2">
-              <LocationSearch
-                onLocationSelect={setSelectedLocation}
-                initialValue={locationInputText}
-                placeholder="Enter your location"
-              />
+          {/* Location Section */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-medium text-gray-900">Location</h3>
+              {selectedLocation && (
+                <span className="text-sm text-green-600 font-medium">
+                  ✓ {selectedLocation.label}
+                </span>
+              )}
+            </div>
+            
+            <div className="flex flex-col sm:flex-row gap-3">
               <button
                 type="button"
                 onClick={() => setUseCurrentLocation(true)}
                 disabled={isLocating}
-                className={`flex items-center text-sm ${
+                className={`flex-1 flex items-center justify-center px-4 py-3 rounded-lg border transition-colors ${
                   isLocating 
-                    ? 'text-gray-400 cursor-not-allowed' 
-                    : 'text-indigo-600 hover:text-indigo-800'
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200' 
+                    : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border-indigo-200'
                 }`}
               >
-                <MapPin className="w-4 h-4 mr-1" />
+                <MapPin className="w-5 h-5 mr-2" />
                 {isLocating ? 'Getting location...' : 'Use my current location'}
               </button>
+              
+              <button
+                type="button"
+                onClick={() => setShowManualEntry(true)}
+                className="flex-1 flex items-center justify-center px-4 py-3 rounded-lg border bg-gray-50 text-gray-600 hover:bg-gray-100 border-gray-200 transition-colors"
+              >
+                <PenSquare className="w-5 h-5 mr-2" />
+                Can't find your location? Enter manually
+              </button>
             </div>
+
+            {showManualEntry && (
+              <div className="mt-4 space-y-4 bg-gray-50 p-4 rounded-lg">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">City</label>
+                  <input
+                    type="text"
+                    value={manualFormData.city}
+                    onChange={(e) => setManualFormData(prev => ({ ...prev, city: e.target.value }))}
+                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">State</label>
+                  <select
+                    value={manualFormData.state}
+                    onChange={(e) => setManualFormData(prev => ({ ...prev, state: e.target.value }))}
+                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  >
+                    <option value="">Select a state</option>
+                    {Object.entries(stateAbbreviations).map(([abbr, name]) => (
+                      <option key={abbr} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">ZIP Code</label>
+                  <input
+                    type="text"
+                    value={manualFormData.zipcode}
+                    onChange={(e) => setManualFormData(prev => ({ ...prev, zipcode: e.target.value }))}
+                    placeholder="12345"
+                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                </div>
+                <div className="flex justify-end space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowManualEntry(false)}
+                    className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleManualSubmit}
+                    className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+                  >
+                    Save Location
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {!selectedLocation && (
+              <p className="text-sm text-red-500">
+                Please select your location using one of the options above
+              </p>
+            )}
           </div>
 
           <div>
@@ -302,7 +433,7 @@ export function ProfileSetup({ onComplete, onClose, initialData }: ProfileSetupP
           <button
             type="submit"
             className="w-full btn-primary"
-            disabled={loading}
+            disabled={loading || !selectedLocation}
           >
             {loading ? 'Saving...' : 'Complete Profile'}
           </button>
