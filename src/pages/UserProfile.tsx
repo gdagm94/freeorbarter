@@ -243,7 +243,7 @@ function UserProfile() {
             className="w-full sm:w-auto flex items-center justify-center px-3 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium transition-colors hover:bg-gray-200 disabled:opacity-50"
           >
             <Clock className="w-4 h-4 mr-1.5" />
-            <span>{isLoading ? 'Canceling...' : 'Request Sent'}</span>
+            <span>{isLoading ? 'Canceling...' : 'Cancel Request'}</span>
           </button>
         );
 
