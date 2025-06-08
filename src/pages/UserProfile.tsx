@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Star, User, Share2, UserPlus, UserMinus, XCircle, CheckCircle, Clock } from 'lucide-react';
+import { Star, User, Share2, UserPlus, UserMinus, XCircle, CheckCircle, Clock, MessageCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import ItemCard from '../components/ItemCard';
 import { Item, FriendshipStatus } from '../types';
 import { UserShareDialog } from '../components/UserShareDialog';
+import { FriendMessageDialog } from '../components/FriendMessageDialog';
 import { 
   sendFriendRequest, 
   acceptFriendRequest, 
@@ -38,6 +39,9 @@ function UserProfile() {
   const [friendActionLoading, setFriendActionLoading] = useState(false);
   const [friendActionError, setFriendActionError] = useState<string | null>(null);
   const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
+
+  // Direct messaging state
+  const [showMessageDialog, setShowMessageDialog] = useState(false);
 
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -206,6 +210,11 @@ function UserProfile() {
     }
   };
 
+  const handleMessageUser = () => {
+    if (!profile) return;
+    setShowMessageDialog(true);
+  };
+
   const renderFriendButton = () => {
     if (!user || !profile || user.id === profile.id) {
       return null;
@@ -263,14 +272,23 @@ function UserProfile() {
 
       case 'friends':
         return (
-          <button
-            onClick={() => handleFriendAction('unfriend')}
-            disabled={isLoading}
-            className={`${buttonClass} bg-green-100 text-green-800 hover:bg-red-100 hover:text-red-800 disabled:opacity-50`}
-          >
-            <UserMinus className="w-4 h-4 mr-2" />
-            {isLoading ? 'Unfriending...' : 'Friends'}
-          </button>
+          <div className="flex space-x-2">
+            <button
+              onClick={handleMessageUser}
+              className={`${buttonClass} bg-indigo-600 text-white hover:bg-indigo-700`}
+            >
+              <MessageCircle className="w-4 h-4 mr-2" />
+              Message
+            </button>
+            <button
+              onClick={() => handleFriendAction('unfriend')}
+              disabled={isLoading}
+              className={`${buttonClass} bg-green-100 text-green-800 hover:bg-red-100 hover:text-red-800 disabled:opacity-50`}
+            >
+              <UserMinus className="w-4 h-4 mr-2" />
+              {isLoading ? 'Unfriending...' : 'Friends'}
+            </button>
+          </div>
         );
 
       default:
@@ -446,6 +464,15 @@ function UserProfile() {
           userId={profile.id}
           username={profile.username}
           onClose={() => setShowShareDialog(false)}
+        />
+      )}
+
+      {showMessageDialog && profile && (
+        <FriendMessageDialog
+          friendId={profile.id}
+          friendName={profile.username}
+          friendAvatar={profile.avatar_url}
+          onClose={() => setShowMessageDialog(false)}
         />
       )}
     </div>
