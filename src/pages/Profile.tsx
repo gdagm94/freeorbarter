@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Settings, Star, History, Upload, Edit, Trash2, Share2, Users, UserPlus, UserMinus, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Settings, Star, History, Upload, Edit, Trash2, Share2, Users, UserPlus, UserMinus, CheckCircle, XCircle, Clock, MessageCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import ItemCard from '../components/ItemCard';
 import { useAuth } from '../hooks/useAuth';
@@ -10,6 +10,7 @@ import { EditListingDialog } from '../components/EditListingDialog';
 import { DeleteListingDialog } from '../components/DeleteListingDialog';
 import { UserShareDialog } from '../components/UserShareDialog';
 import { WatchedItems } from '../components/WatchedItems';
+import { FriendMessageDialog } from '../components/FriendMessageDialog';
 import { 
   getFriendsList, 
   getPendingRequests, 
@@ -58,6 +59,14 @@ function Profile() {
   const [friendsLoading, setFriendsLoading] = useState(false);
   const [friendActionLoading, setFriendActionLoading] = useState<string | null>(null);
   const [friendsSubTab, setFriendsSubTab] = useState<'friends' | 'pending' | 'sent'>('friends');
+
+  // Direct messaging state
+  const [showMessageDialog, setShowMessageDialog] = useState(false);
+  const [selectedFriend, setSelectedFriend] = useState<{
+    id: string;
+    name: string;
+    avatar: string | null;
+  } | null>(null);
 
   const fetchProfileAndItems = async () => {
     if (!user) return;
@@ -239,6 +248,15 @@ function Profile() {
     }
   };
 
+  const handleMessageFriend = (friend: { id: string; username: string; avatar_url: string | null }) => {
+    setSelectedFriend({
+      id: friend.id,
+      name: friend.username,
+      avatar: friend.avatar_url
+    });
+    setShowMessageDialog(true);
+  };
+
   const renderFriendsContent = () => {
     if (friendsLoading) {
       return (
@@ -278,6 +296,13 @@ function Profile() {
                       </div>
                     </div>
                     <div className="flex space-x-2">
+                      <button
+                        onClick={() => friendship.friend && handleMessageFriend(friendship.friend)}
+                        className="flex items-center px-3 py-1 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm"
+                      >
+                        <MessageCircle className="w-4 h-4 mr-1" />
+                        Message
+                      </button>
                       <button
                         onClick={() => navigate(`/users/${friendship.friend?.id}`)}
                         className="text-sm text-indigo-600 hover:text-indigo-800"
@@ -475,6 +500,18 @@ function Profile() {
           userId={user.id}
           username={profile.username}
           onClose={() => setShowShareDialog(false)}
+        />
+      )}
+
+      {showMessageDialog && selectedFriend && (
+        <FriendMessageDialog
+          friendId={selectedFriend.id}
+          friendName={selectedFriend.name}
+          friendAvatar={selectedFriend.avatar}
+          onClose={() => {
+            setShowMessageDialog(false);
+            setSelectedFriend(null);
+          }}
         />
       )}
 
