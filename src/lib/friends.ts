@@ -120,37 +120,43 @@ export async function getFriendshipStatus(currentUserId: string, otherUserId: st
     const user1Id = currentUserId < otherUserId ? currentUserId : otherUserId;
     const user2Id = currentUserId < otherUserId ? otherUserId : currentUserId;
 
-    const { data: friendship } = await supabase
+    const { data: friendshipData } = await supabase
       .from('friendships')
       .select('id')
       .eq('user1_id', user1Id)
       .eq('user2_id', user2Id)
-      .maybeSingle();
+      .limit(1);
+
+    const friendship = friendshipData && friendshipData.length > 0 ? friendshipData[0] : null;
 
     if (friendship) {
       return 'friends';
     }
 
     // Check for pending friend requests
-    const { data: sentRequest } = await supabase
+    const { data: sentRequestData } = await supabase
       .from('friend_requests')
       .select('id')
       .eq('sender_id', currentUserId)
       .eq('receiver_id', otherUserId)
       .eq('status', 'pending')
-      .maybeSingle();
+      .limit(1);
+
+    const sentRequest = sentRequestData && sentRequestData.length > 0 ? sentRequestData[0] : null;
 
     if (sentRequest) {
       return 'pending_sent';
     }
 
-    const { data: receivedRequest } = await supabase
+    const { data: receivedRequestData } = await supabase
       .from('friend_requests')
       .select('id')
       .eq('sender_id', otherUserId)
       .eq('receiver_id', currentUserId)
       .eq('status', 'pending')
-      .maybeSingle();
+      .limit(1);
+
+    const receivedRequest = receivedRequestData && receivedRequestData.length > 0 ? receivedRequestData[0] : null;
 
     if (receivedRequest) {
       return 'pending_received';
