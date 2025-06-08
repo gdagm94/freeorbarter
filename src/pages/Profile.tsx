@@ -268,6 +268,40 @@ function Profile() {
 
     return (
       <div className="space-y-6">
+        {/* Friends sub-navigation */}
+        <div className="flex space-x-1 bg-gray-100 rounded-lg p-1">
+          <button
+            onClick={() => setFriendsSubTab('friends')}
+            className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+              friendsSubTab === 'friends'
+                ? 'bg-white text-indigo-600 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            Friends ({friends.length})
+          </button>
+          <button
+            onClick={() => setFriendsSubTab('pending')}
+            className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+              friendsSubTab === 'pending'
+                ? 'bg-white text-indigo-600 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            Requests ({pendingRequests.length})
+          </button>
+          <button
+            onClick={() => setFriendsSubTab('sent')}
+            className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+              friendsSubTab === 'sent'
+                ? 'bg-white text-indigo-600 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            Sent ({sentRequests.length})
+          </button>
+        </div>
+
         {/* Friends List */}
         {friendsSubTab === 'friends' && (
           <div>
@@ -516,7 +550,7 @@ function Profile() {
       )}
 
       <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center space-x-4 mb-4 sm:mb-0">
             <div className="relative flex-shrink-0">
               <img
@@ -549,67 +583,28 @@ function Profile() {
               </div>
             </div>
           </div>
-          <div className="flex flex-col space-y-3">
-            {/* Action buttons row */}
-            <div className="flex flex-row space-x-2">
-              <button
-                onClick={() => setShowProfileSetup(true)}
-                className="flex-1 sm:flex-none btn-secondary flex items-center justify-center text-sm"
-              >
-                <Settings className="w-4 h-4 mr-1" />
-                <span>Edit</span>
-              </button>
-              <button
-                onClick={handleHistoryClick}
-                className="flex-1 sm:flex-none btn-secondary flex items-center justify-center text-sm"
-              >
-                <History className="w-4 h-4 mr-1" />
-                <span>History</span>
-              </button>
-              <button
-                onClick={() => setShowShareDialog(true)}
-                className="flex-1 sm:flex-none btn-secondary flex items-center justify-center text-sm"
-              >
-                <Share2 className="w-4 h-4 mr-1" />
-                <span>Share</span>
-              </button>
-            </div>
-            
-            {/* Friends sub-navigation */}
-            {activeTab === 'friends' && (
-              <div className="flex space-x-1 bg-gray-100 rounded-lg p-1">
-                <button
-                  onClick={() => setFriendsSubTab('friends')}
-                  className={`flex-1 py-2 px-3 rounded-md text-xs font-medium transition-colors ${
-                    friendsSubTab === 'friends'
-                      ? 'bg-white text-indigo-600 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  Friends ({friends.length})
-                </button>
-                <button
-                  onClick={() => setFriendsSubTab('pending')}
-                  className={`flex-1 py-2 px-3 rounded-md text-xs font-medium transition-colors ${
-                    friendsSubTab === 'pending'
-                      ? 'bg-white text-indigo-600 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  Requests ({pendingRequests.length})
-                </button>
-                <button
-                  onClick={() => setFriendsSubTab('sent')}
-                  className={`flex-1 py-2 px-3 rounded-md text-xs font-medium transition-colors ${
-                    friendsSubTab === 'sent'
-                      ? 'bg-white text-indigo-600 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  Sent ({sentRequests.length})
-                </button>
-              </div>
-            )}
+          <div className="flex flex-row sm:flex-col space-x-2 sm:space-x-0 sm:space-y-2">
+            <button
+              onClick={() => setShowProfileSetup(true)}
+              className="flex-1 sm:flex-none btn-secondary flex items-center justify-center text-sm"
+            >
+              <Settings className="w-4 h-4 mr-1" />
+              <span>Edit</span>
+            </button>
+            <button
+              onClick={handleHistoryClick}
+              className="flex-1 sm:flex-none btn-secondary flex items-center justify-center text-sm"
+            >
+              <History className="w-4 h-4 mr-1" />
+              <span>History</span>
+            </button>
+            <button
+              onClick={() => setShowShareDialog(true)}
+              className="flex-1 sm:flex-none btn-secondary flex items-center justify-center text-sm"
+            >
+              <Share2 className="w-4 h-4 mr-1" />
+              <span>Share</span>
+            </button>
           </div>
         </div>
       </div>
