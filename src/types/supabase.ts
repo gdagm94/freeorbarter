@@ -67,6 +67,7 @@ export interface Database {
           offer_item_id?: string
           read: boolean
           is_offer: boolean
+          archived: boolean
         }
         Insert: {
           id?: string
@@ -78,6 +79,7 @@ export interface Database {
           offer_item_id?: string
           read?: boolean
           is_offer?: boolean
+          archived?: boolean
         }
         Update: {
           id?: string
@@ -89,6 +91,7 @@ export interface Database {
           offer_item_id?: string
           read?: boolean
           is_offer?: boolean
+          archived?: boolean
         }
       }
       users: {
@@ -124,6 +127,172 @@ export interface Database {
           zipcode?: string
           profile_completed?: boolean
           rating?: number
+        }
+      }
+      friend_requests: {
+        Row: {
+          id: string
+          sender_id: string
+          receiver_id: string
+          status: 'pending' | 'accepted' | 'declined'
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          sender_id: string
+          receiver_id: string
+          status?: 'pending' | 'accepted' | 'declined'
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          sender_id?: string
+          receiver_id?: string
+          status?: 'pending' | 'accepted' | 'declined'
+          created_at?: string
+        }
+      }
+      friendships: {
+        Row: {
+          id: string
+          user1_id: string
+          user2_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user1_id: string
+          user2_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user1_id?: string
+          user2_id?: string
+          created_at?: string
+        }
+      }
+      blocked_users: {
+        Row: {
+          id: string
+          blocker_id: string
+          blocked_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          blocker_id: string
+          blocked_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          blocker_id?: string
+          blocked_id?: string
+          created_at?: string
+        }
+      }
+      reported_messages: {
+        Row: {
+          id: string
+          message_id: string
+          reporter_id: string
+          reason: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          message_id: string
+          reporter_id: string
+          reason: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          message_id?: string
+          reporter_id?: string
+          reason?: string
+          created_at?: string
+        }
+      }
+      changelogs: {
+        Row: {
+          id: string
+          title: string
+          description: string
+          created_at: string
+          is_upcoming: boolean
+        }
+        Insert: {
+          id?: string
+          title: string
+          description: string
+          created_at?: string
+          is_upcoming?: boolean
+        }
+        Update: {
+          id?: string
+          title?: string
+          description?: string
+          created_at?: string
+          is_upcoming?: boolean
+        }
+      }
+      changelog_dismissals: {
+        Row: {
+          id: string
+          user_id: string
+          changelog_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          changelog_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          changelog_id?: string
+          created_at?: string
+        }
+      }
+      newsletter_subscribers: {
+        Row: {
+          id: string
+          email: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          email: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          email?: string
+          created_at?: string
+        }
+      }
+      watched_items: {
+        Row: {
+          id: string
+          user_id: string
+          item_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          item_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          item_id?: string
+          created_at?: string
         }
       }
     }

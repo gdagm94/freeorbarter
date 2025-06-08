@@ -20,6 +20,8 @@ export interface Item {
   location: string;
   status: 'available' | 'pending' | 'traded' | 'claimed';
   type: 'free' | 'barter';
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface Message {
@@ -32,6 +34,7 @@ export interface Message {
   offer_item_id?: string;
   read: boolean;
   is_offer: boolean;
+  archived: boolean;
 }
 
 export interface Conversation {
@@ -49,4 +52,49 @@ export interface Conversation {
   offer_item_title?: string;
   offer_item_image?: string;
   has_offer: boolean;
+  archived?: boolean;
 }
+
+// New friend-related interfaces
+export interface FriendRequest {
+  id: string;
+  sender_id: string;
+  receiver_id: string;
+  status: 'pending' | 'accepted' | 'declined';
+  created_at: string;
+}
+
+export interface Friendship {
+  id: string;
+  user1_id: string;
+  user2_id: string;
+  created_at: string;
+}
+
+export interface FriendRequestWithUser extends FriendRequest {
+  sender?: {
+    id: string;
+    username: string;
+    avatar_url: string | null;
+  };
+  receiver?: {
+    id: string;
+    username: string;
+    avatar_url: string | null;
+  };
+}
+
+export interface FriendshipWithUser extends Friendship {
+  friend?: {
+    id: string;
+    username: string;
+    avatar_url: string | null;
+    rating: number | null;
+  };
+}
+
+export type FriendshipStatus = 
+  | 'none' 
+  | 'pending_sent' 
+  | 'pending_received' 
+  | 'friends';
