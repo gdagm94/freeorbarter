@@ -599,21 +599,21 @@ function Profile() {
           <div className="flex flex-row sm:flex-col space-x-2 sm:space-x-0 sm:space-y-2">
             <button
               onClick={() => setShowProfileSetup(true)}
-              className="flex-1 sm:flex-none btn-secondary flex items-center justify-center text-sm"
+              className="flex-1 sm:flex-none bg-gray-100 text-gray-700 px-2 py-1 text-xs sm:px-4 sm:py-2 sm:text-sm rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center flex-shrink-0"
             >
               <Settings className="w-4 h-4 mr-1" />
               <span>Edit</span>
             </button>
             <button
               onClick={handleHistoryClick}
-              className="flex-1 sm:flex-none btn-secondary flex items-center justify-center text-sm"
+              className="flex-1 sm:flex-none bg-gray-100 text-gray-700 px-2 py-1 text-xs sm:px-4 sm:py-2 sm:text-sm rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center flex-shrink-0"
             >
               <History className="w-4 h-4 mr-1" />
               <span>History</span>
             </button>
             <button
               onClick={handleWatchlistClick}
-              className="flex-1 sm:flex-none btn-secondary flex items-center justify-center text-sm"
+              className="flex-1 sm:flex-none bg-gray-100 text-gray-700 px-2 py-1 text-xs sm:px-4 sm:py-2 sm:text-sm rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center flex-shrink-0"
             >
               <Eye className="w-4 h-4 mr-1" />
               <span>Watchlist</span>
