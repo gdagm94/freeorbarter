@@ -4,7 +4,7 @@ import { FriendRequest, Friendship, FriendRequestWithUser, FriendshipWithUser, F
 /**
  * Send a friend request to another user
  */
-export async function sendFriendRequest(senderId: string, receiverId: string): Promise<{ data: FriendRequest | null; error: Error | null }> {
+export async function sendFriendRequest(senderId: string, receiverId: string): Promise<{ data: null; error: Error | null }> {
   try {
     // Check if users are already friends or have pending request
     const existingStatus = await getFriendshipStatus(senderId, receiverId);
@@ -13,19 +13,17 @@ export async function sendFriendRequest(senderId: string, receiverId: string): P
       return { data: null, error: new Error('Friend request already exists or users are already friends') };
     }
 
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('friend_requests')
       .insert([{
         sender_id: senderId,
         receiver_id: receiverId,
         status: 'pending'
-      }])
-      .select()
-      .single();
+      }]);
 
     if (error) throw error;
 
-    return { data, error: null };
+    return { data: null, error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err : new Error('Failed to send friend request') };
   }
