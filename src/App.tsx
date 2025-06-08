@@ -9,6 +9,7 @@ import UserProfile from './pages/UserProfile';
 import Messages from './pages/Messages';
 import NewListing from './pages/NewListing';
 import History from './pages/History';
+import Notifications from './pages/Notifications';
 import About from './pages/About';
 import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
@@ -93,6 +94,7 @@ function App() {
             />
             <Route path="/new-listing" element={<NewListing />} />
             <Route path="/history" element={<History />} />
+            <Route path="/notifications" element={<Notifications />} />
             <Route path="/about" element={<About />} />
             <Route path="/terms" element={<Terms />} />
             <Route path="/privacy" element={<Privacy />} />

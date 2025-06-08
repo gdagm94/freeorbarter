@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { MessageCircle, PlusCircle, User, BarChart2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Auth } from './Auth';
+import { NotificationBell } from './NotificationBell';
 import { useAuth } from '../hooks/useAuth';
 
 interface NavbarProps {
@@ -66,6 +67,7 @@ function Navbar({ unreadCount, unreadOffers }: NavbarProps) {
                     <PlusCircle className="w-6 h-6" />
                     <span className="hidden md:block">New Listing</span>
                   </Link>
+                  <NotificationBell />
                   <Link to="/profile" className="nav-link">
                     <User className="w-6 h-6" />
                     <span className="hidden md:block">Profile</span>

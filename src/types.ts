@@ -98,3 +98,20 @@ export type FriendshipStatus =
   | 'pending_sent' 
   | 'pending_received' 
   | 'friends';
+
+// New notification interfaces
+export interface Notification {
+  id: string;
+  user_id: string;
+  sender_id?: string;
+  type: 'friend_request' | 'friend_request_approved' | 'new_listing' | 'direct_message' | 'watchlist_update';
+  content: string;
+  related_id?: string;
+  read: boolean;
+  created_at: string;
+  sender?: {
+    id: string;
+    username: string;
+    avatar_url: string | null;
+  };
+}
