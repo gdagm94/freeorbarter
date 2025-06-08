@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Settings, Star, History, Upload, Edit, Trash2, Share2, Users, UserPlus, UserMinus, CheckCircle, XCircle, Clock, MessageCircle, Eye } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import ItemCard from '../components/ItemCard';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabase';
@@ -312,7 +312,10 @@ function Profile() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {friends.map((friendship) => (
                   <div key={friendship.id} className="bg-gray-50 rounded-lg p-4 flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
+                    <Link 
+                      to={`/users/${friendship.friend?.id}`}
+                      className="flex items-center space-x-3 flex-1 hover:opacity-80 transition-opacity"
+                    >
                       {friendship.friend?.avatar_url ? (
                         <img
                           src={friendship.friend.avatar_url}
@@ -331,7 +334,7 @@ function Profile() {
                           {friendship.friend?.rating?.toFixed(1) || 'No rating'}
                         </div>
                       </div>
-                    </div>
+                    </Link>
                     <div className="flex space-x-2">
                       <button
                         onClick={() => friendship.friend && handleMessageFriend(friendship.friend)}
@@ -339,12 +342,6 @@ function Profile() {
                       >
                         <MessageCircle className="w-4 h-4 mr-1" />
                         Message
-                      </button>
-                      <button
-                        onClick={() => navigate(`/users/${friendship.friend?.id}`)}
-                        className="text-sm text-indigo-600 hover:text-indigo-800"
-                      >
-                        View Profile
                       </button>
                       <button
                         onClick={() => handleFriendAction('unfriend', friendship.id, friendship.friend?.id)}
@@ -378,7 +375,10 @@ function Profile() {
               <div className="space-y-4">
                 {pendingRequests.map((request) => (
                   <div key={request.id} className="bg-gray-50 rounded-lg p-4 flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
+                    <Link 
+                      to={`/users/${request.sender?.id}`}
+                      className="flex items-center space-x-3 flex-1 hover:opacity-80 transition-opacity"
+                    >
                       {request.sender?.avatar_url ? (
                         <img
                           src={request.sender.avatar_url}
@@ -396,7 +396,7 @@ function Profile() {
                           Sent {new Date(request.created_at).toLocaleDateString()}
                         </p>
                       </div>
-                    </div>
+                    </Link>
                     <div className="flex space-x-2">
                       <button
                         onClick={() => handleFriendAction('accept', request.id)}
@@ -446,7 +446,10 @@ function Profile() {
               <div className="space-y-4">
                 {sentRequests.map((request) => (
                   <div key={request.id} className="bg-gray-50 rounded-lg p-4 flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
+                    <Link 
+                      to={`/users/${request.receiver?.id}`}
+                      className="flex items-center space-x-3 flex-1 hover:opacity-80 transition-opacity"
+                    >
                       {request.receiver?.avatar_url ? (
                         <img
                           src={request.receiver.avatar_url}
@@ -464,7 +467,7 @@ function Profile() {
                           Sent {new Date(request.created_at).toLocaleDateString()}
                         </p>
                       </div>
-                    </div>
+                    </Link>
                     <button
                       onClick={() => handleFriendAction('cancel', request.id)}
                       disabled={friendActionLoading === request.id}
