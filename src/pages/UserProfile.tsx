@@ -1,10 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Star, User, Share2 } from 'lucide-react';
+import { Star, User, Share2, UserPlus, UserMinus, XCircle, CheckCircle, Clock } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../hooks/useAuth';
 import ItemCard from '../components/ItemCard';
-import { Item } from '../types';
+import { Item, FriendshipStatus } from '../types';
 import { UserShareDialog } from '../components/UserShareDialog';
+import { 
+  sendFriendRequest, 
+  acceptFriendRequest, 
+  declineFriendRequest, 
+  cancelFriendRequest, 
+  unfriend, 
+  getFriendshipStatus 
+} from '../lib/friends';
 
 interface UserProfileData {
   id: string;
@@ -16,12 +25,19 @@ interface UserProfileData {
 
 function UserProfile() {
   const { id } = useParams();
+  const { user } = useAuth();
   const [profile, setProfile] = useState<UserProfileData | null>(null);
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [activeTab, setActiveTab] = useState<'free' | 'barter'>('free');
+  
+  // Friend request states
+  const [friendshipStatus, setFriendshipStatus] = useState<FriendshipStatus>('none');
+  const [friendActionLoading, setFriendActionLoading] = useState(false);
+  const [friendActionError, setFriendActionError] = useState<string | null>(null);
+  const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -91,6 +107,177 @@ function UserProfile() {
     };
   }, [id]);
 
+  // Fetch friendship status when user or profile changes
+  useEffect(() => {
+    const fetchFriendshipStatus = async () => {
+      if (!user || !id || user.id === id) {
+        setFriendshipStatus('none');
+        return;
+      }
+
+      try {
+        const status = await getFriendshipStatus(user.id, id);
+        setFriendshipStatus(status);
+
+        // If status is pending_received, get the request ID
+        if (status === 'pending_received') {
+          const { data: request } = await supabase
+            .from('friend_requests')
+            .select('id')
+            .eq('sender_id', id)
+            .eq('receiver_id', user.id)
+            .eq('status', 'pending')
+            .single();
+
+          if (request) {
+            setPendingRequestId(request.id);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching friendship status:', err);
+      }
+    };
+
+    fetchFriendshipStatus();
+  }, [user, id]);
+
+  const handleFriendAction = async (action: 'send' | 'accept' | 'decline' | 'cancel' | 'unfriend') => {
+    if (!user || !id || user.id === id) return;
+
+    setFriendActionLoading(true);
+    setFriendActionError(null);
+
+    try {
+      let result;
+
+      switch (action) {
+        case 'send':
+          result = await sendFriendRequest(user.id, id);
+          if (result.error) throw result.error;
+          break;
+
+        case 'accept':
+          if (!pendingRequestId) throw new Error('No pending request found');
+          result = await acceptFriendRequest(pendingRequestId);
+          if (result.error) throw result.error;
+          break;
+
+        case 'decline':
+          if (!pendingRequestId) throw new Error('No pending request found');
+          result = await declineFriendRequest(pendingRequestId);
+          if (result.error) throw result.error;
+          break;
+
+        case 'cancel':
+          // For cancel, we need to find the request ID
+          const { data: sentRequest } = await supabase
+            .from('friend_requests')
+            .select('id')
+            .eq('sender_id', user.id)
+            .eq('receiver_id', id)
+            .eq('status', 'pending')
+            .single();
+
+          if (!sentRequest) throw new Error('No pending request found');
+          
+          result = await cancelFriendRequest(sentRequest.id);
+          if (result.error) throw result.error;
+          break;
+
+        case 'unfriend':
+          result = await unfriend(user.id, id);
+          if (result.error) throw result.error;
+          break;
+
+        default:
+          throw new Error('Invalid action');
+      }
+
+      // Refresh friendship status
+      const newStatus = await getFriendshipStatus(user.id, id);
+      setFriendshipStatus(newStatus);
+      setPendingRequestId(null);
+
+    } catch (err) {
+      console.error('Error performing friend action:', err);
+      setFriendActionError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setFriendActionLoading(false);
+    }
+  };
+
+  const renderFriendButton = () => {
+    if (!user || !profile || user.id === profile.id) {
+      return null;
+    }
+
+    const buttonClass = "flex items-center justify-center px-4 py-2 rounded-lg text-sm font-medium transition-colors";
+    const isLoading = friendActionLoading;
+
+    switch (friendshipStatus) {
+      case 'none':
+        return (
+          <button
+            onClick={() => handleFriendAction('send')}
+            disabled={isLoading}
+            className={`${buttonClass} bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50`}
+          >
+            <UserPlus className="w-4 h-4 mr-2" />
+            {isLoading ? 'Sending...' : 'Add Friend'}
+          </button>
+        );
+
+      case 'pending_sent':
+        return (
+          <button
+            onClick={() => handleFriendAction('cancel')}
+            disabled={isLoading}
+            className={`${buttonClass} bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-50`}
+          >
+            <Clock className="w-4 h-4 mr-2" />
+            {isLoading ? 'Canceling...' : 'Request Sent'}
+          </button>
+        );
+
+      case 'pending_received':
+        return (
+          <div className="flex space-x-2">
+            <button
+              onClick={() => handleFriendAction('accept')}
+              disabled={isLoading}
+              className={`${buttonClass} bg-green-600 text-white hover:bg-green-700 disabled:opacity-50`}
+            >
+              <CheckCircle className="w-4 h-4 mr-2" />
+              {isLoading ? 'Accepting...' : 'Accept'}
+            </button>
+            <button
+              onClick={() => handleFriendAction('decline')}
+              disabled={isLoading}
+              className={`${buttonClass} bg-red-600 text-white hover:bg-red-700 disabled:opacity-50`}
+            >
+              <XCircle className="w-4 h-4 mr-2" />
+              {isLoading ? 'Declining...' : 'Decline'}
+            </button>
+          </div>
+        );
+
+      case 'friends':
+        return (
+          <button
+            onClick={() => handleFriendAction('unfriend')}
+            disabled={isLoading}
+            className={`${buttonClass} bg-green-100 text-green-800 hover:bg-red-100 hover:text-red-800 disabled:opacity-50`}
+          >
+            <UserMinus className="w-4 h-4 mr-2" />
+            {isLoading ? 'Unfriending...' : 'Friends'}
+          </button>
+        );
+
+      default:
+        return null;
+    }
+  };
+
   if (loading) {
     return (
       <div className="max-w-4xl mx-auto">
@@ -159,14 +346,24 @@ function UserProfile() {
               </div>
             </div>
           </div>
-          <button
-            onClick={() => setShowShareDialog(true)}
-            className="bg-gray-100 p-2 rounded-full shadow-sm hover:bg-gray-200 transition-colors"
-            title="Share Profile"
-          >
-            <Share2 className="w-5 h-5 text-gray-600" />
-          </button>
+          <div className="flex items-center space-x-3">
+            {renderFriendButton()}
+            <button
+              onClick={() => setShowShareDialog(true)}
+              className="bg-gray-100 p-2 rounded-full shadow-sm hover:bg-gray-200 transition-colors"
+              title="Share Profile"
+            >
+              <Share2 className="w-5 h-5 text-gray-600" />
+            </button>
+          </div>
         </div>
+
+        {/* Friend action error */}
+        {friendActionError && (
+          <div className="mt-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+            {friendActionError}
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
