@@ -39,10 +39,12 @@ export interface Message {
 
 export interface Conversation {
   id: string;
-  type: 'item' | 'direct_message'; // Added type field
-  item_id: string | null; // Made nullable for direct messages
-  item_title: string | null; // Made nullable for direct messages
-  item_image: string | null; // Made nullable for direct messages
+  type: 'item' | 'direct_message' | 'unified'; // Added unified type
+  item_id: string | null; // Made nullable for direct messages and unified conversations
+  item_title: string | null; // Made nullable for direct messages and unified conversations
+  item_image: string | null; // Made nullable for direct messages and unified conversations
+  recent_item_title?: string | null; // For unified conversations - most recent item discussed
+  recent_item_image?: string | null; // For unified conversations - most recent item image
   other_user_id: string;
   other_user_name: string;
   other_user_avatar: string | null;

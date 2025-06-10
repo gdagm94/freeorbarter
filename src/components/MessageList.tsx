@@ -8,10 +8,10 @@ import pusherClient from '../lib/pusher';
 import { debounce } from 'throttle-debounce';
 
 interface MessageListProps {
-  itemId: string | null; // Made nullable for direct messages
+  itemId: string | null; // Made nullable for unified conversations
   currentUserId: string;
   otherUserId: string;
-  conversationType: 'item' | 'direct_message'; // Added conversation type
+  conversationType: 'item' | 'direct_message' | 'unified'; // Added unified type
   onMessageRead?: () => void;
 }
 
@@ -26,6 +26,11 @@ interface MessageWithOfferItem extends Message {
   sender?: {
     username: string;
     avatar_url: string | null;
+  };
+  items?: {
+    id: string;
+    title: string;
+    images: string[];
   };
 }
 
@@ -57,12 +62,15 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
         .eq('sender_id', otherUserId)
         .eq('read', false);
 
-      // Apply different filters based on conversation type
-      if (conversationType === 'direct_message') {
-        query = query.is('item_id', null);
-      } else if (itemId) {
+      // For unified conversations, we don't filter by item_id
+      // For item conversations, we filter by specific item_id
+      // For direct_message conversations, we filter by null item_id
+      if (conversationType === 'item' && itemId) {
         query = query.eq('item_id', itemId);
+      } else if (conversationType === 'direct_message') {
+        query = query.is('item_id', null);
       }
+      // For unified conversations, we don't add any item_id filter
 
       const { error } = await query;
       
@@ -114,7 +122,9 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
   // Debounced function to emit typing status
   const emitTypingStatus = debounce(1000, async (isTyping: boolean) => {
     try {
-      const channelName = conversationType === 'direct_message' 
+      const channelName = conversationType === 'unified' 
+        ? `private-user-${[currentUserId, otherUserId].sort().join('-')}`
+        : conversationType === 'direct_message' 
         ? `private-dm-${[currentUserId, otherUserId].sort().join('-')}`
         : `private-messages-${itemId}`;
 
@@ -171,6 +181,11 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
             sender:sender_id (
               username,
               avatar_url
+            ),
+            items:item_id (
+              id,
+              title,
+              images
             )
           `)
           .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${currentUserId})`)
@@ -179,9 +194,10 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
         // Apply different filters based on conversation type
         if (conversationType === 'direct_message') {
           query = query.is('item_id', null);
-        } else if (itemId) {
+        } else if (conversationType === 'item' && itemId) {
           query = query.eq('item_id', itemId);
         }
+        // For unified conversations, we don't filter by item_id - we get all messages between these users
 
         const { data, error } = await query;
 
@@ -211,7 +227,9 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
     fetchMessages();
 
     // Subscribe to Pusher channels
-    const channelName = conversationType === 'direct_message' 
+    const channelName = conversationType === 'unified' 
+      ? `private-user-${[currentUserId, otherUserId].sort().join('-')}`
+      : conversationType === 'direct_message' 
       ? `private-dm-${[currentUserId, otherUserId].sort().join('-')}`
       : `private-messages-${itemId}`;
 
@@ -233,6 +251,11 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
             sender:sender_id (
               username,
               avatar_url
+            ),
+            items:item_id (
+              id,
+              title,
+              images
             )
           `)
           .eq('id', data.messageId)
@@ -244,13 +267,21 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
         }
 
         // Check if this message belongs to the current conversation
-        const messageMatches = conversationType === 'direct_message'
-          ? newMessage.item_id === null &&
-            ((newMessage.sender_id === currentUserId && newMessage.receiver_id === otherUserId) || 
-             (newMessage.sender_id === otherUserId && newMessage.receiver_id === currentUserId))
-          : newMessage.item_id === itemId &&
+        let messageMatches = false;
+        
+        if (conversationType === 'unified') {
+          // For unified conversations, any message between these two users matches
+          messageMatches = (newMessage.sender_id === currentUserId && newMessage.receiver_id === otherUserId) || 
+                          (newMessage.sender_id === otherUserId && newMessage.receiver_id === currentUserId);
+        } else if (conversationType === 'direct_message') {
+          messageMatches = newMessage.item_id === null &&
             ((newMessage.sender_id === currentUserId && newMessage.receiver_id === otherUserId) || 
              (newMessage.sender_id === otherUserId && newMessage.receiver_id === currentUserId));
+        } else if (conversationType === 'item') {
+          messageMatches = newMessage.item_id === itemId &&
+            ((newMessage.sender_id === currentUserId && newMessage.receiver_id === otherUserId) || 
+             (newMessage.sender_id === otherUserId && newMessage.receiver_id === currentUserId));
+        }
 
         if (newMessage && messageMatches) {
           setMessages((current) => [...current, newMessage]);
@@ -332,7 +363,7 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
       const { data, error } = await supabase.from('messages').insert([
         {
           content: messageContent,
-          item_id: conversationType === 'direct_message' ? null : itemId,
+          item_id: conversationType === 'unified' ? null : itemId, // For unified, always use null
           sender_id: currentUserId,
           receiver_id: otherUserId,
           read: false,
@@ -350,6 +381,11 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
         sender:sender_id (
           username,
           avatar_url
+        ),
+        items:item_id (
+          id,
+          title,
+          images
         )
       `).single();
 
@@ -362,7 +398,9 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
         setMessages(prev => [...prev, data]);
 
         // Trigger Pusher event for new message
-        const channelName = conversationType === 'direct_message' 
+        const channelName = conversationType === 'unified' 
+          ? `private-user-${[currentUserId, otherUserId].sort().join('-')}`
+          : conversationType === 'direct_message' 
           ? `private-dm-${[currentUserId, otherUserId].sort().join('-')}`
           : `private-messages-${itemId}`;
 
@@ -446,6 +484,55 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
                   )}
                   
                   <p>{message.content}</p>
+                  
+                  {/* Show item context for unified conversations */}
+                  {conversationType === 'unified' && message.items && (
+                    <div className={`mt-2 p-2 rounded ${
+                      message.sender_id === currentUserId
+                        ? 'bg-indigo-700'
+                        : 'bg-white'
+                    }`}>
+                      <div className="mb-1 text-xs font-medium">
+                        <span className={message.sender_id === currentUserId ? 'text-indigo-200' : 'text-indigo-600'}>
+                          About item:
+                        </span>
+                      </div>
+                      <Link 
+                        to={`/items/${message.items.id}`}
+                        className="block"
+                      >
+                        <div className="flex items-start">
+                          <img 
+                            src={message.items.images[0]} 
+                            alt={message.items.title}
+                            className="w-12 h-12 object-cover rounded mr-2 flex-shrink-0"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-xs font-medium ${
+                              message.sender_id === currentUserId
+                                ? 'text-white'
+                                : 'text-gray-800'
+                            }`}>
+                              {message.items.title}
+                            </p>
+                            <div className="flex items-center text-xs mt-1">
+                              <span className={message.sender_id === currentUserId
+                                ? 'text-indigo-200'
+                                : 'text-indigo-600'
+                              }>
+                                View item
+                              </span>
+                              <ArrowRight className={`w-3 h-3 ml-1 ${
+                                message.sender_id === currentUserId
+                                  ? 'text-indigo-200'
+                                  : 'text-indigo-600'
+                              }`} />
+                            </div>
+                          </div>
+                        </div>
+                      </Link>
+                    </div>
+                  )}
                   
                   {message.offer_item_id && (
                     <div className={`mt-3 p-3 rounded ${
