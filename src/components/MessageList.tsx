@@ -8,9 +8,10 @@ import pusherClient from '../lib/pusher';
 import { debounce } from 'throttle-debounce';
 
 interface MessageListProps {
-  itemId: string;
+  itemId: string | null; // Made nullable for direct messages
   currentUserId: string;
   otherUserId: string;
+  conversationType: 'item' | 'direct_message'; // Added conversation type
   onMessageRead?: () => void;
 }
 
@@ -30,7 +31,7 @@ interface MessageWithOfferItem extends Message {
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export function MessageList({ itemId, currentUserId, otherUserId, onMessageRead }: MessageListProps) {
+export function MessageList({ itemId, currentUserId, otherUserId, conversationType, onMessageRead }: MessageListProps) {
   const [messages, setMessages] = useState<MessageWithOfferItem[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -49,13 +50,21 @@ export function MessageList({ itemId, currentUserId, otherUserId, onMessageRead 
       
       if (unreadMessages.length === 0) return;
 
-      const { error } = await supabase
+      let query = supabase
         .from('messages')
         .update({ read: true })
-        .eq('item_id', itemId)
         .eq('receiver_id', currentUserId)
         .eq('sender_id', otherUserId)
         .eq('read', false);
+
+      // Apply different filters based on conversation type
+      if (conversationType === 'direct_message') {
+        query = query.is('item_id', null);
+      } else if (itemId) {
+        query = query.eq('item_id', itemId);
+      }
+
+      const { error } = await query;
       
       if (error) {
         console.error('Error updating message read status:', error);
@@ -105,6 +114,10 @@ export function MessageList({ itemId, currentUserId, otherUserId, onMessageRead 
   // Debounced function to emit typing status
   const emitTypingStatus = debounce(1000, async (isTyping: boolean) => {
     try {
+      const channelName = conversationType === 'direct_message' 
+        ? `private-dm-${[currentUserId, otherUserId].sort().join('-')}`
+        : `private-messages-${itemId}`;
+
       await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pusher-trigger`, {
         method: 'POST',
         headers: {
@@ -112,7 +125,7 @@ export function MessageList({ itemId, currentUserId, otherUserId, onMessageRead 
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          channel: `private-messages-${itemId}`,
+          channel: channelName,
           event: isTyping ? 'typing.start' : 'typing.stop',
           data: {
             userId: currentUserId
@@ -130,13 +143,6 @@ export function MessageList({ itemId, currentUserId, otherUserId, onMessageRead 
         setLoading(true);
         setError(null);
         
-        if (!itemId || !UUID_REGEX.test(itemId)) {
-          console.error('Invalid item ID format:', itemId);
-          setError('Invalid item ID format');
-          setLoading(false);
-          return;
-        }
-
         if (!otherUserId || !UUID_REGEX.test(otherUserId)) {
           console.error('Invalid user ID format:', otherUserId);
           setError('Invalid user ID format');
@@ -144,7 +150,14 @@ export function MessageList({ itemId, currentUserId, otherUserId, onMessageRead 
           return;
         }
 
-        const { data, error } = await supabase
+        if (conversationType === 'item' && (!itemId || !UUID_REGEX.test(itemId))) {
+          console.error('Invalid item ID format:', itemId);
+          setError('Invalid item ID format');
+          setLoading(false);
+          return;
+        }
+
+        let query = supabase
           .from('messages')
           .select(`
             *,
@@ -160,9 +173,17 @@ export function MessageList({ itemId, currentUserId, otherUserId, onMessageRead 
               avatar_url
             )
           `)
-          .eq('item_id', itemId)
           .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${currentUserId})`)
           .order('created_at', { ascending: true });
+
+        // Apply different filters based on conversation type
+        if (conversationType === 'direct_message') {
+          query = query.is('item_id', null);
+        } else if (itemId) {
+          query = query.eq('item_id', itemId);
+        }
+
+        const { data, error } = await query;
 
         if (error) {
           console.error('Error fetching messages:', error);
@@ -190,7 +211,11 @@ export function MessageList({ itemId, currentUserId, otherUserId, onMessageRead 
     fetchMessages();
 
     // Subscribe to Pusher channels
-    const messageChannel = pusherClient.subscribe(`private-messages-${itemId}`);
+    const channelName = conversationType === 'direct_message' 
+      ? `private-dm-${[currentUserId, otherUserId].sort().join('-')}`
+      : `private-messages-${itemId}`;
+
+    const messageChannel = pusherClient.subscribe(channelName);
     
     messageChannel.bind('new-message', async (data: { messageId: string }) => {
       try {
@@ -218,9 +243,16 @@ export function MessageList({ itemId, currentUserId, otherUserId, onMessageRead 
           return;
         }
 
-        if (newMessage && 
+        // Check if this message belongs to the current conversation
+        const messageMatches = conversationType === 'direct_message'
+          ? newMessage.item_id === null &&
             ((newMessage.sender_id === currentUserId && newMessage.receiver_id === otherUserId) || 
-             (newMessage.sender_id === otherUserId && newMessage.receiver_id === currentUserId))) {
+             (newMessage.sender_id === otherUserId && newMessage.receiver_id === currentUserId))
+          : newMessage.item_id === itemId &&
+            ((newMessage.sender_id === currentUserId && newMessage.receiver_id === otherUserId) || 
+             (newMessage.sender_id === otherUserId && newMessage.receiver_id === currentUserId));
+
+        if (newMessage && messageMatches) {
           setMessages((current) => [...current, newMessage]);
           
           if (newMessage.sender_id === otherUserId && newMessage.receiver_id === currentUserId) {
@@ -264,7 +296,7 @@ export function MessageList({ itemId, currentUserId, otherUserId, onMessageRead 
       messageChannel.unsubscribe();
       emitTypingStatus.cancel();
     };
-  }, [itemId, currentUserId, otherUserId]);
+  }, [itemId, currentUserId, otherUserId, conversationType]);
 
   useEffect(() => {
     if (!hasMarkedAsRead && messages.length > 0 && !loading) {
@@ -300,7 +332,7 @@ export function MessageList({ itemId, currentUserId, otherUserId, onMessageRead 
       const { data, error } = await supabase.from('messages').insert([
         {
           content: messageContent,
-          item_id: itemId,
+          item_id: conversationType === 'direct_message' ? null : itemId,
           sender_id: currentUserId,
           receiver_id: otherUserId,
           read: false,
@@ -330,6 +362,10 @@ export function MessageList({ itemId, currentUserId, otherUserId, onMessageRead 
         setMessages(prev => [...prev, data]);
 
         // Trigger Pusher event for new message
+        const channelName = conversationType === 'direct_message' 
+          ? `private-dm-${[currentUserId, otherUserId].sort().join('-')}`
+          : `private-messages-${itemId}`;
+
         const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pusher-trigger`, {
           method: 'POST',
           headers: {
@@ -353,6 +389,10 @@ export function MessageList({ itemId, currentUserId, otherUserId, onMessageRead 
       console.error('Error in message sending process:', err);
     }
   };
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   return (
     <div className="flex flex-col h-[500px]">

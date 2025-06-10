@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
@@ -16,20 +16,46 @@ const isValidUUID = (uuid: string): boolean => {
   return UUID_REGEX.test(uuid);
 };
 
-// Extract IDs from conversation ID
-const extractConversationIds = (conversationId: string): { itemId: string | null; otherUserId: string | null } => {
+// Extract conversation details from conversation ID
+const extractConversationDetails = (conversationId: string): { 
+  type: 'item' | 'direct_message'; 
+  itemId: string | null; 
+  otherUserId: string | null; 
+} => {
+  // Check if it's a direct message conversation
+  if (conversationId.startsWith('dm-')) {
+    const parts = conversationId.substring(3).split('-'); // Remove 'dm-' prefix
+    if (parts.length >= 10) { // Two UUIDs = 10 parts when split by '-'
+      const user1Parts = parts.slice(0, 5);
+      const user2Parts = parts.slice(5, 10);
+      const user1Id = user1Parts.join('-');
+      const user2Id = user2Parts.join('-');
+      
+      if (isValidUUID(user1Id) && isValidUUID(user2Id)) {
+        // Return the other user's ID (not the current user's)
+        return { 
+          type: 'direct_message', 
+          itemId: null, 
+          otherUserId: user2Id // This will be determined in the calling function
+        };
+      }
+    }
+    return { type: 'direct_message', itemId: null, otherUserId: null };
+  }
+  
+  // Handle item-based conversations
   const parts = conversationId.split('-');
-  if (parts.length < 5) return { itemId: null, otherUserId: null };
+  if (parts.length < 5) return { type: 'item', itemId: null, otherUserId: null };
   
   // Reconstruct the UUIDs from the parts
   const itemId = parts.slice(0, 5).join('-');
   const otherUserId = parts.slice(5).join('-');
   
   if (!isValidUUID(itemId) || !isValidUUID(otherUserId)) {
-    return { itemId: null, otherUserId: null };
+    return { type: 'item', itemId: null, otherUserId: null };
   }
   
-  return { itemId, otherUserId };
+  return { type: 'item', itemId, otherUserId };
 };
 
 // New component for conversation item
@@ -96,20 +122,42 @@ const ConversationItem = ({
           } truncate ${conversation.unread_count > 0 ? 'font-semibold' : ''}`}>
             {conversation.last_message}
           </p>
-          <div className="mt-2 flex items-center space-x-2">
-            <img
-              src={conversation.item_image}
-              alt={conversation.item_title}
-              className="w-8 h-8 rounded object-cover"
-            />
-            <span className={`text-sm ${
-              isActive 
-                ? 'text-indigo-600' 
-                : 'text-gray-500'
-            } truncate`}>
-              {conversation.item_title}
-            </span>
-          </div>
+          
+          {/* Show item info for item-based conversations */}
+          {conversation.type === 'item' && conversation.item_image && conversation.item_title && (
+            <div className="mt-2 flex items-center space-x-2">
+              <img
+                src={conversation.item_image}
+                alt={conversation.item_title}
+                className="w-8 h-8 rounded object-cover"
+              />
+              <span className={`text-sm ${
+                isActive 
+                  ? 'text-indigo-600' 
+                  : 'text-gray-500'
+              } truncate`}>
+                {conversation.item_title}
+              </span>
+            </div>
+          )}
+
+          {/* Show direct message indicator */}
+          {conversation.type === 'direct_message' && (
+            <div className="mt-2 flex items-center space-x-2">
+              <MessageCircle className={`w-4 h-4 ${
+                isActive 
+                  ? 'text-indigo-400' 
+                  : 'text-gray-400'
+              }`} />
+              <span className={`text-sm ${
+                isActive 
+                  ? 'text-indigo-600' 
+                  : 'text-gray-500'
+              }`}>
+                Direct Message
+              </span>
+            </div>
+          )}
           
           {conversation.has_offer && (
             <div className="mt-2 flex items-center">
@@ -237,25 +285,43 @@ function Messages({ onUnreadCountChange, onUnreadOffersChange }: MessagesProps) 
             }
           }
 
-          const itemId = message.item_id;
-          const itemOwnerId = message.items?.user_id;
-          
-          if (!message.items || !isValidUUID(itemId) || !isValidUUID(itemOwnerId)) return;
-          
-          const senderId = message.sender_id;
-          const receiverId = message.receiver_id;
-          
-          if (!isValidUUID(senderId) || !isValidUUID(receiverId)) return;
-          
-          const isItemOwner = user.id === itemOwnerId;
-          const otherUserId = isItemOwner ? 
-            (senderId !== user.id ? senderId : receiverId) : 
-            itemOwnerId;
-          
-          if (!isValidUUID(otherUserId) || senderId === receiverId) return;
-          
-          const conversationId = `${itemId}-${otherUserId}`;
-          
+          let conversationId: string;
+          let conversationType: 'item' | 'direct_message';
+          let otherUserId: string;
+
+          // Determine if this is a direct message or item-based conversation
+          if (message.item_id === null) {
+            // Direct message
+            conversationType = 'direct_message';
+            otherUserId = message.sender_id === user.id ? message.receiver_id : message.sender_id;
+            
+            // Create consistent conversation ID for direct messages
+            const sortedUserIds = [user.id, otherUserId].sort();
+            conversationId = `dm-${sortedUserIds[0]}-${sortedUserIds[1]}`;
+          } else {
+            // Item-based conversation
+            conversationType = 'item';
+            const itemId = message.item_id;
+            const itemOwnerId = message.items?.user_id;
+            
+            if (!message.items || !isValidUUID(itemId) || !isValidUUID(itemOwnerId)) return;
+            
+            const senderId = message.sender_id;
+            const receiverId = message.receiver_id;
+            
+            if (!isValidUUID(senderId) || !isValidUUID(receiverId)) return;
+            
+            const isItemOwner = user.id === itemOwnerId;
+            otherUserId = isItemOwner ? 
+              (senderId !== user.id ? senderId : receiverId) : 
+              itemOwnerId;
+            
+            if (!isValidUUID(otherUserId) || senderId === receiverId) return;
+            
+            conversationId = `${itemId}-${otherUserId}`;
+          }
+
+          // Track unread counts
           if (message.receiver_id === user.id && !message.read) {
             unreadCountMap.set(
               conversationId, 
@@ -269,17 +335,27 @@ function Messages({ onUnreadCountChange, onUnreadOffersChange }: MessagesProps) 
               : message.receiver;
             
             const hasOffer = messagesData.some(
-              msg => msg.item_id === itemId && 
-                    ((msg.sender_id === otherUserId && msg.receiver_id === user.id) || 
-                     (msg.sender_id === user.id && msg.receiver_id === otherUserId)) && 
-                    msg.offer_item_id
+              msg => {
+                if (conversationType === 'direct_message') {
+                  return msg.item_id === null && 
+                         ((msg.sender_id === otherUserId && msg.receiver_id === user.id) || 
+                          (msg.sender_id === user.id && msg.receiver_id === otherUserId)) && 
+                         msg.offer_item_id;
+                } else {
+                  return msg.item_id === message.item_id && 
+                         ((msg.sender_id === otherUserId && msg.receiver_id === user.id) || 
+                          (msg.sender_id === user.id && msg.receiver_id === otherUserId)) && 
+                         msg.offer_item_id;
+                }
+              }
             );
             
             conversationMap.set(conversationId, {
               id: conversationId,
-              item_id: itemId,
-              item_title: message.items.title,
-              item_image: message.items.images[0],
+              type: conversationType,
+              item_id: message.item_id,
+              item_title: message.items?.title || null,
+              item_image: message.items?.images?.[0] || null,
               other_user_id: otherUserId,
               other_user_name: otherUserInfo?.username || 'User',
               other_user_avatar: otherUserInfo?.avatar_url,
@@ -287,8 +363,8 @@ function Messages({ onUnreadCountChange, onUnreadOffersChange }: MessagesProps) 
               last_message_time: message.created_at,
               unread_count: 0,
               offer_item_id: message.offer_item_id,
-              offer_item_title: message.offer_items?.title,
-              offer_item_image: message.offer_items?.images?.[0],
+              offer_item_title: message.offer_item?.title,
+              offer_item_image: message.offer_item?.images?.[0],
               has_offer: hasOffer,
               archived: message.archived
             });
@@ -338,9 +414,20 @@ function Messages({ onUnreadCountChange, onUnreadOffersChange }: MessagesProps) 
   }, [user, onUnreadCountChange, onUnreadOffersChange]);
 
   const handleConversationClick = async (conversationId: string) => {
-    const { itemId, otherUserId } = extractConversationIds(conversationId);
+    const conversationDetails = extractConversationDetails(conversationId);
     
-    if (!itemId || !otherUserId) {
+    if (conversationDetails.type === 'direct_message') {
+      // For direct messages, we need to extract the other user ID from the conversation ID
+      const parts = conversationId.substring(3).split('-'); // Remove 'dm-' prefix
+      if (parts.length >= 10) {
+        const user1Id = parts.slice(0, 5).join('-');
+        const user2Id = parts.slice(5, 10).join('-');
+        const otherUserId = user1Id === user?.id ? user2Id : user1Id;
+        conversationDetails.otherUserId = otherUserId;
+      }
+    }
+
+    if (!conversationDetails.otherUserId) {
       console.error('Invalid conversation ID format:', conversationId);
       return;
     }
@@ -360,19 +447,29 @@ function Messages({ onUnreadCountChange, onUnreadOffersChange }: MessagesProps) 
   };
 
   const handleArchive = async (conversationId: string, archived: boolean) => {
-    const { itemId, otherUserId } = extractConversationIds(conversationId);
+    const conversationDetails = extractConversationDetails(conversationId);
     
-    if (!itemId || !otherUserId) {
+    if (!conversationDetails.otherUserId) {
       console.error('Invalid conversation ID format:', conversationId);
       return;
     }
 
     try {
-      const { error } = await supabase
-        .from('messages')
-        .update({ archived })
-        .eq('item_id', itemId)
-        .or(`and(sender_id.eq.${user?.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${user?.id})`);
+      let query = supabase.from('messages').update({ archived });
+
+      if (conversationDetails.type === 'direct_message') {
+        // For direct messages, update all messages between these two users where item_id is null
+        query = query
+          .is('item_id', null)
+          .or(`and(sender_id.eq.${user?.id},receiver_id.eq.${conversationDetails.otherUserId}),and(sender_id.eq.${conversationDetails.otherUserId},receiver_id.eq.${user?.id})`);
+      } else {
+        // For item-based conversations
+        query = query
+          .eq('item_id', conversationDetails.itemId)
+          .or(`and(sender_id.eq.${user?.id},receiver_id.eq.${conversationDetails.otherUserId}),and(sender_id.eq.${conversationDetails.otherUserId},receiver_id.eq.${user?.id})`);
+      }
+
+      const { error } = await query;
 
       if (error) throw error;
 
@@ -443,12 +540,21 @@ function Messages({ onUnreadCountChange, onUnreadOffersChange }: MessagesProps) 
     }
   });
 
-  const { itemId, otherUserId } = activeConversation
-    ? extractConversationIds(activeConversation)
-    : { itemId: null, otherUserId: null };
+  const conversationDetails = activeConversation
+    ? extractConversationDetails(activeConversation)
+    : { type: 'item' as const, itemId: null, otherUserId: null };
 
-  const isValidConversation = itemId && otherUserId;
+  // For direct messages, extract the other user ID from the conversation ID
+  if (activeConversation && conversationDetails.type === 'direct_message') {
+    const parts = activeConversation.substring(3).split('-'); // Remove 'dm-' prefix
+    if (parts.length >= 10) {
+      const user1Id = parts.slice(0, 5).join('-');
+      const user2Id = parts.slice(5, 10).join('-');
+      conversationDetails.otherUserId = user1Id === user?.id ? user2Id : user1Id;
+    }
+  }
 
+  const isValidConversation = conversationDetails.otherUserId;
   const activeConversationData = conversations.find(c => c.id === activeConversation);
 
   if (!user) {
@@ -562,11 +668,16 @@ function Messages({ onUnreadCountChange, onUnreadOffersChange }: MessagesProps) 
                   )}
                   <div>
                     <h3 className="font-semibold">
-                      {activeConversationData?.item_title || 'Loading...'}
+                      {activeConversationData?.type === 'direct_message' 
+                        ? `Direct Message with ${activeConversationData?.other_user_name || 'User'}`
+                        : activeConversationData?.item_title || 'Loading...'
+                      }
                     </h3>
-                    <p className="text-sm text-gray-600">
-                      with {activeConversationData?.other_user_name || 'User'}
-                    </p>
+                    {activeConversationData?.type === 'item' && (
+                      <p className="text-sm text-gray-600">
+                        with {activeConversationData?.other_user_name || 'User'}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="flex space-x-2">
@@ -576,7 +687,7 @@ function Messages({ onUnreadCountChange, onUnreadOffersChange }: MessagesProps) 
                       Barter Offer
                     </div>
                   )}
-                  {activeConversationData && (
+                  {activeConversationData?.type === 'item' && activeConversationData?.item_id && (
                     <Link 
                       to={`/items/${activeConversationData.item_id}`}
                       className="text-sm text-indigo-600 hover:text-indigo-800"
@@ -588,9 +699,10 @@ function Messages({ onUnreadCountChange, onUnreadOffersChange }: MessagesProps) 
               </div>
               
               <MessageList 
-                itemId={itemId} 
+                itemId={conversationDetails.itemId}
                 currentUserId={user.id}
-                otherUserId={otherUserId}
+                otherUserId={conversationDetails.otherUserId}
+                conversationType={conversationDetails.type}
                 onMessageRead={() => {
                   setConversations(prev =>
                     prev.map(conv =>

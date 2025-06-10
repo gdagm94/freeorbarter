@@ -30,7 +30,7 @@ export interface Message {
   receiver_id: string;
   content: string;
   created_at: string;
-  item_id: string;
+  item_id: string | null; // Made nullable for direct messages
   offer_item_id?: string;
   read: boolean;
   is_offer: boolean;
@@ -39,18 +39,19 @@ export interface Message {
 
 export interface Conversation {
   id: string;
-  item_id: string;
-  item_title: string;
-  item_image: string;
+  type: 'item' | 'direct_message'; // Added type field
+  item_id: string | null; // Made nullable for direct messages
+  item_title: string | null; // Made nullable for direct messages
+  item_image: string | null; // Made nullable for direct messages
   other_user_id: string;
   other_user_name: string;
   other_user_avatar: string | null;
   last_message: string;
   last_message_time: string;
   unread_count: number;
-  offer_item_id?: string;
-  offer_item_title?: string;
-  offer_item_image?: string;
+  offer_item_id?: string | null; // Made nullable for direct messages
+  offer_item_title?: string | null; // Made nullable for direct messages
+  offer_item_image?: string | null; // Made nullable for direct messages
   has_offer: boolean;
   archived?: boolean;
 }
