@@ -233,9 +233,9 @@ function Messages({ onUnreadCountChange, onUnreadOffersChange }: MessagesProps) 
           
           if (!isValidUUID(otherUserId)) return;
 
-          // Create conversation ID based on user pair (sorted for consistency)
+          // Create conversation ID based on user pair (sorted for consistency) - using underscores as delimiter
           const sortedUserIds = [user.id, otherUserId].sort();
-          const conversationId = `user-${sortedUserIds[0]}-${sortedUserIds[1]}`;
+          const conversationId = `user_${sortedUserIds[0]}_${sortedUserIds[1]}`;
 
           // Track unread counts
           if (message.receiver_id === user.id && !message.read) {
@@ -346,8 +346,8 @@ function Messages({ onUnreadCountChange, onUnreadOffersChange }: MessagesProps) 
   }, [user, onUnreadCountChange, onUnreadOffersChange]);
 
   const handleConversationClick = async (conversationId: string) => {
-    // Extract other user ID from conversation ID
-    const parts = conversationId.split('-');
+    // Extract other user ID from conversation ID - using underscores as delimiter
+    const parts = conversationId.split('_');
     if (parts.length !== 3 || parts[0] !== 'user') {
       console.error('Invalid conversation ID format:', conversationId);
       return;
@@ -377,8 +377,8 @@ function Messages({ onUnreadCountChange, onUnreadOffersChange }: MessagesProps) 
   };
 
   const handleArchive = async (conversationId: string, archived: boolean) => {
-    // Extract other user ID from conversation ID
-    const parts = conversationId.split('-');
+    // Extract other user ID from conversation ID - using underscores as delimiter
+    const parts = conversationId.split('_');
     if (parts.length !== 3 || parts[0] !== 'user') {
       console.error('Invalid conversation ID format:', conversationId);
       return;
@@ -469,9 +469,9 @@ function Messages({ onUnreadCountChange, onUnreadOffersChange }: MessagesProps) 
     }
   });
 
-  // Extract other user ID for MessageList
+  // Extract other user ID for MessageList - using underscores as delimiter
   const getOtherUserId = (conversationId: string): string | null => {
-    const parts = conversationId.split('-');
+    const parts = conversationId.split('_');
     if (parts.length !== 3 || parts[0] !== 'user') return null;
     
     const userId1 = parts[1];
