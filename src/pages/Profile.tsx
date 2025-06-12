@@ -270,12 +270,12 @@ function Profile() {
     }
 
     return (
-      <div className="space-y-6">
+      <div className="space-y-4 sm:space-y-6">
         {/* Friends sub-navigation */}
         <div className="flex space-x-1 bg-gray-100 rounded-lg p-1">
           <button
             onClick={() => setFriendsSubTab('friends')}
-            className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+            className={`flex-1 py-2 px-2 sm:px-3 rounded-md text-xs sm:text-sm font-medium transition-colors ${
               friendsSubTab === 'friends'
                 ? 'bg-white text-indigo-600 shadow-sm'
                 : 'text-gray-600 hover:text-gray-900'
@@ -285,7 +285,7 @@ function Profile() {
           </button>
           <button
             onClick={() => setFriendsSubTab('pending')}
-            className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+            className={`flex-1 py-2 px-2 sm:px-3 rounded-md text-xs sm:text-sm font-medium transition-colors ${
               friendsSubTab === 'pending'
                 ? 'bg-white text-indigo-600 shadow-sm'
                 : 'text-gray-600 hover:text-gray-900'
@@ -295,7 +295,7 @@ function Profile() {
           </button>
           <button
             onClick={() => setFriendsSubTab('sent')}
-            className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+            className={`flex-1 py-2 px-2 sm:px-3 rounded-md text-xs sm:text-sm font-medium transition-colors ${
               friendsSubTab === 'sent'
                 ? 'bg-white text-indigo-600 shadow-sm'
                 : 'text-gray-600 hover:text-gray-900'
@@ -309,51 +309,53 @@ function Profile() {
         {friendsSubTab === 'friends' && (
           <div>
             {friends.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-3">
                 {friends.map((friendship) => (
-                  <div key={friendship.id} className="bg-gray-50 rounded-lg p-4 flex items-center justify-between">
-                    <Link 
-                      to={`/users/${friendship.friend?.id}`}
-                      className="flex items-center space-x-3 flex-1 hover:opacity-80 transition-opacity"
-                    >
-                      {friendship.friend?.avatar_url ? (
-                        <img
-                          src={friendship.friend.avatar_url}
-                          alt={friendship.friend.username}
-                          className="w-12 h-12 rounded-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center">
-                          <Users className="w-6 h-6 text-gray-400" />
-                        </div>
-                      )}
-                      <div>
-                        <h3 className="font-medium text-gray-900">{friendship.friend?.username}</h3>
-                        <div className="flex items-center text-sm text-gray-500">
-                          <Star className="w-4 h-4 text-yellow-400 fill-current mr-1" />
-                          {friendship.friend?.rating?.toFixed(1) || 'No rating'}
-                        </div>
-                      </div>
-                    </Link>
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={() => friendship.friend && handleMessageFriend(friendship.friend)}
-                        className="flex items-center px-3 py-1 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm"
+                  <div key={friendship.id} className="bg-gray-50 rounded-lg p-3 sm:p-4">
+                    <div className="flex items-center space-x-3">
+                      <Link 
+                        to={`/users/${friendship.friend?.id}`}
+                        className="flex items-center space-x-3 flex-1 hover:opacity-80 transition-opacity min-w-0"
                       >
-                        <MessageCircle className="w-4 h-4 mr-1" />
-                        Message
-                      </button>
-                      <button
-                        onClick={() => handleFriendAction('unfriend', friendship.id, friendship.friend?.id)}
-                        disabled={friendActionLoading === friendship.id}
-                        className="text-sm text-red-600 hover:text-red-800 disabled:opacity-50"
-                      >
-                        {friendActionLoading === friendship.id ? (
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>
+                        {friendship.friend?.avatar_url ? (
+                          <img
+                            src={friendship.friend.avatar_url}
+                            alt={friendship.friend.username}
+                            className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover flex-shrink-0"
+                          />
                         ) : (
-                          'Unfriend'
+                          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                            <Users className="w-5 h-5 sm:w-6 sm:h-6 text-gray-400" />
+                          </div>
                         )}
-                      </button>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-medium text-gray-900 text-sm sm:text-base truncate">{friendship.friend?.username}</h3>
+                          <div className="flex items-center text-xs sm:text-sm text-gray-500">
+                            <Star className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-400 fill-current mr-1" />
+                            {friendship.friend?.rating?.toFixed(1) || 'No rating'}
+                          </div>
+                        </div>
+                      </Link>
+                      <div className="flex flex-col sm:flex-row space-y-1 sm:space-y-0 sm:space-x-2 flex-shrink-0">
+                        <button
+                          onClick={() => friendship.friend && handleMessageFriend(friendship.friend)}
+                          className="flex items-center justify-center px-2 py-1 sm:px-3 sm:py-1 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-xs sm:text-sm whitespace-nowrap"
+                        >
+                          <MessageCircle className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+                          Message
+                        </button>
+                        <button
+                          onClick={() => handleFriendAction('unfriend', friendship.id, friendship.friend?.id)}
+                          disabled={friendActionLoading === friendship.id}
+                          className="text-xs sm:text-sm text-red-600 hover:text-red-800 disabled:opacity-50 px-1"
+                        >
+                          {friendActionLoading === friendship.id ? (
+                            <div className="animate-spin rounded-full h-3 w-3 sm:h-4 sm:w-4 border-b-2 border-red-600"></div>
+                          ) : (
+                            'Unfriend'
+                          )}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -361,8 +363,8 @@ function Profile() {
             ) : (
               <div className="text-center py-8 text-gray-500">
                 <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p>No friends yet</p>
-                <p className="text-sm">Start connecting with other users!</p>
+                <p className="text-sm sm:text-base">No friends yet</p>
+                <p className="text-xs sm:text-sm">Start connecting with other users!</p>
               </div>
             )}
           </div>
@@ -372,60 +374,62 @@ function Profile() {
         {friendsSubTab === 'pending' && (
           <div>
             {pendingRequests.length > 0 ? (
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {pendingRequests.map((request) => (
-                  <div key={request.id} className="bg-gray-50 rounded-lg p-4 flex items-center justify-between">
-                    <Link 
-                      to={`/users/${request.sender?.id}`}
-                      className="flex items-center space-x-3 flex-1 hover:opacity-80 transition-opacity"
-                    >
-                      {request.sender?.avatar_url ? (
-                        <img
-                          src={request.sender.avatar_url}
-                          alt={request.sender.username}
-                          className="w-12 h-12 rounded-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center">
-                          <UserPlus className="w-6 h-6 text-gray-400" />
+                  <div key={request.id} className="bg-gray-50 rounded-lg p-3 sm:p-4">
+                    <div className="flex items-center space-x-3">
+                      <Link 
+                        to={`/users/${request.sender?.id}`}
+                        className="flex items-center space-x-3 flex-1 hover:opacity-80 transition-opacity min-w-0"
+                      >
+                        {request.sender?.avatar_url ? (
+                          <img
+                            src={request.sender.avatar_url}
+                            alt={request.sender.username}
+                            className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover flex-shrink-0"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                            <UserPlus className="w-5 h-5 sm:w-6 sm:h-6 text-gray-400" />
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-medium text-gray-900 text-sm sm:text-base truncate">{request.sender?.username}</h3>
+                          <p className="text-xs sm:text-sm text-gray-500">
+                            Sent {new Date(request.created_at).toLocaleDateString()}
+                          </p>
                         </div>
-                      )}
-                      <div>
-                        <h3 className="font-medium text-gray-900">{request.sender?.username}</h3>
-                        <p className="text-sm text-gray-500">
-                          Sent {new Date(request.created_at).toLocaleDateString()}
-                        </p>
+                      </Link>
+                      <div className="flex flex-col sm:flex-row space-y-1 sm:space-y-0 sm:space-x-2 flex-shrink-0">
+                        <button
+                          onClick={() => handleFriendAction('accept', request.id)}
+                          disabled={friendActionLoading === request.id}
+                          className="flex items-center justify-center px-2 py-1 sm:px-3 sm:py-1 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 text-xs sm:text-sm"
+                        >
+                          {friendActionLoading === request.id ? (
+                            <div className="animate-spin rounded-full h-3 w-3 sm:h-4 sm:w-4 border-b-2 border-white"></div>
+                          ) : (
+                            <>
+                              <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+                              Accept
+                            </>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => handleFriendAction('decline', request.id)}
+                          disabled={friendActionLoading === request.id}
+                          className="flex items-center justify-center px-2 py-1 sm:px-3 sm:py-1 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 text-xs sm:text-sm"
+                        >
+                          {friendActionLoading === request.id ? (
+                            <div className="animate-spin rounded-full h-3 w-3 sm:h-4 sm:w-4 border-b-2 border-white"></div>
+                          ) : (
+                            <>
+                              <XCircle className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+                              Decline
+                            </>
+                          )}
+                        </button>
                       </div>
-                    </Link>
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={() => handleFriendAction('accept', request.id)}
-                        disabled={friendActionLoading === request.id}
-                        className="flex items-center px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 text-sm"
-                      >
-                        {friendActionLoading === request.id ? (
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        ) : (
-                          <>
-                            <CheckCircle className="w-4 h-4 mr-1" />
-                            Accept
-                          </>
-                        )}
-                      </button>
-                      <button
-                        onClick={() => handleFriendAction('decline', request.id)}
-                        disabled={friendActionLoading === request.id}
-                        className="flex items-center px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 text-sm"
-                      >
-                        {friendActionLoading === request.id ? (
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        ) : (
-                          <>
-                            <XCircle className="w-4 h-4 mr-1" />
-                            Decline
-                          </>
-                        )}
-                      </button>
                     </div>
                   </div>
                 ))}
@@ -433,7 +437,7 @@ function Profile() {
             ) : (
               <div className="text-center py-8 text-gray-500">
                 <UserPlus className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p>No pending friend requests</p>
+                <p className="text-sm sm:text-base">No pending friend requests</p>
               </div>
             )}
           </div>
@@ -443,52 +447,54 @@ function Profile() {
         {friendsSubTab === 'sent' && (
           <div>
             {sentRequests.length > 0 ? (
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {sentRequests.map((request) => (
-                  <div key={request.id} className="bg-gray-50 rounded-lg p-4 flex items-center justify-between">
-                    <Link 
-                      to={`/users/${request.receiver?.id}`}
-                      className="flex items-center space-x-3 flex-1 hover:opacity-80 transition-opacity"
-                    >
-                      {request.receiver?.avatar_url ? (
-                        <img
-                          src={request.receiver.avatar_url}
-                          alt={request.receiver.username}
-                          className="w-12 h-12 rounded-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center">
-                          <Clock className="w-6 h-6 text-gray-400" />
+                  <div key={request.id} className="bg-gray-50 rounded-lg p-3 sm:p-4">
+                    <div className="flex items-center space-x-3">
+                      <Link 
+                        to={`/users/${request.receiver?.id}`}
+                        className="flex items-center space-x-3 flex-1 hover:opacity-80 transition-opacity min-w-0"
+                      >
+                        {request.receiver?.avatar_url ? (
+                          <img
+                            src={request.receiver.avatar_url}
+                            alt={request.receiver.username}
+                            className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover flex-shrink-0"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                            <Clock className="w-5 h-5 sm:w-6 sm:h-6 text-gray-400" />
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-medium text-gray-900 text-sm sm:text-base truncate">{request.receiver?.username}</h3>
+                          <p className="text-xs sm:text-sm text-gray-500">
+                            Sent {new Date(request.created_at).toLocaleDateString()}
+                          </p>
                         </div>
-                      )}
-                      <div>
-                        <h3 className="font-medium text-gray-900">{request.receiver?.username}</h3>
-                        <p className="text-sm text-gray-500">
-                          Sent {new Date(request.created_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </Link>
-                    <button
-                      onClick={() => handleFriendAction('cancel', request.id)}
-                      disabled={friendActionLoading === request.id}
-                      className="flex items-center px-3 py-1 bg-gray-600 text-white rounded-md hover:bg-gray-700 disabled:opacity-50 text-sm"
-                    >
-                      {friendActionLoading === request.id ? (
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      ) : (
-                        <>
-                          <XCircle className="w-4 h-4 mr-1" />
-                          Cancel
-                        </>
-                      )}
-                    </button>
+                      </Link>
+                      <button
+                        onClick={() => handleFriendAction('cancel', request.id)}
+                        disabled={friendActionLoading === request.id}
+                        className="flex items-center justify-center px-2 py-1 sm:px-3 sm:py-1 bg-gray-600 text-white rounded-md hover:bg-gray-700 disabled:opacity-50 text-xs sm:text-sm flex-shrink-0"
+                      >
+                        {friendActionLoading === request.id ? (
+                          <div className="animate-spin rounded-full h-3 w-3 sm:h-4 sm:w-4 border-b-2 border-white"></div>
+                        ) : (
+                          <>
+                            <XCircle className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+                            Cancel
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
             ) : (
               <div className="text-center py-8 text-gray-500">
                 <Clock className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p>No pending sent requests</p>
+                <p className="text-sm sm:text-base">No pending sent requests</p>
               </div>
             )}
           </div>
