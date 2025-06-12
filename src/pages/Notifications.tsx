@@ -5,6 +5,7 @@ import { ArrowLeft, CheckCheck, User, Package, MessageCircle, Star, UserPlus, Se
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { Notification } from '../types';
+import { NotificationSettings } from '../components/NotificationSettings';
 
 function Notifications() {
   const { user, loading: authLoading } = useAuth();
@@ -12,6 +13,7 @@ function Notifications() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -171,7 +173,10 @@ function Notifications() {
               Mark all read ({unreadCount})
             </button>
           )}
-          <button className="text-gray-600 hover:text-indigo-600">
+          <button 
+            onClick={() => setShowSettings(true)}
+            className="text-gray-600 hover:text-indigo-600"
+          >
             <Settings className="w-5 h-5" />
           </button>
         </div>
@@ -265,6 +270,11 @@ function Notifications() {
           </div>
         )}
       </div>
+
+      {/* Notification Settings Modal */}
+      {showSettings && (
+        <NotificationSettings onClose={() => setShowSettings(false)} />
+      )}
     </div>
   );
 }
