@@ -107,7 +107,7 @@ export interface Notification {
   id: string;
   user_id: string;
   sender_id?: string;
-  type: 'friend_request' | 'friend_request_approved' | 'new_listing' | 'direct_message' | 'watchlist_update';
+  type: 'friend_request' | 'friend_request_approved' | 'new_listing' | 'direct_message' | 'watchlist_update' | 'system_alerts';
   content: string;
   related_id?: string;
   read: boolean;
