@@ -6,7 +6,6 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, Check, CheckCheck } from 'lucide-react';
 import pusherClient from '../lib/pusher';
 import { debounce } from 'throttle-debounce';
-import { debounce } from 'throttle-debounce';
 
 interface MessageListProps {
   itemId: string | null; // Made nullable for unified conversations
@@ -42,13 +41,12 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
   const [newMessage, setNewMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [otherUserTyping, setOtherUserTyping] = useState(false);
-  const [isTyping, setIsTyping] = useState(false);
-  const [otherUserTyping, setOtherUserTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hasMarkedAsRead, setHasMarkedAsRead] = useState(false);
+  const [sending, setSending] = useState(false);
 
   // Debounced function to emit typing status
   const emitTypingStatus = debounce(1000, async (isTyping: boolean) => {
@@ -149,34 +147,6 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
       console.error('Error marking messages as read:', err);
     }
   };
-
-  // Debounced function to emit typing status
-  const emitTypingStatus = debounce(1000, async (isTyping: boolean) => {
-    try {
-      const channelName = conversationType === 'unified' 
-        ? `private-user-${[currentUserId, otherUserId].sort().join('-')}`
-        : conversationType === 'direct_message' 
-        ? `private-dm-${[currentUserId, otherUserId].sort().join('-')}`
-        : `private-messages-${itemId}`;
-
-      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pusher-trigger`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          channel: channelName,
-          event: isTyping ? 'typing.start' : 'typing.stop',
-          data: {
-            userId: currentUserId
-          }
-        })
-      });
-    } catch (err) {
-      console.error('Error sending typing status:', err);
-    }
-  });
 
   useEffect(() => {
     const fetchMessages = async () => {
@@ -353,23 +323,9 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
       }
     });
 
-    // Handle typing indicators
-    messageChannel.bind('typing.start', (data: { userId: string }) => {
-      if (data.userId === otherUserId) {
-        setOtherUserTyping(true);
-      }
-    });
-
-    messageChannel.bind('typing.stop', (data: { userId: string }) => {
-      if (data.userId === otherUserId) {
-        setOtherUserTyping(false);
-      }
-    });
-
     return () => {
       messageChannel.unbind_all();
       messageChannel.unsubscribe();
-      emitTypingStatus.cancel();
       emitTypingStatus.cancel();
     };
   }, [itemId, currentUserId, otherUserId, conversationType]);
@@ -395,21 +351,6 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
     }
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setNewMessage(e.target.value);
-    if (!isTyping) {
-      setIsTyping(true);
-      emitTypingStatus(true);
-    }
-  };
-
-  const handleInputBlur = () => {
-    if (isTyping) {
-      setIsTyping(false);
-      emitTypingStatus(false);
-    }
-  };
-
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim()) return;
@@ -417,8 +358,7 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
     try {
       const messageContent = newMessage.trim();
       setNewMessage('');
-      setIsTyping(false);
-      emitTypingStatus(false);
+      setSending(true);
       setIsTyping(false);
       emitTypingStatus(false);
 
@@ -487,6 +427,8 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
       }
     } catch (err) {
       console.error('Error in message sending process:', err);
+    } finally {
+      setSending(false);
     }
   };
 
@@ -708,7 +650,6 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
             value={newMessage}
             onChange={handleInputChange}
             onBlur={handleInputBlur}
-            onBlur={handleInputBlur}
             placeholder="Type your message..."
             className="flex-1 rounded-lg border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
             disabled={sending}
@@ -716,18 +657,6 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
           <button type="submit" className="btn-primary">
             Send
           </button>
-          {otherUserTyping && (
-            <div className="flex justify-start">
-              <div className="bg-gray-100 rounded-lg px-4 py-2">
-                <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
-                </div>
-              </div>
-            </div>
-          )}
-          <div ref={messagesEndRef} />
         </div>
       </form>
     </div>
