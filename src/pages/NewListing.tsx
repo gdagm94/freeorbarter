@@ -226,6 +226,54 @@ function NewListing() {
       setCreatedItemId(data.id);
       setCountdown(5);
 
+      // Trigger real-time notifications to friends about new listing
+      try {
+        // Get user's friends
+        const { data: friendsData, error: friendsError } = await supabase
+          .from('friendships')
+          .select(`
+            user1_id,
+            user2_id
+          `)
+          .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`);
+
+        if (!friendsError && friendsData) {
+          // Send notification to each friend
+          const notificationPromises = friendsData.map(async (friendship) => {
+            const friendId = friendship.user1_id === user.id ? friendship.user2_id : friendship.user1_id;
+            
+            try {
+              await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pusher-trigger`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  channel: `private-user-${friendId}`,
+                  event: 'new-notification',
+                  data: {
+                    type: 'new_listing',
+                    itemId: data.id,
+                    posterId: user.id
+                  }
+                })
+              });
+            } catch (pusherError) {
+              console.error('Error sending notification to friend:', friendId, pusherError);
+              // Continue with other notifications even if one fails
+            }
+          });
+
+          // Wait for all notifications to be sent (but don't block the UI)
+          Promise.all(notificationPromises).catch(err => {
+            console.error('Some friend notifications failed:', err);
+          });
+        }
+      } catch (friendsError) {
+        console.error('Error fetching friends for notifications:', friendsError);
+        // Don't fail the listing creation if friend notifications fail
+      }
     } catch (err) {
       setError('Error creating listing. Please try again.');
       console.error('Error creating listing:', err);

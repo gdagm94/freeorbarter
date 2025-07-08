@@ -66,6 +66,38 @@ export function WatchButton({ itemId, onAuthRequired }: WatchButtonProps) {
         if (error) throw error;
         setIsWatched(true);
       }
+        // Trigger real-time notification to item owner
+        try {
+          // First get the item owner's ID
+          const { data: itemData, error: itemError } = await supabase
+            .from('items')
+            .select('user_id')
+            .eq('id', itemId)
+            .single();
+
+          if (!itemError && itemData && itemData.user_id !== user.id) {
+            // Only notify if someone else is watching the item (not the owner)
+            await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pusher-trigger`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                channel: `private-user-${itemData.user_id}`,
+                event: 'new-notification',
+                data: {
+                  type: 'watchlist_update',
+                  itemId: itemId,
+                  watcherId: user.id
+                }
+              })
+            });
+          }
+        } catch (pusherError) {
+          console.error('Error triggering real-time notification:', pusherError);
+          // Don't fail the watch action if Pusher fails
+        }
     } catch (error) {
       console.error('Error updating watch status:', error);
     } finally {

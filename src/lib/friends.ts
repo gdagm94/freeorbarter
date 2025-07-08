@@ -23,6 +23,27 @@ export async function sendFriendRequest(senderId: string, receiverId: string): P
 
     if (error) throw error;
 
+    // Trigger real-time notification
+    try {
+      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pusher-trigger`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          channel: `private-user-${receiverId}`,
+          event: 'new-notification',
+          data: {
+            type: 'friend_request',
+            senderId: senderId
+          }
+        })
+      });
+    } catch (pusherError) {
+      console.error('Error triggering real-time notification:', pusherError);
+      // Don't fail the friend request if Pusher fails
+    }
     return { data: null, error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err : new Error('Failed to send friend request') };
@@ -34,6 +55,16 @@ export async function sendFriendRequest(senderId: string, receiverId: string): P
  */
 export async function acceptFriendRequest(requestId: string): Promise<{ error: Error | null }> {
   try {
+    // First get the friend request details for notification
+    const { data: requestData, error: fetchError } = await supabase
+      .from('friend_requests')
+      .select('sender_id, receiver_id')
+      .eq('id', requestId)
+      .eq('status', 'pending')
+      .single();
+
+    if (fetchError) throw fetchError;
+
     const { error } = await supabase
       .from('friend_requests')
       .update({ status: 'accepted' })
@@ -42,6 +73,29 @@ export async function acceptFriendRequest(requestId: string): Promise<{ error: E
 
     if (error) throw error;
 
+    // Trigger real-time notification to the original sender
+    if (requestData) {
+      try {
+        await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pusher-trigger`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            channel: `private-user-${requestData.sender_id}`,
+            event: 'new-notification',
+            data: {
+              type: 'friend_request_approved',
+              senderId: requestData.receiver_id
+            }
+          })
+        });
+      } catch (pusherError) {
+        console.error('Error triggering real-time notification:', pusherError);
+        // Don't fail the acceptance if Pusher fails
+      }
+    }
     return { error: null };
   } catch (err) {
     return { error: err instanceof Error ? err : new Error('Failed to accept friend request') };
