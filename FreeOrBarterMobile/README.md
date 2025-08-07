@@ -1,0 +1,105 @@
+# Free or Barter Mobile App
+
+A React Native mobile application for the Free or Barter marketplace, converted from the original web application.
+
+## Features
+
+- User authentication with Supabase
+- Browse items (free and barter)
+- Item details and messaging
+- User profiles
+- Real-time notifications (coming soon)
+- Image uploads (coming soon)
+- Location-based search (coming soon)
+
+## Setup Instructions
+
+### Prerequisites
+
+- Node.js (v16 or higher)
+- npm or yarn
+- Expo CLI (`npm install -g @expo/cli`)
+- iOS Simulator (for iOS development) or Android Studio (for Android development)
+
+### Installation
+
+1. Clone the repository and navigate to the mobile app directory:
+   ```bash
+   cd FreeOrBarterMobile
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Create a `.env` file in the root directory with your Supabase credentials:
+   ```
+   EXPO_PUBLIC_SUPABASE_URL=your_supabase_url
+   EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+   ```
+
+4. Start the development server:
+   ```bash
+   npm start
+   ```
+
+### Running the App
+
+- **iOS Simulator**: Press `i` in the terminal or scan the QR code with the Expo Go app
+- **Android Emulator**: Press `a` in the terminal or scan the QR code with the Expo Go app
+- **Physical Device**: Install the Expo Go app and scan the QR code
+
+### Building for Production
+
+#### iOS
+```bash
+npm run ios
+```
+
+#### Android
+```bash
+npm run android
+```
+
+## Project Structure
+
+```
+src/
+├── components/          # Reusable UI components
+├── hooks/              # Custom React hooks
+├── lib/                # External service configurations
+├── screens/            # Screen components
+└── types/              # TypeScript type definitions
+```
+
+## Key Differences from Web Version
+
+1. **Navigation**: Uses React Navigation instead of React Router
+2. **Styling**: Uses React Native StyleSheet instead of Tailwind CSS
+3. **Components**: Adapted for mobile UI patterns
+4. **Images**: Uses React Native Image component
+5. **Forms**: Uses React Native TextInput and TouchableOpacity
+
+## Next Steps
+
+- [ ] Implement messaging functionality
+- [ ] Add image upload capability
+- [ ] Implement location-based search
+- [ ] Add push notifications
+- [ ] Implement barter offer functionality
+- [ ] Add user profile editing
+- [ ] Implement item watching functionality
+
+## Troubleshooting
+
+If you encounter issues:
+
+1. Clear Metro cache: `npx expo start --clear`
+2. Reset Expo cache: `npx expo r -c`
+3. Check that your Supabase credentials are correct
+4. Ensure all dependencies are properly installed
+
+## Contributing
+
+This is a converted version of the original web application. The core business logic and data models remain the same, but the UI has been adapted for mobile devices.
