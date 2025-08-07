@@ -1,66 +1,57 @@
 import React from 'react';
-import { StatusBar } from 'expo-status-bar';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { StatusBar } from 'expo-status-bar';
 
-import AuthScreen from './src/screens/AuthScreen';
-import HomeScreen from './src/screens/HomeScreen';
-import ItemDetailsScreen from './src/screens/ItemDetailsScreen';
-import MessagesScreen from './src/screens/MessagesScreen';
-import ChatScreen from './src/screens/ChatScreen';
-import BarterOfferScreen from './src/screens/BarterOfferScreen';
-import NewListingScreen from './src/screens/NewListingScreen';
-import NotificationsScreen from './src/screens/NotificationsScreen';
-import HistoryScreen from './src/screens/HistoryScreen';
-import ProfileScreen from './src/screens/ProfileScreen';
-import WatchedItemsScreen from './src/screens/WatchedItemsScreen';
-import { useAuth } from './src/hooks/useAuth';
-
-const RootStack = createStackNavigator();
-const Tab = createBottomTabNavigator();
-
-function MainTabs() {
+// Simple test screens
+function HomeScreen({ navigation }: any) {
   return (
-    <Tab.Navigator screenOptions={{ headerShown: false }}>
-      <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen name="Watched" component={WatchedItemsScreen} />
-      <Tab.Screen name="Messages" component={MessagesScreen} />
-      <Tab.Screen name="Profile" component={ProfileScreen} />
-    </Tab.Navigator>
+    <View style={styles.container}>
+      <Text style={styles.title}>FreeOrBarter Mobile</Text>
+      <Text style={styles.subtitle}>Home Screen</Text>
+      
+      <TouchableOpacity 
+        style={styles.button}
+        onPress={() => navigation.navigate('Details')}
+      >
+        <Text style={styles.buttonText}>Go to Details</Text>
+      </TouchableOpacity>
+      
+      <StatusBar style="auto" />
+    </View>
   );
 }
 
+function DetailsScreen({ navigation }: any) {
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Details Screen</Text>
+      <Text style={styles.subtitle}>Navigation is working!</Text>
+      
+      <TouchableOpacity 
+        style={styles.button}
+        onPress={() => navigation.goBack()}
+      >
+        <Text style={styles.buttonText}>Go Back</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+const Stack = createStackNavigator();
+
 export default function App() {
-  const { user, loading } = useAuth();
-
-  // While checking auth state, just render nothing to avoid flicker
-  if (loading) {
-    return null;
-  }
-
   return (
     <NavigationContainer>
       <StatusBar style="auto" />
-      <RootStack.Navigator screenOptions={{ headerShown: false }}>
-        {user ? (
-          <>
-            <RootStack.Screen name="Main" component={MainTabs} />
-            <RootStack.Screen name="ItemDetails" component={ItemDetailsScreen} />
-            <RootStack.Screen name="Chat" component={ChatScreen} />
-            <RootStack.Screen name="BarterOffer" component={BarterOfferScreen} />
-            <RootStack.Screen name="NewListing" component={NewListingScreen} />
-            <RootStack.Screen name="Notifications" component={NotificationsScreen} />
-            <RootStack.Screen name="History" component={HistoryScreen} />
-          </>
-        ) : (
-          <RootStack.Screen name="Auth" component={AuthScreen} />
-        )}
-      </RootStack.Navigator>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="Home" component={HomeScreen} />
+        <Stack.Screen name="Details" component={DetailsScreen} />
+      </Stack.Navigator>
     </NavigationContainer>
   );
 }
-<<<<<<< Current (Your changes)
 
 const styles = StyleSheet.create({
   container: {
@@ -94,5 +85,3 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
-=======
->>>>>>> Incoming (Background Agent changes)
