@@ -31,6 +31,8 @@ export default function ProfileScreen() {
     );
   };
 
+  const fullName = (user?.user_metadata as any)?.full_name as string | undefined;
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -39,7 +41,7 @@ export default function ProfileScreen() {
 
       <View style={styles.content}>
         <View style={styles.userInfo}>
-          <Text style={styles.userName}>{user?.full_name || 'User'}</Text>
+          <Text style={styles.userName}>{fullName || 'User'}</Text>
           <Text style={styles.userEmail}>{user?.email}</Text>
         </View>
 
