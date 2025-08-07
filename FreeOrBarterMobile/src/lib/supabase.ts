@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Try multiple ways to get environment variables
 const supabaseUrl = 
@@ -17,18 +18,25 @@ console.log('Supabase Key exists:', !!supabaseAnonKey);
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
+    storage: AsyncStorage,
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: false
+    detectSessionInUrl: false,
   },
   realtime: {
     params: {
-      eventsPerSecond: 10
-    }
+      eventsPerSecond: 10,
+    },
   },
   global: {
     headers: {
+<<<<<<< Current (Your changes)
       'X-Client-Info': 'freeorbarter-mobile-app'
     }
   }
+=======
+      'X-Client-Info': 'freeorbarter-mobile-app',
+    },
+  },
+>>>>>>> Incoming (Background Agent changes)
 });
