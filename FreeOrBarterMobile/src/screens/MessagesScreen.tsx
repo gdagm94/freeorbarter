@@ -5,15 +5,22 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
+  SafeAreaView,
+  StatusBar,
+  Image,
+  RefreshControl,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { Message, Conversation } from '../types';
+import * as Haptics from 'expo-haptics';
 
 export default function MessagesScreen() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'unread' | 'offers'>('all');
   const navigation = useNavigation<any>();
   const { user } = useAuth();
 
@@ -32,6 +39,11 @@ export default function MessagesScreen() {
         { event: '*', schema: 'public', table: 'messages', filter: `receiver_id=eq.${user.id}` },
         () => fetchConversations()
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'messages', filter: `sender_id=eq.${user.id}` },
+        () => fetchConversations()
+      )
       .subscribe();
 
     return () => {
@@ -41,215 +53,516 @@ export default function MessagesScreen() {
 
   const fetchConversations = async () => {
     if (!user) return;
+    
     try {
       setLoading(true);
       const { data, error } = await supabase
         .from('messages')
-        .select('id,sender_id,receiver_id,content,created_at,item_id,offer_item_id,read,is_offer,archived')
+        .select(`
+          *,
+          items:item_id (
+            id,
+            title,
+            images,
+            type
+          ),
+          sender:sender_id (
+            username,
+            avatar_url
+          ),
+          receiver:receiver_id (
+            username,
+            avatar_url
+          )
+        `)
         .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      const map = new Map<string, Conversation & { _hasUnarchived: boolean }>();
+      // Group messages by user pairs
+      const conversationMap = new Map<string, Conversation>();
+      const unreadCountMap = new Map<string, number>();
 
-      (data as Message[] | null)?.forEach((msg: any) => {
-        const otherUserId = msg.sender_id === user.id ? msg.receiver_id : msg.sender_id;
-        const convId = `user_${[user.id, otherUserId].sort().join('_')}`;
-        const existing = map.get(convId);
+      (data as any[])?.forEach(message => {
+        const otherUserId = message.sender_id === user.id ? message.receiver_id : message.sender_id;
+        const conversationId = `user_${[user.id, otherUserId].sort().join('_')}`;
 
-        const unreadIncrement = msg.receiver_id === user.id && !msg.read ? 1 : 0;
-        const hasOffer = !!msg.offer_item_id || !!msg.is_offer;
-        const isUnarchived = !msg.archived;
+        // Track unread counts
+        if (message.receiver_id === user.id && !message.read) {
+          unreadCountMap.set(
+            conversationId, 
+            (unreadCountMap.get(conversationId) || 0) + 1
+          );
+        }
+        
+        if (!conversationMap.has(conversationId)) {
+          const otherUserInfo = message.sender_id === otherUserId 
+            ? message.sender 
+            : message.receiver;
+          
+          const hasOffer = data.some(
+            (msg: any) => {
+              const msgOtherUserId = msg.sender_id === user.id ? msg.receiver_id : msg.sender_id;
+              return msgOtherUserId === otherUserId && msg.offer_item_id;
+            }
+          );
 
-        if (!existing) {
-          map.set(convId, {
-            id: convId,
-            item_id: msg.item_id || '',
-            item_title: '',
-            item_image: '',
+          conversationMap.set(conversationId, {
+            id: conversationId,
+            item_id: message.item_id || '',
+            item_title: message.items?.title || '',
+            item_image: message.items?.images?.[0] || '',
             other_user_id: otherUserId,
-            other_user_name: 'User',
-            other_user_avatar: null,
-            last_message: msg.content,
-            last_message_time: msg.created_at,
-            unread_count: unreadIncrement,
+            other_user_name: otherUserInfo?.username || 'User',
+            other_user_avatar: otherUserInfo?.avatar_url,
+            last_message: message.content,
+            last_message_time: message.created_at,
+            unread_count: 0,
             has_offer: hasOffer,
-            archived: !isUnarchived,
-            _hasUnarchived: isUnarchived,
+            archived: message.archived || false,
           });
         } else {
-          // Update last message if newer
-          if (new Date(msg.created_at) > new Date(existing.last_message_time)) {
-            existing.last_message = msg.content;
-            existing.last_message_time = msg.created_at;
-            existing.item_id = msg.item_id || '';
+          const existing = conversationMap.get(conversationId)!;
+          if (new Date(message.created_at) > new Date(existing.last_message_time)) {
+            existing.last_message = message.content;
+            existing.last_message_time = message.created_at;
+            if (message.items) {
+              existing.item_title = message.items.title;
+              existing.item_image = message.items.images?.[0] || '';
+            }
           }
-          existing.unread_count += unreadIncrement;
-          existing.has_offer = existing.has_offer || hasOffer;
-          existing._hasUnarchived = existing._hasUnarchived || isUnarchived;
-          existing.archived = !existing._hasUnarchived;
         }
       });
 
-      const list = Array.from(map.values()).sort(conversationSorter).map(({ _hasUnarchived, ...conv }) => conv);
-      setConversations(list);
+      // Apply unread counts
+      unreadCountMap.forEach((count, id) => {
+        const conversation = conversationMap.get(id);
+        if (conversation) {
+          conversation.unread_count = count;
+        }
+      });
+
+      const allConversations = Array.from(conversationMap.values()).sort(conversationSorter);
+      setConversations(allConversations);
+
     } catch (err) {
       console.error('Error fetching conversations:', err);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchConversations();
+  };
+
+  const filteredConversations = conversations.filter(conv => {
+    if (filter === 'unread') return conv.unread_count > 0 && !conv.archived;
+    if (filter === 'offers') return conv.has_offer && !conv.archived;
+    return !conv.archived;
+  });
+
   const renderConversation = ({ item }: { item: Conversation }) => (
     <TouchableOpacity 
-      style={styles.conversationItem}
-      onPress={() => navigation.navigate('Chat', { otherUserId: item.other_user_id, itemId: item.item_id || null })}
+      style={[
+        styles.conversationItem,
+        item.unread_count > 0 && styles.unreadConversation
+      ]}
+      onPress={() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        const otherUserId = item.other_user_id;
+        navigation.navigate('Chat', { 
+          otherUserId, 
+          itemId: item.item_id || null 
+        });
+      }}
+      activeOpacity={0.8}
     >
-      <View style={styles.conversationHeader}>
-        <Text style={styles.conversationTitle}>{item.other_user_name || 'Conversation'}</Text>
-        <Text style={styles.conversationTime}>{new Date(item.last_message_time).toLocaleString()}</Text>
-      </View>
-      <Text style={styles.conversationPreview}>{item.last_message}</Text>
-      {item.unread_count > 0 && (
-        <View style={styles.unreadBadge}>
-          <Text style={styles.unreadText}>{item.unread_count}</Text>
+      <View style={styles.conversationContent}>
+        {/* User Avatar */}
+        <View style={styles.avatarContainer}>
+          {item.other_user_avatar ? (
+            <Image 
+              source={{ uri: item.other_user_avatar }} 
+              style={styles.avatar}
+            />
+          ) : (
+            <View style={styles.avatarPlaceholder}>
+              <Text style={styles.avatarText}>👤</Text>
+            </View>
+          )}
+          {item.unread_count > 0 && (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadText}>
+                {item.unread_count > 9 ? '9+' : item.unread_count}
+              </Text>
+            </View>
+          )}
         </View>
-      )}
+
+        {/* Conversation Info */}
+        <View style={styles.conversationInfo}>
+          <View style={styles.conversationHeader}>
+            <Text style={[
+              styles.userName,
+              item.unread_count > 0 && styles.unreadUserName
+            ]}>
+              {item.other_user_name}
+            </Text>
+            <Text style={styles.timestamp}>
+              {formatTime(item.last_message_time)}
+            </Text>
+          </View>
+
+          {/* Item Context */}
+          {item.item_title && (
+            <View style={styles.itemContext}>
+              {item.item_image && (
+                <Image 
+                  source={{ uri: item.item_image }} 
+                  style={styles.itemThumbnail}
+                />
+              )}
+              <Text style={styles.itemTitle} numberOfLines={1}>
+                📦 {item.item_title}
+              </Text>
+            </View>
+          )}
+
+          {/* Last Message */}
+          <Text style={[
+            styles.lastMessage,
+            item.unread_count > 0 && styles.unreadLastMessage
+          ]} numberOfLines={2}>
+            {item.last_message}
+          </Text>
+
+          {/* Offer Indicator */}
+          {item.has_offer && (
+            <View style={styles.offerIndicator}>
+              <Text style={styles.offerText}>🔄 Barter offer</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Chevron */}
+        <Text style={styles.chevron}>›</Text>
+      </View>
     </TouchableOpacity>
   );
 
-  if (loading) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Text style={styles.backButton}>← Back</Text>
-          </TouchableOpacity>
-          <Text style={styles.title}>Messages</Text>
-        </View>
-        <View style={styles.content}>
-          <Text>Loading conversations...</Text>
-        </View>
-      </View>
-    );
-  }
+  const renderFilterTabs = () => (
+    <View style={styles.filterContainer}>
+      {[
+        { key: 'all', label: 'All', emoji: '💬' },
+        { key: 'unread', label: 'Unread', emoji: '🔴' },
+        { key: 'offers', label: 'Offers', emoji: '🔄' },
+      ].map((filterOption) => (
+        <TouchableOpacity
+          key={filterOption.key}
+          style={[
+            styles.filterTab,
+            filter === filterOption.key && styles.activeFilterTab,
+          ]}
+          onPress={() => {
+            setFilter(filterOption.key as any);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          }}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.filterEmoji}>{filterOption.emoji}</Text>
+          <Text style={[
+            styles.filterText,
+            filter === filterOption.key && styles.activeFilterText,
+          ]}>
+            {filterOption.label}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backButton}>← Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.title}>Messages</Text>
-      </View>
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.title}>Messages</Text>
+        <Text style={styles.subtitle}>
+          {filteredConversations.length} conversation{filteredConversations.length !== 1 ? 's' : ''}
+        </Text>
+      </View>
+
+      {/* Filter Tabs */}
+      {renderFilterTabs()}
+
       <FlatList
-        data={conversations}
+        data={filteredConversations}
         renderItem={renderConversation}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContainer}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No conversations yet</Text>
-            <Text style={styles.emptySubtext}>
-              Start a conversation by messaging a seller about an item
-            </Text>
-          </View>
+        refreshControl={
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh}
+            tintColor="#3B82F6"
+            colors={['#3B82F6']}
+          />
         }
+        ListEmptyComponent={
+          !loading ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyEmoji}>
+                {filter === 'unread' ? '✅' : filter === 'offers' ? '🔄' : '💬'}
+              </Text>
+              <Text style={styles.emptyText}>
+                {filter === 'unread' ? 'All caught up!' : 
+                 filter === 'offers' ? 'No barter offers yet' : 
+                 'No conversations yet'}
+              </Text>
+              <Text style={styles.emptySubtext}>
+                {filter === 'unread' ? 'Check back later for new messages' :
+                 filter === 'offers' ? 'Barter offers will appear here' :
+                 'Start a conversation by messaging someone about their item'}
+              </Text>
+            </View>
+          ) : null
+        }
+        showsVerticalScrollIndicator={false}
       />
-    </View>
+    </SafeAreaView>
   );
 }
+
+const formatTime = (timestamp: string) => {
+  const date = new Date(timestamp);
+  const now = new Date();
+  const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
+
+  if (diffInHours < 1) {
+    return 'Just now';
+  } else if (diffInHours < 24) {
+    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  } else if (diffInHours < 168) { // 7 days
+    return date.toLocaleDateString([], { weekday: 'short' });
+  } else {
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  }
+};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#F8FAFC',
   },
   header: {
-    padding: 16,
     backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  backButton: {
-    fontSize: 16,
-    color: '#3B82F6',
-    marginRight: 16,
+    borderBottomColor: '#E2E8F0',
   },
   title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1F2937',
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#1E293B',
+    textAlign: 'center',
   },
-  content: {
+  subtitle: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  filterContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    gap: 8,
+  },
+  filterTab: {
     flex: 1,
-    justifyContent: 'center',
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F1F5F9',
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  activeFilterTab: {
+    backgroundColor: '#3B82F6',
+  },
+  filterEmoji: {
+    fontSize: 14,
+    marginRight: 6,
+  },
+  filterText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  activeFilterText: {
+    color: '#FFFFFF',
   },
   listContainer: {
-    padding: 16,
+    paddingVertical: 8,
   },
   conversationItem: {
     backgroundColor: '#FFFFFF',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 12,
+    marginHorizontal: 16,
+    marginVertical: 4,
+    borderRadius: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
     elevation: 2,
   },
-  conversationHeader: {
+  unreadConversation: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#3B82F6',
+    shadowOpacity: 0.1,
+  },
+  conversationContent: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    padding: 16,
   },
-  conversationTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
+  avatarContainer: {
+    position: 'relative',
+    marginRight: 12,
   },
-  conversationTime: {
-    fontSize: 12,
-    color: '#6B7280',
+  avatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
   },
-  conversationPreview: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 8,
+  avatarPlaceholder: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#E2E8F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: {
+    fontSize: 20,
   },
   unreadBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
     backgroundColor: '#EF4444',
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    alignSelf: 'flex-start',
+    borderRadius: 12,
+    minWidth: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
   },
   unreadText: {
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: 'bold',
   },
-  emptyContainer: {
+  conversationInfo: {
     flex: 1,
-    justifyContent: 'center',
+    gap: 4,
+  },
+  conversationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 40,
+  },
+  userName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1E293B',
+  },
+  unreadUserName: {
+    fontWeight: '700',
+  },
+  timestamp: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  itemContext: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  itemThumbnail: {
+    width: 16,
+    height: 16,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+  itemTitle: {
+    fontSize: 12,
+    color: '#475569',
+    fontWeight: '500',
+  },
+  lastMessage: {
+    fontSize: 14,
+    color: '#64748B',
+    lineHeight: 18,
+  },
+  unreadLastMessage: {
+    fontWeight: '600',
+    color: '#374151',
+  },
+  offerIndicator: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  offerText: {
+    fontSize: 12,
+    color: '#92400E',
+    fontWeight: '600',
+  },
+  chevron: {
+    fontSize: 20,
+    color: '#CBD5E1',
+    fontWeight: '300',
+    marginLeft: 8,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    paddingVertical: 80,
+    paddingHorizontal: 32,
+  },
+  emptyEmoji: {
+    fontSize: 64,
+    marginBottom: 20,
   },
   emptyText: {
-    fontSize: 16,
-    color: '#6B7280',
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#374151',
     marginBottom: 8,
+    textAlign: 'center',
   },
   emptySubtext: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: '#6B7280',
     textAlign: 'center',
+    lineHeight: 20,
   },
 });
