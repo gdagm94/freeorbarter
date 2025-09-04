@@ -12,6 +12,7 @@ import { useRoute, useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { Item } from '../types';
+import * as Haptics from 'expo-haptics';
 
 export default function ItemDetailsScreen() {
   const [item, setItem] = useState<Item | null>(null);
@@ -64,8 +65,7 @@ export default function ItemDetailsScreen() {
     // Navigate to chat with the seller
     navigation.navigate('Chat', { 
       itemId: item.id,
-      sellerId: item.user_id,
-      conversationId: undefined // Will be created if it doesn't exist
+      otherUserId: item.user_id,
     });
   };
 
@@ -108,6 +108,7 @@ export default function ItemDetailsScreen() {
         return;
       }
 
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       Alert.alert('Success', 'Item added to your watchlist');
     } catch (error) {
       console.error('Error watching item:', error);

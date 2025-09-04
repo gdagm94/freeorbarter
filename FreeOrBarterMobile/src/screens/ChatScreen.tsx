@@ -13,6 +13,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { Message } from '../types';
+import * as Haptics from 'expo-haptics';
 
 export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -21,23 +22,42 @@ export default function ChatScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { user } = useAuth();
-  const { conversationId, itemId, sellerId } = route.params || {};
+  const { otherUserId, itemId } = route.params || {};
   const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
-    if (conversationId) {
-      fetchMessages();
-    }
-  }, [conversationId]);
+    if (!otherUserId || !user) return;
+    fetchMessages();
+
+    const channel = supabase
+      .channel('chat-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'messages', filter: `receiver_id=eq.${user.id}` },
+        fetchMessages
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'messages', filter: `sender_id=eq.${user.id}` },
+        fetchMessages
+      )
+      .subscribe();
+
+    return () => {
+      channel.unsubscribe();
+    };
+  }, [otherUserId, user?.id]);
 
   const fetchMessages = async () => {
-    if (!conversationId) return;
+    if (!otherUserId || !user) return;
 
     try {
       const { data, error } = await supabase
         .from('messages')
         .select('*')
-        .eq('conversation_id', conversationId)
+        .or(
+          `and(sender_id.eq.${user.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${user.id})`
+        )
         .order('created_at', { ascending: true });
 
       if (error) {
@@ -45,7 +65,18 @@ export default function ChatScreen() {
         return;
       }
 
-      setMessages(data || []);
+      // Mark messages from other user as read
+      const all = (data as Message[]) || [];
+      const unreadFromOther = all.filter(m => m.receiver_id === user.id && !m.read);
+      if (unreadFromOther.length > 0) {
+        try {
+          await supabase
+            .from('messages')
+            .update({ read: true })
+            .or(`and(sender_id.eq.${otherUserId},receiver_id.eq.${user.id})`);
+        } catch {}
+      }
+      setMessages(all);
     } catch (error) {
       console.error('Error fetching messages:', error);
     } finally {
@@ -54,17 +85,15 @@ export default function ChatScreen() {
   };
 
   const sendMessage = async () => {
-    if (!newMessage.trim() || !user) return;
+    if (!newMessage.trim() || !user || !otherUserId) return;
 
     try {
-      const messageData = {
+      const messageData: Partial<Message> = {
         sender_id: user.id,
-        receiver_id: sellerId,
+        receiver_id: otherUserId,
         content: newMessage.trim(),
-        item_id: itemId,
-        conversation_id: conversationId,
-        created_at: new Date().toISOString(),
-      };
+        item_id: itemId || null,
+      } as any;
 
       const { error } = await supabase
         .from('messages')
@@ -76,6 +105,7 @@ export default function ChatScreen() {
       }
 
       setNewMessage('');
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       fetchMessages();
     } catch (error) {
       console.error('Error sending message:', error);

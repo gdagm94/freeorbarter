@@ -1,14 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  TextInput,
-  Alert,
 } from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { Message, Conversation } from '../types';
@@ -17,31 +15,87 @@ export default function MessagesScreen() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const navigation = useNavigation<any>();
-  const route = useRoute<any>();
   const { user } = useAuth();
 
-  useEffect(() => {
-    fetchConversations();
+  const conversationSorter = useMemo(() => (a: Conversation, b: Conversation) => {
+    return new Date(b.last_message_time).getTime() - new Date(a.last_message_time).getTime();
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    fetchConversations();
+
+    const channel = supabase
+      .channel('messages-updates')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'messages', filter: `receiver_id=eq.${user.id}` },
+        () => fetchConversations()
+      )
+      .subscribe();
+
+    return () => {
+      channel.unsubscribe();
+    };
+  }, [user]);
 
   const fetchConversations = async () => {
     if (!user) return;
-
     try {
+      setLoading(true);
       const { data, error } = await supabase
-        .from('conversations')
-        .select('*')
-        .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`)
-        .order('updated_at', { ascending: false });
+        .from('messages')
+        .select('id,sender_id,receiver_id,content,created_at,item_id,offer_item_id,read,is_offer,archived')
+        .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
+        .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Error fetching conversations:', error);
-        return;
-      }
+      if (error) throw error;
 
-      setConversations(data || []);
-    } catch (error) {
-      console.error('Error fetching conversations:', error);
+      const map = new Map<string, Conversation & { _hasUnarchived: boolean }>();
+
+      (data as Message[] | null)?.forEach((msg: any) => {
+        const otherUserId = msg.sender_id === user.id ? msg.receiver_id : msg.sender_id;
+        const convId = `user_${[user.id, otherUserId].sort().join('_')}`;
+        const existing = map.get(convId);
+
+        const unreadIncrement = msg.receiver_id === user.id && !msg.read ? 1 : 0;
+        const hasOffer = !!msg.offer_item_id || !!msg.is_offer;
+        const isUnarchived = !msg.archived;
+
+        if (!existing) {
+          map.set(convId, {
+            id: convId,
+            item_id: msg.item_id || '',
+            item_title: '',
+            item_image: '',
+            other_user_id: otherUserId,
+            other_user_name: 'User',
+            other_user_avatar: null,
+            last_message: msg.content,
+            last_message_time: msg.created_at,
+            unread_count: unreadIncrement,
+            has_offer: hasOffer,
+            archived: !isUnarchived,
+            _hasUnarchived: isUnarchived,
+          });
+        } else {
+          // Update last message if newer
+          if (new Date(msg.created_at) > new Date(existing.last_message_time)) {
+            existing.last_message = msg.content;
+            existing.last_message_time = msg.created_at;
+            existing.item_id = msg.item_id || '';
+          }
+          existing.unread_count += unreadIncrement;
+          existing.has_offer = existing.has_offer || hasOffer;
+          existing._hasUnarchived = existing._hasUnarchived || isUnarchived;
+          existing.archived = !existing._hasUnarchived;
+        }
+      });
+
+      const list = Array.from(map.values()).sort(conversationSorter).map(({ _hasUnarchived, ...conv }) => conv);
+      setConversations(list);
+    } catch (err) {
+      console.error('Error fetching conversations:', err);
     } finally {
       setLoading(false);
     }
@@ -50,11 +104,11 @@ export default function MessagesScreen() {
   const renderConversation = ({ item }: { item: Conversation }) => (
     <TouchableOpacity 
       style={styles.conversationItem}
-      onPress={() => navigation.navigate('Chat', { conversationId: item.id })}
+      onPress={() => navigation.navigate('Chat', { otherUserId: item.other_user_id, itemId: item.item_id || null })}
     >
       <View style={styles.conversationHeader}>
-        <Text style={styles.conversationTitle}>{item.item_title}</Text>
-        <Text style={styles.conversationTime}>{item.last_message_time}</Text>
+        <Text style={styles.conversationTitle}>{item.other_user_name || 'Conversation'}</Text>
+        <Text style={styles.conversationTime}>{new Date(item.last_message_time).toLocaleString()}</Text>
       </View>
       <Text style={styles.conversationPreview}>{item.last_message}</Text>
       {item.unread_count > 0 && (

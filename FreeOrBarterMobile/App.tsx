@@ -1,87 +1,180 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
+import * as Linking from 'expo-linking';
 import { createStackNavigator } from '@react-navigation/stack';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
+import * as Notifications from 'expo-notifications';
+import { useEffect, useState } from 'react';
+import { supabase } from './src/lib/supabase';
 
-// Simple test screens
-function HomeScreen({ navigation }: any) {
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>FreeOrBarter Mobile</Text>
-      <Text style={styles.subtitle}>Home Screen</Text>
-      
-      <TouchableOpacity 
-        style={styles.button}
-        onPress={() => navigation.navigate('Details')}
-      >
-        <Text style={styles.buttonText}>Go to Details</Text>
-      </TouchableOpacity>
-      
-      <StatusBar style="auto" />
-    </View>
-  );
-}
-
-function DetailsScreen({ navigation }: any) {
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Details Screen</Text>
-      <Text style={styles.subtitle}>Navigation is working!</Text>
-      
-      <TouchableOpacity 
-        style={styles.button}
-        onPress={() => navigation.goBack()}
-      >
-        <Text style={styles.buttonText}>Go Back</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
+import HomeScreen from './src/screens/HomeScreen';
+import ItemDetailsScreen from './src/screens/ItemDetailsScreen';
+import MessagesScreen from './src/screens/MessagesScreen';
+import ChatScreen from './src/screens/ChatScreen';
+import NewListingScreen from './src/screens/NewListingScreen';
+import NotificationsScreen from './src/screens/NotificationsScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
+import BarterOfferScreen from './src/screens/BarterOfferScreen';
+import AuthScreen from './src/screens/AuthScreen';
+import WatchedItemsScreen from './src/screens/WatchedItemsScreen';
+import HistoryScreen from './src/screens/HistoryScreen';
+import { useAuth } from './src/hooks/useAuth';
 
 const Stack = createStackNavigator();
+const Tab = createBottomTabNavigator();
+
+function Placeholder({ title }: { title: string }) {
+  return (
+    <View style={styles.placeholderContainer}>
+      <Text style={styles.placeholderText}>{title}</Text>
+    </View>
+  );
+}
+
+function Tabs() {
+  const { user } = useAuth();
+  const [messageBadge, setMessageBadge] = useState<number | undefined>(undefined);
+  const [notificationBadge, setNotificationBadge] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    if (!user) {
+      setMessageBadge(undefined);
+      setNotificationBadge(undefined);
+      return;
+    }
+    let isMounted = true;
+    const loadCounts = async () => {
+      try {
+        const { count: msgCount } = await supabase
+          .from('messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('receiver_id', user.id)
+          .eq('read', false);
+
+        const { count: notifCount } = await supabase
+          .from('notifications')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .eq('read', false);
+
+        if (!isMounted) return;
+        setMessageBadge(msgCount && msgCount > 0 ? msgCount : undefined);
+        setNotificationBadge(notifCount && notifCount > 0 ? notifCount : undefined);
+      } catch {}
+    };
+    loadCounts();
+    const interval = setInterval(loadCounts, 15000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [user?.id]);
+
+  return (
+    <Tab.Navigator screenOptions={{ headerShown: false }}>
+      <Tab.Screen name="Home" component={HomeScreen} />
+      <Tab.Screen name="Messages" component={user ? MessagesScreen : AuthScreen} options={{ tabBarBadge: messageBadge }} />
+      <Tab.Screen name="NewListing" options={{ title: 'New' }} component={user ? NewListingScreen : AuthScreen} />
+      <Tab.Screen name="Notifications" component={user ? NotificationsScreen : AuthScreen} options={{ tabBarBadge: notificationBadge }} />
+      <Tab.Screen name="Profile" component={user ? ProfileScreen : AuthScreen} />
+    </Tab.Navigator>
+  );
+}
 
 export default function App() {
+  const { loading } = useAuth();
+  const navRef = React.useRef<any>(null);
+
+  // Deep linking config
+  const linking = {
+    prefixes: [Linking.createURL('/'), 'freeorbarter://'],
+    config: {
+      screens: {
+        Tabs: {
+          screens: {
+            Home: '',
+            Messages: 'messages',
+            NewListing: 'new',
+            Notifications: 'notifications',
+            Profile: 'profile',
+          },
+        },
+        ItemDetails: 'item/:itemId',
+        Chat: 'chat/:otherUserId',
+        BarterOffer: 'barter/:itemId',
+      },
+    },
+  } as const;
+
+  useEffect(() => {
+    // Notifications handler behavior
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({ shouldShowAlert: true, shouldPlaySound: false, shouldSetBadge: false }),
+    });
+  }, []);
+
+  // Badge counts handled inside Tabs
+
+  useEffect(() => {
+    const register = async () => {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      if (finalStatus !== 'granted') return;
+      await Notifications.getExpoPushTokenAsync();
+    };
+    register();
+  }, []);
+
+  useEffect(() => {
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      try {
+        const data: any = response.notification.request.content.data || {};
+        if (data.type === 'direct_message' && data.sender_id) {
+          navRef.current?.navigate('Chat', { otherUserId: data.sender_id, itemId: data.item_id || null });
+        } else if (data.item_id) {
+          navRef.current?.navigate('ItemDetails', { itemId: data.item_id });
+        }
+      } catch {}
+    });
+    return () => sub.remove();
+  }, []);
+
+  if (loading) {
+    return <Placeholder title="Loading..." />;
+  }
+
   return (
-    <NavigationContainer>
+    <NavigationContainer linking={linking} ref={navRef}>
       <StatusBar style="auto" />
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="Home" component={HomeScreen} />
-        <Stack.Screen name="Details" component={DetailsScreen} />
+        <Stack.Screen name="Tabs" component={Tabs} />
+        <Stack.Screen name="ItemDetails" component={ItemDetailsScreen} />
+        <Stack.Screen name="Chat" component={ChatScreen} />
+        <Stack.Screen name="BarterOffer" component={BarterOfferScreen} />
+        <Stack.Screen name="Auth" component={AuthScreen} />
+        <Stack.Screen name="WatchedItems" component={WatchedItemsScreen} />
+        <Stack.Screen name="History" component={HistoryScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  placeholderContainer: {
     flex: 1,
     backgroundColor: '#F9FAFB',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
+  placeholderText: {
+    fontSize: 18,
     color: '#6B7280',
-    marginBottom: 32,
-  },
-  button: {
-    backgroundColor: '#3B82F6',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginTop: 16,
-  },
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
   },
 });
