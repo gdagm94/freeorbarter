@@ -32,7 +32,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
   },
   plugins: [
-    'expo-router',
     'expo-notifications'
   ]
 });
