@@ -20,6 +20,7 @@ import BarterOfferScreen from './src/screens/BarterOfferScreen';
 import AuthScreen from './src/screens/AuthScreen';
 import WatchedItemsScreen from './src/screens/WatchedItemsScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
 import { useAuth } from './src/hooks/useAuth';
 
 const Stack = createStackNavigator();
@@ -243,6 +244,7 @@ export default function App() {
         <Stack.Screen name="Auth" component={AuthScreen} />
         <Stack.Screen name="WatchedItems" component={WatchedItemsScreen} />
         <Stack.Screen name="History" component={HistoryScreen} />
+        <Stack.Screen name="Settings" component={SettingsScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

@@ -209,10 +209,22 @@ export default function HistoryScreen() {
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       
       <View style={styles.header}>
-        <Text style={styles.title}>History</Text>
-        <Text style={styles.subtitle}>
-          {filteredHistory.length} {filteredHistory.length === 1 ? 'item' : 'items'}
-        </Text>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            navigation.goBack();
+          }}
+        >
+          <Text style={styles.backButtonText}>← Back</Text>
+        </TouchableOpacity>
+        <View style={styles.headerContent}>
+          <Text style={styles.title}>History</Text>
+          <Text style={styles.subtitle}>
+            {filteredHistory.length} {filteredHistory.length === 1 ? 'item' : 'items'}
+          </Text>
+        </View>
+        <View style={styles.headerSpacer} />
       </View>
 
       {renderFilterTabs()}
@@ -258,9 +270,28 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  backButton: {
+    padding: 8,
+    minWidth: 80,
+  },
+  backButtonText: {
+    fontSize: 16,
+    color: '#3B82F6',
+    fontWeight: '600',
+  },
+  headerContent: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  headerSpacer: {
+    minWidth: 80,
   },
   title: {
-    fontSize: 28,
+    fontSize: 20,
     fontWeight: '700',
     color: '#1E293B',
     textAlign: 'center',
@@ -269,7 +300,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#64748B',
     textAlign: 'center',
-    marginTop: 4,
+    marginTop: 2,
     fontWeight: '500',
   },
   filterContainer: {

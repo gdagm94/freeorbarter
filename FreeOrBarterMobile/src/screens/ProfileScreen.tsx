@@ -42,6 +42,17 @@ export default function ProfileScreen() {
     }
   }, [user]);
 
+  // Refresh profile data when screen comes into focus
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (user) {
+        fetchProfileData();
+      }
+    });
+
+    return unsubscribe;
+  }, [navigation, user]);
+
   const fetchProfileData = async () => {
     if (!user) return;
 
@@ -187,11 +198,11 @@ export default function ProfileScreen() {
               style={styles.quickAction}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                // Navigate to settings when implemented
+                navigation.navigate('Settings');
               }}
             >
-              <Text style={styles.quickActionEmoji}>⚙️</Text>
-              <Text style={styles.quickActionText}>Settings</Text>
+              <Text style={styles.quickActionEmoji}>✏️</Text>
+              <Text style={styles.quickActionText}>Edit</Text>
             </TouchableOpacity>
           </View>
         </View>
