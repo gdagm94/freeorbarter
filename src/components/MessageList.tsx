@@ -360,7 +360,7 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
       
-      const { error: uploadError, data } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('message-images')
         .upload(fileName, file);
 
@@ -523,7 +523,7 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            channel: `private-user-${otherUserId}`,
+            channel: channelName,
             event: 'new-message',
             data: {
               messageId: data.id
