@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,8 @@ import {
   StatusBar,
   Image,
   RefreshControl,
+  Animated,
+  Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
@@ -20,9 +22,11 @@ export default function MessagesScreen() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'unread' | 'offers'>('all');
+  const [filter, setFilter] = useState<'all' | 'unread' | 'offers' | 'deleted'>('all');
+  const [swipedItemId, setSwipedItemId] = useState<string | null>(null);
   const navigation = useNavigation<any>();
   const { user } = useAuth();
+  const swipeAnimations = useRef<Map<string, Animated.Value>>(new Map());
 
   const conversationSorter = useMemo(() => (a: Conversation, b: Conversation) => {
     return new Date(b.last_message_time).getTime() - new Date(a.last_message_time).getTime();
@@ -121,6 +125,8 @@ export default function MessagesScreen() {
             unread_count: 0,
             has_offer: hasOffer,
             archived: message.archived || false,
+            deleted: message.deleted || false,
+            silenced: message.silenced || false,
           });
         } else {
           const existing = conversationMap.get(conversationId)!;
@@ -159,28 +165,188 @@ export default function MessagesScreen() {
     fetchConversations();
   };
 
+  const getSwipeAnimation = (itemId: string) => {
+    if (!swipeAnimations.current.has(itemId)) {
+      swipeAnimations.current.set(itemId, new Animated.Value(0));
+    }
+    return swipeAnimations.current.get(itemId)!;
+  };
+
+  const handleSwipeLeft = (itemId: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSwipedItemId(itemId);
+    Animated.timing(getSwipeAnimation(itemId), {
+      toValue: -120,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handleSwipeRight = (itemId: string) => {
+    setSwipedItemId(null);
+    Animated.timing(getSwipeAnimation(itemId), {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const deleteConversation = async (conversationId: string, otherUserId: string) => {
+    try {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      
+      Alert.alert(
+        'Delete Conversation',
+        'Are you sure you want to delete this conversation? You can retrieve it later.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: async () => {
+              const { error } = await supabase
+                .from('messages')
+                .update({ deleted: true })
+                .eq('sender_id', user?.id)
+                .or(`sender_id.eq.${otherUserId},receiver_id.eq.${otherUserId}`)
+                .eq('receiver_id', user?.id);
+
+              if (error) throw error;
+              
+              setConversations(prev => 
+                prev.map(conv => 
+                  conv.id === conversationId ? { ...conv, deleted: true } : conv
+                )
+              );
+              
+              handleSwipeRight(conversationId);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Error deleting conversation:', error);
+      Alert.alert('Error', 'Failed to delete conversation');
+    }
+  };
+
+  const retrieveConversation = async (conversationId: string, otherUserId: string) => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      
+      const { error } = await supabase
+        .from('messages')
+        .update({ deleted: false })
+        .eq('sender_id', user?.id)
+        .or(`sender_id.eq.${otherUserId},receiver_id.eq.${otherUserId}`)
+        .eq('receiver_id', user?.id);
+
+      if (error) throw error;
+      
+      setConversations(prev => 
+        prev.map(conv => 
+          conv.id === conversationId ? { ...conv, deleted: false } : conv
+        )
+      );
+      
+      handleSwipeRight(conversationId);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      console.error('Error retrieving conversation:', error);
+      Alert.alert('Error', 'Failed to retrieve conversation');
+    }
+  };
+
+  const silenceConversation = async (conversationId: string, otherUserId: string) => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      
+      const { error } = await supabase
+        .from('messages')
+        .update({ silenced: true })
+        .eq('sender_id', user?.id)
+        .or(`sender_id.eq.${otherUserId},receiver_id.eq.${otherUserId}`)
+        .eq('receiver_id', user?.id);
+
+      if (error) throw error;
+      
+      setConversations(prev => 
+        prev.map(conv => 
+          conv.id === conversationId ? { ...conv, silenced: true } : conv
+        )
+      );
+      
+      handleSwipeRight(conversationId);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      console.error('Error silencing conversation:', error);
+      Alert.alert('Error', 'Failed to silence conversation');
+    }
+  };
+
   const filteredConversations = conversations.filter(conv => {
-    if (filter === 'unread') return conv.unread_count > 0 && !conv.archived;
-    if (filter === 'offers') return conv.has_offer && !conv.archived;
-    return !conv.archived;
+    if (filter === 'unread') return conv.unread_count > 0 && !conv.archived && !conv.deleted;
+    if (filter === 'offers') return conv.has_offer && !conv.archived && !conv.deleted;
+    if (filter === 'deleted') return conv.deleted === true;
+    return !conv.archived && !conv.deleted;
   });
 
   const renderConversation = ({ item }: { item: Conversation }) => (
-    <TouchableOpacity 
-      style={[
-        styles.conversationItem,
-        item.unread_count > 0 && styles.unreadConversation
-      ]}
-      onPress={() => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        const otherUserId = item.other_user_id;
-        navigation.navigate('Chat', { 
-          otherUserId, 
-          itemId: item.item_id || null 
-        });
-      }}
-      activeOpacity={0.8}
-    >
+    <View style={styles.conversationWrapper}>
+      {/* Action Buttons */}
+      <View style={styles.actionButtons}>
+        {item.deleted ? (
+          <TouchableOpacity
+            style={[styles.actionButton, styles.retrieveButton]}
+            onPress={() => retrieveConversation(item.id, item.other_user_id)}
+          >
+            <Text style={styles.actionButtonText}>📥</Text>
+            <Text style={styles.actionButtonLabel}>Retrieve</Text>
+          </TouchableOpacity>
+        ) : (
+          <>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.silenceButton]}
+              onPress={() => silenceConversation(item.id, item.other_user_id)}
+            >
+              <Text style={styles.actionButtonText}>🔇</Text>
+              <Text style={styles.actionButtonLabel}>Silence</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.deleteButton]}
+              onPress={() => deleteConversation(item.id, item.other_user_id)}
+            >
+              <Text style={styles.actionButtonText}>🗑️</Text>
+              <Text style={styles.actionButtonLabel}>Delete</Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
+
+      {/* Conversation Item */}
+      <Animated.View
+        style={[
+          styles.conversationItem,
+          item.unread_count > 0 && styles.unreadConversation,
+          item.deleted && styles.deletedConversation,
+          { transform: [{ translateX: getSwipeAnimation(item.id) }] }
+        ]}
+      >
+        <TouchableOpacity 
+          style={styles.conversationTouchable}
+          onPress={() => {
+            if (item.deleted) return;
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            const otherUserId = item.other_user_id;
+            navigation.navigate('Chat', { 
+              otherUserId, 
+              itemId: item.item_id || null 
+            });
+          }}
+          onLongPress={() => handleSwipeLeft(item.id)}
+          activeOpacity={0.8}
+        >
       <View style={styles.conversationContent}>
         {/* User Avatar */}
         <View style={styles.avatarContainer}>
@@ -250,8 +416,10 @@ export default function MessagesScreen() {
 
         {/* Chevron */}
         <Text style={styles.chevron}>›</Text>
-      </View>
-    </TouchableOpacity>
+        </View>
+        </TouchableOpacity>
+      </Animated.View>
+    </View>
   );
 
   const renderFilterTabs = () => (
@@ -260,6 +428,7 @@ export default function MessagesScreen() {
         { key: 'all', label: 'All', emoji: '💬' },
         { key: 'unread', label: 'Unread', emoji: '🔴' },
         { key: 'offers', label: 'Offers', emoji: '🔄' },
+        { key: 'deleted', label: 'Deleted', emoji: '🗑️' },
       ].map((filterOption) => (
         <TouchableOpacity
           key={filterOption.key}
@@ -317,16 +486,20 @@ export default function MessagesScreen() {
           !loading ? (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyEmoji}>
-                {filter === 'unread' ? '✅' : filter === 'offers' ? '🔄' : '💬'}
+                {filter === 'unread' ? '✅' : 
+                 filter === 'offers' ? '🔄' : 
+                 filter === 'deleted' ? '🗑️' : '💬'}
               </Text>
               <Text style={styles.emptyText}>
                 {filter === 'unread' ? 'All caught up!' : 
                  filter === 'offers' ? 'No barter offers yet' : 
+                 filter === 'deleted' ? 'No deleted conversations' :
                  'No conversations yet'}
               </Text>
               <Text style={styles.emptySubtext}>
                 {filter === 'unread' ? 'Check back later for new messages' :
                  filter === 'offers' ? 'Barter offers will appear here' :
+                 filter === 'deleted' ? 'Deleted conversations will appear here' :
                  'Start a conversation by messaging someone about their item'}
               </Text>
             </View>
@@ -358,6 +531,47 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC',
+  },
+  conversationWrapper: {
+    position: 'relative',
+    marginHorizontal: 16,
+    marginVertical: 4,
+  },
+  actionButtons: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  actionButton: {
+    width: 60,
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 16,
+    marginLeft: 4,
+  },
+  deleteButton: {
+    backgroundColor: '#EF4444',
+  },
+  retrieveButton: {
+    backgroundColor: '#10B981',
+  },
+  silenceButton: {
+    backgroundColor: '#F59E0B',
+  },
+  actionButtonText: {
+    fontSize: 20,
+    marginBottom: 4,
+  },
+  actionButtonLabel: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   header: {
     backgroundColor: '#FFFFFF',
@@ -417,14 +631,20 @@ const styles = StyleSheet.create({
   },
   conversationItem: {
     backgroundColor: '#FFFFFF',
-    marginHorizontal: 16,
-    marginVertical: 4,
     borderRadius: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
+    zIndex: 2,
+  },
+  conversationTouchable: {
+    flex: 1,
+  },
+  deletedConversation: {
+    backgroundColor: '#F3F4F6',
+    opacity: 0.7,
   },
   unreadConversation: {
     borderLeftWidth: 4,

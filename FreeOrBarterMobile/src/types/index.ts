@@ -50,6 +50,8 @@ export interface Conversation {
   offer_item_image?: string;
   has_offer: boolean;
   archived?: boolean;
+  deleted?: boolean;
+  silenced?: boolean;
 }
 
 export interface Notification {
