@@ -317,10 +317,13 @@ export default function ItemDetailsScreen() {
           <Text style={styles.title}>{item.title}</Text>
           
           {/* User Info */}
-          {item.users && (
+          {item.users && !isOwnItem && (
             <TouchableOpacity 
               style={styles.userInfo}
-              onPress={() => navigation.navigate('Profile', { userId: item.users?.id })}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                navigation.navigate('UserProfile', { userId: item.users?.id });
+              }}
               activeOpacity={0.7}
             >
               {item.users.avatar_url ? (

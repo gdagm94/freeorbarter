@@ -3,7 +3,7 @@ import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { Message } from '../types';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Check, CheckCheck } from 'lucide-react';
+import { ArrowRight, Check, CheckCheck, Image as ImageIcon, Send } from 'lucide-react';
 import pusherClient from '../lib/pusher';
 import { debounce } from 'throttle-debounce';
 
@@ -47,6 +47,8 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
   const [error, setError] = useState<string | null>(null);
   const [hasMarkedAsRead, setHasMarkedAsRead] = useState(false);
   const [sending, setSending] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Debounced function to emit typing status
   const emitTypingStatus = debounce(1000, async (isTyping: boolean) => {
@@ -351,6 +353,114 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
     }
   };
 
+  const uploadImage = async (file: File): Promise<string | null> => {
+    try {
+      setUploading(true);
+      
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      
+      const { error: uploadError, data } = await supabase.storage
+        .from('message-images')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('message-images')
+        .getPublicUrl(fileName);
+
+      return publicUrl;
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      setError('Failed to upload image');
+      return null;
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const imageUrl = await uploadImage(file);
+    if (imageUrl) {
+      await sendMessageWithImage('', imageUrl);
+    }
+  };
+
+  const sendMessageWithImage = async (content: string, imageUrl: string) => {
+    try {
+      setSending(true);
+      setIsTyping(false);
+      emitTypingStatus(false);
+
+      const { data, error } = await supabase.from('messages').insert([
+        {
+          content: content,
+          image_url: imageUrl,
+          item_id: conversationType === 'unified' ? null : itemId,
+          sender_id: currentUserId,
+          receiver_id: otherUserId,
+          read: false,
+          is_offer: false
+        },
+      ]).select(`
+        *,
+        offer_item:offer_item_id (
+          id,
+          title,
+          images,
+          condition,
+          description
+        ),
+        sender:sender_id (
+          username,
+          avatar_url
+        ),
+        items:item_id (
+          id,
+          title,
+          images
+        )
+      `).single();
+
+      if (error) {
+        console.error('Error sending message:', error);
+        return;
+      }
+
+      if (data) {
+        setMessages(prev => [...prev, data]);
+
+        // Trigger Pusher event for new message
+        const channelName = conversationType === 'unified' 
+          ? `private-user-${[currentUserId, otherUserId].sort().join('-')}`
+          : conversationType === 'direct_message' 
+          ? `private-dm-${[currentUserId, otherUserId].sort().join('-')}`
+          : `private-messages-${itemId}`;
+
+        await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pusher-trigger`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            channel: channelName,
+            event: 'new-message',
+            data: { messageId: data.id }
+          })
+        });
+      }
+    } catch (err) {
+      console.error('Error sending message:', err);
+    } finally {
+      setSending(false);
+    }
+  };
+
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim()) return;
@@ -487,7 +597,22 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
                     </div>
                   )}
                   
-                  <p>{message.content}</p>
+                  {/* Message Image */}
+                  {message.image_url && (
+                    <div className="mt-2">
+                      <img 
+                        src={message.image_url} 
+                        alt="Message attachment"
+                        className="max-w-full h-auto rounded-lg cursor-pointer"
+                        onClick={() => window.open(message.image_url, '_blank')}
+                      />
+                    </div>
+                  )}
+                  
+                  {/* Message Content */}
+                  {message.content && (
+                    <p>{message.content}</p>
+                  )}
                   
                   {/* Show item context for unified conversations */}
                   {conversationType === 'unified' && message.items && (
@@ -646,16 +771,43 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
       <form onSubmit={sendMessage} className="p-4 border-t">
         <div className="flex space-x-2">
           <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleImageUpload}
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="bg-gray-100 text-gray-600 px-3 py-2 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+            title="Attach image"
+          >
+            <ImageIcon className="w-5 h-5" />
+          </button>
+          <input
             type="text"
             value={newMessage}
             onChange={handleInputChange}
             onBlur={handleInputBlur}
             placeholder="Type your message..."
             className="flex-1 rounded-lg border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            disabled={sending}
+            disabled={sending || uploading}
           />
-          <button type="submit" className="btn-primary">
-            Send
+          <button
+            type="submit"
+            disabled={!newMessage.trim() || sending || uploading}
+            className="btn-primary flex items-center"
+          >
+            {uploading ? (
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <>
+                <Send className="w-5 h-5 mr-1" />
+                Send
+              </>
+            )}
           </button>
         </div>
       </form>

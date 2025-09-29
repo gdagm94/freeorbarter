@@ -8,7 +8,12 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  SafeAreaView,
+  StatusBar,
+  Image,
+  Alert,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
@@ -19,6 +24,8 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [otherUser, setOtherUser] = useState<{username: string; avatar_url: string | null} | null>(null);
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { user } = useAuth();
@@ -28,6 +35,7 @@ export default function ChatScreen() {
   useEffect(() => {
     if (!otherUserId || !user) return;
     fetchMessages();
+    fetchOtherUser();
 
     const channel = supabase
       .channel('chat-realtime')
@@ -47,6 +55,23 @@ export default function ChatScreen() {
       channel.unsubscribe();
     };
   }, [otherUserId, user?.id]);
+
+  const fetchOtherUser = async () => {
+    if (!otherUserId) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('username, avatar_url')
+        .eq('id', otherUserId)
+        .single();
+      
+      if (error) throw error;
+      setOtherUser(data);
+    } catch (error) {
+      console.error('Error fetching other user:', error);
+    }
+  };
 
   const fetchMessages = async () => {
     if (!otherUserId || !user) return;
@@ -84,15 +109,146 @@ export default function ChatScreen() {
     }
   };
 
-  const sendMessage = async () => {
-    if (!newMessage.trim() || !user || !otherUserId) return;
+  const uploadImage = async (uri: string): Promise<string | null> => {
+    try {
+      setUploading(true);
+      
+      // Create FormData for React Native file upload
+      const formData = new FormData();
+      const fileExt = uri.split('.').pop() || 'jpg';
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      
+      // Add file to FormData with proper structure for React Native
+      formData.append('file', {
+        uri: uri,
+        type: `image/${fileExt}`,
+        name: fileName,
+      } as any);
+
+      console.log('Attempting to upload image:', fileName);
+      console.log('File URI:', uri);
+
+      // Upload using FormData instead of blob
+      const { error: uploadError, data } = await supabase.storage
+        .from('message-images')
+        .upload(fileName, formData, {
+          contentType: `image/${fileExt}`,
+        });
+
+      if (uploadError) {
+        console.error('Upload error details:', uploadError);
+        Alert.alert('Upload Error', `Failed to upload image: ${uploadError.message}`);
+        return null;
+      }
+      
+      console.log('Upload successful:', data);
+      const { data: { publicUrl } } = supabase.storage
+        .from('message-images')
+        .getPublicUrl(fileName);
+      console.log('Public URL:', publicUrl);
+      return publicUrl;
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      Alert.alert('Error', `Failed to upload image: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return null;
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const pickImage = async () => {
+    try {
+      console.log('Requesting media library permissions...');
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      console.log('Permission status:', status);
+      
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Please grant camera roll permissions to attach photos');
+        return;
+      }
+
+      console.log('Launching image library...');
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      console.log('Image picker result:', result);
+
+      if (!result.canceled && result.assets[0]) {
+        console.log('Image selected:', result.assets[0]);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        const imageUrl = await uploadImage(result.assets[0].uri);
+        if (imageUrl) {
+          await sendMessage('', imageUrl);
+        }
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', `Failed to pick image: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const takePhoto = async () => {
+    try {
+      console.log('Requesting camera permissions...');
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      console.log('Camera permission status:', status);
+      
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Please grant camera permissions to take photos');
+        return;
+      }
+
+      console.log('Launching camera...');
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      console.log('Camera result:', result);
+
+      if (!result.canceled && result.assets[0]) {
+        console.log('Photo taken:', result.assets[0]);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        const imageUrl = await uploadImage(result.assets[0].uri);
+        if (imageUrl) {
+          await sendMessage('', imageUrl);
+        }
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+      Alert.alert('Error', `Failed to take photo: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const showImagePicker = () => {
+    Alert.alert(
+      'Attach Photo',
+      'Choose how you want to add a photo',
+      [
+        { text: 'Camera', onPress: takePhoto },
+        { text: 'Photo Library', onPress: pickImage },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
+  const sendMessage = async (content?: string, imageUrl?: string) => {
+    const messageContent = content || newMessage.trim();
+    if (!messageContent && !imageUrl) return;
+    if (!user || !otherUserId) return;
 
     try {
       const messageData: Partial<Message> = {
         sender_id: user.id,
         receiver_id: otherUserId,
-        content: newMessage.trim(),
+        content: messageContent,
         item_id: itemId || null,
+        image_url: imageUrl || null,
       } as any;
 
       const { error } = await supabase
@@ -120,12 +276,29 @@ export default function ChatScreen() {
         styles.messageContainer,
         isOwnMessage ? styles.ownMessage : styles.otherMessage
       ]}>
+        {item.image_url && (
+          <TouchableOpacity 
+            style={styles.messageImageContainer}
+            onPress={() => {
+              // TODO: Add image viewer
+              Alert.alert('Image', 'Tap to view full size');
+            }}
+          >
+            <Image 
+              source={{ uri: item.image_url }} 
+              style={styles.messageImage}
+              resizeMode="cover"
+            />
+          </TouchableOpacity>
+        )}
+        {item.content && (
         <Text style={[
           styles.messageText,
           isOwnMessage ? styles.ownMessageText : styles.otherMessageText
         ]}>
           {item.content}
         </Text>
+        )}
         <Text style={styles.messageTime}>
           {new Date(item.created_at).toLocaleTimeString()}
         </Text>
@@ -135,30 +308,53 @@ export default function ChatScreen() {
 
   if (loading) {
     return (
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Text style={styles.backButton}>← Back</Text>
+          <TouchableOpacity 
+            style={styles.backButtonContainer}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              navigation.goBack();
+            }}
+          >
+            <Text style={styles.backButton}>←</Text>
           </TouchableOpacity>
-          <Text style={styles.title}>Chat</Text>
+          <Text style={styles.title} numberOfLines={1}>
+            {otherUser?.username || 'Loading...'}
+          </Text>
+          <View style={styles.placeholder} />
         </View>
-        <View style={styles.content}>
-          <Text>Loading messages...</Text>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading messages...</Text>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
     <KeyboardAvoidingView 
-      style={styles.container} 
+        style={styles.keyboardContainer} 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backButton}>← Back</Text>
+          <TouchableOpacity 
+            style={styles.backButtonContainer}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              navigation.goBack();
+            }}
+          >
+            <Text style={styles.backButton}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Chat</Text>
+          <View style={styles.titleContainer}>
+            <Text style={styles.title} numberOfLines={1}>
+              {otherUser?.username || 'Chat'}
+            </Text>
+          </View>
+          <View style={styles.placeholder} />
       </View>
 
       <FlatList
@@ -179,54 +375,93 @@ export default function ChatScreen() {
       />
 
       <View style={styles.inputContainer}>
+          <TouchableOpacity 
+            style={styles.attachButton}
+            onPress={showImagePicker}
+            disabled={uploading}
+          >
+            <Text style={styles.attachButtonText}>📷</Text>
+          </TouchableOpacity>
+          
         <TextInput
           style={styles.textInput}
           value={newMessage}
           onChangeText={setNewMessage}
           placeholder="Type a message..."
           multiline
+            maxLength={1000}
         />
+          
         <TouchableOpacity 
-          style={styles.sendButton}
-          onPress={sendMessage}
+            style={[styles.sendButton, (!newMessage.trim() && !uploading) && styles.sendButtonDisabled]}
+            onPress={() => sendMessage()}
+            disabled={!newMessage.trim() || uploading}
         >
-          <Text style={styles.sendButtonText}>Send</Text>
+            <Text style={styles.sendButtonText}>
+              {uploading ? '⏳' : 'Send'}
+            </Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#F8FAFC',
+  },
+  keyboardContainer: {
+    flex: 1,
   },
   header: {
-    padding: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    minHeight: 60,
+  },
+  backButtonContainer: {
+    padding: 8,
+    marginLeft: -8,
   },
   backButton: {
-    fontSize: 16,
+    fontSize: 24,
     color: '#3B82F6',
-    marginRight: 16,
+    fontWeight: '600',
+  },
+  titleContainer: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: 16,
   },
   title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1F2937',
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1E293B',
+    textAlign: 'center',
   },
-  content: {
+  placeholder: {
+    width: 40,
+  },
+  loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  loadingText: {
+    fontSize: 16,
+    color: '#64748B',
+    fontWeight: '500',
+  },
   messagesContainer: {
     padding: 16,
+    flexGrow: 1,
   },
   messageContainer: {
     marginBottom: 12,
@@ -235,30 +470,50 @@ const styles = StyleSheet.create({
   ownMessage: {
     alignSelf: 'flex-end',
     backgroundColor: '#3B82F6',
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   otherMessage: {
     alignSelf: 'flex-start',
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  messageImageContainer: {
+    marginBottom: 8,
+  },
+  messageImage: {
+    width: 200,
+    height: 150,
+    borderRadius: 12,
   },
   messageText: {
     fontSize: 16,
+    lineHeight: 20,
     marginBottom: 4,
   },
   ownMessageText: {
     color: '#FFFFFF',
   },
   otherMessageText: {
-    color: '#1F2937',
+    color: '#1E293B',
   },
   messageTime: {
-    fontSize: 12,
-    color: '#9CA3AF',
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.7)',
+    textAlign: 'right',
   },
   emptyContainer: {
     flex: 1,
@@ -278,20 +533,34 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     flexDirection: 'row',
+    alignItems: 'flex-end',
     padding: 16,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: '#E2E8F0',
+    gap: 12,
+  },
+  attachButton: {
+    padding: 12,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  attachButtonText: {
+    fontSize: 18,
   },
   textInput: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#F1F5F9',
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    marginRight: 12,
     fontSize: 16,
     maxHeight: 100,
+    minHeight: 44,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   sendButton: {
     backgroundColor: '#3B82F6',
@@ -299,6 +568,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
     justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 60,
+  },
+  sendButtonDisabled: {
+    backgroundColor: '#CBD5E1',
   },
   sendButtonText: {
     color: '#FFFFFF',

@@ -176,6 +176,17 @@ export default function ProfileScreen() {
               style={styles.quickAction}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                navigation.navigate('Friends');
+              }}
+            >
+              <Text style={styles.quickActionEmoji}>👥</Text>
+              <Text style={styles.quickActionText}>Friends</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.quickAction}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 navigation.navigate('WatchedItems');
               }}
             >

@@ -35,6 +35,7 @@ export interface Message {
   read: boolean;
   is_offer: boolean;
   archived: boolean;
+  image_url?: string;
 }
 
 export interface Conversation {

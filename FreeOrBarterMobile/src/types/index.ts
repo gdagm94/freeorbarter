@@ -31,6 +31,7 @@ export interface Message {
   read: boolean;
   is_offer: boolean;
   archived: boolean;
+  image_url?: string;
 }
 
 export interface Conversation {
@@ -62,3 +63,47 @@ export interface Notification {
   item_id?: string;
   sender_id?: string;
 }
+
+// Friend-related interfaces
+export interface FriendRequest {
+  id: string;
+  sender_id: string;
+  receiver_id: string;
+  status: 'pending' | 'accepted' | 'declined';
+  created_at: string;
+}
+
+export interface Friendship {
+  id: string;
+  user1_id: string;
+  user2_id: string;
+  created_at: string;
+}
+
+export interface FriendRequestWithUser extends FriendRequest {
+  sender?: {
+    id: string;
+    username: string;
+    avatar_url: string | null;
+  };
+  receiver?: {
+    id: string;
+    username: string;
+    avatar_url: string | null;
+  };
+}
+
+export interface FriendshipWithUser extends Friendship {
+  friend?: {
+    id: string;
+    username: string;
+    avatar_url: string | null;
+    rating: number | null;
+  };
+}
+
+export type FriendshipStatus = 
+  | 'none' 
+  | 'pending_sent' 
+  | 'pending_received' 
+  | 'friends';

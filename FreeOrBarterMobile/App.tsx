@@ -21,6 +21,9 @@ import AuthScreen from './src/screens/AuthScreen';
 import WatchedItemsScreen from './src/screens/WatchedItemsScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import FriendsScreen from './src/screens/FriendsScreen';
+import UserProfileScreen from './src/screens/UserProfileScreen';
+import SearchUsersScreen from './src/screens/SearchUsersScreen';
 import { useAuth } from './src/hooks/useAuth';
 
 const Stack = createStackNavigator();
@@ -186,6 +189,9 @@ export default function App() {
         ItemDetails: 'item/:itemId',
         Chat: 'chat/:otherUserId',
         BarterOffer: 'barter/:itemId',
+        Friends: 'friends',
+        UserProfile: 'user/:userId',
+        SearchUsers: 'search-users',
       },
     },
   } as const;
@@ -245,6 +251,9 @@ export default function App() {
         <Stack.Screen name="WatchedItems" component={WatchedItemsScreen} />
         <Stack.Screen name="History" component={HistoryScreen} />
         <Stack.Screen name="Settings" component={SettingsScreen} />
+        <Stack.Screen name="Friends" component={FriendsScreen} />
+        <Stack.Screen name="UserProfile" component={UserProfileScreen} />
+        <Stack.Screen name="SearchUsers" component={SearchUsersScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

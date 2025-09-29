@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Send, User } from 'lucide-react';
+import { X, Send, User, Image as ImageIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
 import { useAuth } from '../hooks/useAuth';
@@ -31,7 +31,9 @@ export function FriendMessageDialog({ friendId, friendName, friendAvatar, onClos
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -120,6 +122,95 @@ export function FriendMessageDialog({ friendId, friendName, friendAvatar, onClos
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  const uploadImage = async (file: File): Promise<string | null> => {
+    try {
+      setUploading(true);
+      
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      
+      const { error: uploadError, data } = await supabase.storage
+        .from('message-images')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('message-images')
+        .getPublicUrl(fileName);
+
+      return publicUrl;
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      return null;
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const imageUrl = await uploadImage(file);
+    if (imageUrl) {
+      await sendMessageWithImage('', imageUrl);
+    }
+  };
+
+  const sendMessageWithImage = async (content: string, imageUrl: string) => {
+    if (!user || sending) return;
+
+    setSending(true);
+    const messageContent = content;
+
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .insert([{
+          content: messageContent,
+          image_url: imageUrl,
+          sender_id: user.id,
+          receiver_id: friendId,
+          item_id: null, // Direct message
+          read: false,
+          is_offer: false,
+          archived: false
+        }])
+        .select(`
+          *,
+          sender:sender_id (
+            username,
+            avatar_url
+          )
+        `)
+        .single();
+
+      if (error) throw error;
+
+      setMessages(prev => [...prev, data]);
+
+      // Trigger Pusher event
+      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pusher-trigger`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          channel: `private-user-${friendId}`,
+          event: 'new-message',
+          data: { messageId: data.id }
+        })
+      });
+
+    } catch (err) {
+      console.error('Error sending message:', err);
+    } finally {
+      setSending(false);
+    }
+  };
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -248,19 +339,39 @@ export function FriendMessageDialog({ friendId, friendName, friendAvatar, onClos
         <form onSubmit={handleSendMessage} className="p-4 border-t">
           <div className="flex space-x-2">
             <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleImageUpload}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="bg-gray-100 text-gray-600 px-3 py-2 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+              title="Attach image"
+            >
+              <ImageIcon className="w-5 h-5" />
+            </button>
+            <input
               type="text"
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               placeholder={`Message ${friendName}...`}
               className="flex-1 rounded-lg border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              disabled={sending}
+              disabled={sending || uploading}
             />
             <button
               type="submit"
-              disabled={!newMessage.trim() || sending}
+              disabled={!newMessage.trim() || sending || uploading}
               className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
             >
-              <Send className="w-5 h-5" />
+              {uploading ? (
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Send className="w-5 h-5" />
+              )}
             </button>
           </div>
         </form>
