@@ -6,10 +6,13 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
+  SafeAreaView,
+  StatusBar,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
+import * as Haptics from 'expo-haptics';
 
 interface NotificationRow {
   id: string;
@@ -50,14 +53,22 @@ export default function NotificationsScreen() {
   }, [user?.id]);
 
   useEffect(() => {
-    fetchNotifications();
     if (!user) return;
+    
+    const initializeNotifications = async () => {
+      await fetchNotifications();
+    };
+    
+    initializeNotifications();
+    
     const channel = supabase
       .channel('notifications-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` }, fetchNotifications)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` }, () => {
+        fetchNotifications();
+      })
       .subscribe();
     return () => channel.unsubscribe();
-  }, [fetchNotifications, user?.id]);
+  }, [user?.id]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -77,10 +88,45 @@ export default function NotificationsScreen() {
     }
   };
 
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case 'friend_request':
+        return '👥';
+      case 'friend_request_approved':
+        return '✅';
+      case 'new_listing':
+        return '📦';
+      case 'direct_message':
+        return '💬';
+      case 'watchlist_update':
+        return '⭐';
+      default:
+        return '🔔';
+    }
+  };
+
+  const getNotificationTypeText = (type: string) => {
+    switch (type) {
+      case 'friend_request':
+        return 'Friend Request';
+      case 'friend_request_approved':
+        return 'Friend Added';
+      case 'new_listing':
+        return 'New Listing';
+      case 'direct_message':
+        return 'Message';
+      case 'watchlist_update':
+        return 'Watchlist';
+      default:
+        return 'Notification';
+    }
+  };
+
   const renderItem = ({ item }: { item: NotificationRow }) => (
     <TouchableOpacity
       style={[styles.notificationCard, !item.read && styles.unreadCard]}
       onPress={() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         markAsRead(item.id);
         if (item.type === 'direct_message' && item.related_id) {
           // related_id could be the sender or message id; open Messages tab
@@ -89,23 +135,42 @@ export default function NotificationsScreen() {
           navigation.navigate('ItemDetails', { itemId: item.related_id });
         }
       }}
+      activeOpacity={0.7}
     >
-      <View style={styles.cardHeader}>
-        <Text style={styles.cardType}>{item.type.replace('_', ' ')}</Text>
-        <Text style={styles.cardTime}>{new Date(item.created_at).toLocaleString()}</Text>
+      <View style={styles.cardContent}>
+        <View style={styles.notificationIcon}>
+          <Text style={styles.iconText}>{getNotificationIcon(item.type)}</Text>
+        </View>
+        <View style={styles.notificationDetails}>
+          <View style={styles.notificationHeader}>
+            <Text style={styles.notificationType}>{getNotificationTypeText(item.type)}</Text>
+            <Text style={styles.notificationTime}>{new Date(item.created_at).toLocaleDateString()}</Text>
+          </View>
+          <Text style={[styles.notificationMessage, !item.read && styles.unreadMessage]} numberOfLines={2}>
+            {item.content}
+          </Text>
+          {!item.read && <View style={styles.unreadDot} />}
+        </View>
       </View>
-      <Text style={styles.cardContent}>{item.content}</Text>
-      {!item.read && <Text style={styles.unreadBadge}>NEW</Text>}
     </TouchableOpacity>
   );
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backButton}>← Back</Text>
+        <TouchableOpacity 
+          style={styles.backButtonContainer}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            navigation.goBack();
+          }}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.backButton}>←</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Notifications</Text>
+        <View style={styles.placeholder} />
       </View>
 
       <FlatList
@@ -113,91 +178,172 @@ export default function NotificationsScreen() {
         renderItem={renderItem}
         keyExtractor={(n) => n.id}
         contentContainerStyle={styles.listContainer}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh}
+            tintColor="#3B82F6"
+            colors={['#3B82F6']}
+          />
+        }
+        showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>{loading ? 'Loading...' : 'No notifications'}</Text>
+            <Text style={styles.emptyIcon}>🔔</Text>
+            <Text style={styles.emptyTitle}>No notifications yet</Text>
+            <Text style={styles.emptySubtitle}>
+              {loading ? 'Loading...' : 'You\'ll see updates about messages, friend requests, and new listings here.'}
+            </Text>
           </View>
         }
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#F8FAFC',
   },
   header: {
-    padding: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: '#E2E8F0',
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1F2937',
+  backButtonContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   backButton: {
-    fontSize: 16,
-    color: '#3B82F6',
-    marginRight: 16,
+    fontSize: 20,
+    color: '#475569',
+    fontWeight: '600',
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1E293B',
+    flex: 1,
+    textAlign: 'center',
+  },
+  placeholder: {
+    width: 44,
   },
   listContainer: {
-    padding: 16,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 20,
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: 60,
+    paddingHorizontal: 40,
   },
-  emptyText: {
-    fontSize: 16,
+  emptyIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontSize: 14,
     color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 20,
   },
   notificationCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 8,
+    borderRadius: 16,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
   },
   unreadCard: {
     borderColor: '#3B82F6',
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  cardType: {
-    fontSize: 14,
-    color: '#6B7280',
-    textTransform: 'capitalize',
-  },
-  cardTime: {
-    fontSize: 12,
-    color: '#9CA3AF',
+    backgroundColor: '#F8FAFF',
+    shadowColor: '#3B82F6',
+    shadowOpacity: 0.1,
   },
   cardContent: {
-    fontSize: 16,
-    color: '#1F2937',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
   },
-  unreadBadge: {
-    marginTop: 8,
-    alignSelf: 'flex-start',
-    backgroundColor: '#3B82F6',
-    color: '#FFFFFF',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
+  notificationIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  iconText: {
+    fontSize: 20,
+  },
+  notificationDetails: {
+    flex: 1,
+    justifyContent: 'flex-start',
+  },
+  notificationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  notificationType: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#475569',
+    textTransform: 'capitalize',
+  },
+  notificationTime: {
     fontSize: 12,
-    overflow: 'hidden',
+    color: '#94A3B8',
+    fontWeight: '500',
+  },
+  notificationMessage: {
+    fontSize: 15,
+    color: '#64748B',
+    lineHeight: 20,
+    marginBottom: 4,
+  },
+  unreadMessage: {
+    color: '#1E293B',
+    fontWeight: '500',
+  },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#3B82F6',
+    marginTop: 4,
   },
 });
