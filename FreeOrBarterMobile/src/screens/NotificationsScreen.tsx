@@ -55,11 +55,7 @@ export default function NotificationsScreen() {
   useEffect(() => {
     if (!user) return;
     
-    const initializeNotifications = async () => {
-      await fetchNotifications();
-    };
-    
-    initializeNotifications();
+    fetchNotifications();
     
     const channel = supabase
       .channel('notifications-changes')
