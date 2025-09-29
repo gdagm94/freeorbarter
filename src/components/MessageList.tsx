@@ -599,12 +599,14 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
                   
                   {/* Message Image */}
                   {message.image_url && (
-                    <div className="mt-2">
+                    <div className="mt-2 p-2 bg-yellow-100 border-2 border-yellow-400">
+                      <p className="text-xs text-yellow-800 mb-1">DEBUG: Image URL found: {message.image_url}</p>
                       <img 
                         src={message.image_url} 
                         alt="Message attachment"
-                        className="max-w-xs h-auto rounded-lg cursor-pointer border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
+                        className="max-w-xs h-auto rounded-lg cursor-pointer border-2 border-red-500 shadow-sm hover:shadow-md transition-shadow"
                         onClick={() => window.open(message.image_url, '_blank')}
+                        onLoad={() => console.log('Image loaded successfully:', message.image_url)}
                         onError={(e) => {
                           console.error('Image failed to load:', message.image_url);
                           e.currentTarget.style.display = 'none';
@@ -785,11 +787,12 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            className="bg-indigo-100 text-indigo-600 px-4 py-2 rounded-lg hover:bg-indigo-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center border border-indigo-200"
+            className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center border-2 border-red-700"
             title="Attach image"
+            style={{ minWidth: '80px', height: '40px' }}
           >
             <ImageIcon className="w-5 h-5 mr-1" />
-            📷
+            📷 PHOTO
           </button>
           <input
             type="text"
