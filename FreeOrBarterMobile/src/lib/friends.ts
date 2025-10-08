@@ -1,6 +1,9 @@
 import { supabase } from './supabase';
 import { FriendRequest, Friendship, FriendRequestWithUser, FriendshipWithUser, FriendshipStatus } from '../types';
 
+// Re-export types for convenience
+export type { FriendRequest, Friendship, FriendRequestWithUser, FriendshipWithUser, FriendshipStatus };
+
 /**
  * Send a friend request to another user
  */
@@ -64,14 +67,29 @@ export async function acceptFriendRequest(requestId: string): Promise<{ error: E
       .single();
 
     if (fetchError) throw fetchError;
+    if (!requestData) throw new Error('Friend request not found');
 
-    const { error } = await supabase
+    // Update the friend request status to accepted
+    const { error: updateError } = await supabase
       .from('friend_requests')
       .update({ status: 'accepted' })
       .eq('id', requestId)
       .eq('status', 'pending');
 
-    if (error) throw error;
+    if (updateError) throw updateError;
+
+    // Create a friendship record (with consistent ordering)
+    const user1Id = requestData.sender_id < requestData.receiver_id ? requestData.sender_id : requestData.receiver_id;
+    const user2Id = requestData.sender_id < requestData.receiver_id ? requestData.receiver_id : requestData.sender_id;
+
+    const { error: friendshipError } = await supabase
+      .from('friendships')
+      .insert([{
+        user1_id: user1Id,
+        user2_id: user2Id
+      }]);
+
+    if (friendshipError) throw friendshipError;
 
     // Trigger real-time notification to the original sender
     if (requestData) {

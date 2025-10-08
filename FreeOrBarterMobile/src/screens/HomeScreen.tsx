@@ -15,6 +15,7 @@ import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { Item } from '../types';
 import ItemCard from '../components/ItemCard';
+import Footer from '../components/Footer';
 
 const { width } = Dimensions.get('window');
 
@@ -144,6 +145,7 @@ export default function HomeScreen() {
         numColumns={2}
         contentContainerStyle={styles.listContainer}
         ListHeaderComponent={renderHeader}
+        ListFooterComponent={<Footer />}
         refreshControl={
           <RefreshControl 
             refreshing={refreshing} 
@@ -274,7 +276,6 @@ const styles = StyleSheet.create({
   listContainer: {
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 32,
   },
   itemWrapper: {
     flex: 1,

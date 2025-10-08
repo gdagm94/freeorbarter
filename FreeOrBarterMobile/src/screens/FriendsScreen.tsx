@@ -23,9 +23,8 @@ import {
   declineFriendRequest,
   cancelFriendRequest,
   unfriend,
-  FriendshipWithUser,
-  FriendRequestWithUser,
 } from '../lib/friends';
+import { FriendshipWithUser, FriendRequestWithUser } from '../types';
 
 interface UserProfile {
   id: string;
@@ -125,7 +124,14 @@ export default function FriendsScreen() {
 
   const renderFriendItem = ({ item }: { item: FriendshipWithUser }) => (
     <View style={styles.friendItem}>
-      <View style={styles.friendInfo}>
+      <TouchableOpacity 
+        style={styles.friendInfo}
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          navigation.navigate('UserProfile', { userId: item.friend?.id });
+        }}
+        activeOpacity={0.7}
+      >
         {item.friend?.avatar_url ? (
           <Image 
             source={{ uri: item.friend.avatar_url }} 
@@ -144,7 +150,7 @@ export default function FriendsScreen() {
             </Text>
           )}
         </View>
-      </View>
+      </TouchableOpacity>
       
       <TouchableOpacity
         style={styles.unfriendButton}
@@ -172,7 +178,14 @@ export default function FriendsScreen() {
 
   const renderRequestItem = ({ item }: { item: FriendRequestWithUser }) => (
     <View style={styles.requestItem}>
-      <View style={styles.requestInfo}>
+      <TouchableOpacity 
+        style={styles.requestInfo}
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          navigation.navigate('UserProfile', { userId: item.sender?.id });
+        }}
+        activeOpacity={0.7}
+      >
         {item.sender?.avatar_url ? (
           <Image 
             source={{ uri: item.sender.avatar_url }} 
@@ -189,7 +202,7 @@ export default function FriendsScreen() {
             {activeTab === 'requests' ? 'Wants to be friends' : 'Request sent'}
           </Text>
         </View>
-      </View>
+      </TouchableOpacity>
       
       {activeTab === 'requests' ? (
         <View style={styles.requestActions}>
@@ -344,20 +357,38 @@ export default function FriendsScreen() {
           />
         }
       >
-        {currentData.length > 0 ? (
-          <FlatList
-            data={currentData}
-            renderItem={activeTab === 'friends' ? renderFriendItem : renderRequestItem}
-            keyExtractor={(item) => item.id}
-            scrollEnabled={false}
-            contentContainerStyle={styles.listContainer}
-          />
+        {activeTab === 'friends' ? (
+          friends.length > 0 ? (
+            <FlatList
+              data={friends}
+              renderItem={renderFriendItem}
+              keyExtractor={(item) => item.id}
+              scrollEnabled={false}
+              contentContainerStyle={styles.listContainer}
+            />
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyEmoji}>{emptyMessage.emoji}</Text>
+              <Text style={styles.emptyTitle}>{emptyMessage.title}</Text>
+              <Text style={styles.emptySubtitle}>{emptyMessage.subtitle}</Text>
+            </View>
+          )
         ) : (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyEmoji}>{emptyMessage.emoji}</Text>
-            <Text style={styles.emptyTitle}>{emptyMessage.title}</Text>
-            <Text style={styles.emptySubtitle}>{emptyMessage.subtitle}</Text>
-          </View>
+          pendingRequests.length > 0 ? (
+            <FlatList
+              data={pendingRequests}
+              renderItem={renderRequestItem}
+              keyExtractor={(item) => item.id}
+              scrollEnabled={false}
+              contentContainerStyle={styles.listContainer}
+            />
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyEmoji}>{emptyMessage.emoji}</Text>
+              <Text style={styles.emptyTitle}>{emptyMessage.title}</Text>
+              <Text style={styles.emptySubtitle}>{emptyMessage.subtitle}</Text>
+            </View>
+          )
         )}
       </ScrollView>
     </SafeAreaView>

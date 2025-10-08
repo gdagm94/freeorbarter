@@ -183,29 +183,56 @@ export default function UserProfileScreen() {
       none: { text: 'Add Friend', action: 'send', style: styles.addFriendButton },
       pending_sent: { text: 'Request Sent', action: 'cancel', style: styles.pendingButton },
       pending_received: { text: 'Accept Request', action: 'accept', style: styles.acceptButton },
-      friends: { text: 'Friends', action: 'unfriend', style: styles.friendsButton },
+      friends: { text: 'Friends ✓', action: 'friends', style: styles.friendsButton },
     };
 
     const config = buttonConfig[friendshipStatus];
+    
+    // If already friends, show message and unfriend buttons
+    if (friendshipStatus === 'friends') {
+      return (
+        <View style={styles.friendActionsContainer}>
+          <TouchableOpacity
+            style={[styles.friendActionButton, styles.messageButton]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              navigation.navigate('Chat', { otherUserId: userId, itemId: null });
+            }}
+          >
+            <Text style={styles.friendActionButtonText}>💬 Message</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.friendActionButton, styles.unfriendButton]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              Alert.alert(
+                'Unfriend',
+                `Are you sure you want to unfriend ${profile?.username}?`,
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Unfriend', style: 'destructive', onPress: () => handleFriendAction('unfriend') }
+                ]
+              );
+            }}
+            disabled={friendActionLoading}
+          >
+            {friendActionLoading ? (
+              <ActivityIndicator size="small" color="#EF4444" />
+            ) : (
+              <Text style={styles.unfriendButtonText}>Unfriend</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      );
+    }
     
     return (
       <TouchableOpacity
         style={[styles.friendButton, config.style]}
         onPress={() => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          
-          if (config.action === 'unfriend') {
-            Alert.alert(
-              'Unfriend',
-              `Are you sure you want to unfriend ${profile?.username}?`,
-              [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Unfriend', style: 'destructive', onPress: () => handleFriendAction('unfriend') }
-              ]
-            );
-          } else {
-            handleFriendAction(config.action as any);
-          }
+          handleFriendAction(config.action as any);
         }}
         disabled={friendActionLoading}
       >
@@ -482,6 +509,39 @@ const styles = StyleSheet.create({
   },
   friendButtonText: {
     color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  friendActionsContainer: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  friendActionButton: {
+    flex: 1,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  messageButton: {
+    backgroundColor: '#3B82F6',
+  },
+  friendActionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  unfriendButton: {
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+  },
+  unfriendButtonText: {
+    color: '#EF4444',
     fontSize: 16,
     fontWeight: '700',
   },

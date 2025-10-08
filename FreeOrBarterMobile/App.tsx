@@ -24,6 +24,9 @@ import SettingsScreen from './src/screens/SettingsScreen';
 import FriendsScreen from './src/screens/FriendsScreen';
 import UserProfileScreen from './src/screens/UserProfileScreen';
 import SearchUsersScreen from './src/screens/SearchUsersScreen';
+import AboutScreen from './src/screens/AboutScreen';
+import TermsScreen from './src/screens/TermsScreen';
+import PrivacyScreen from './src/screens/PrivacyScreen';
 import { useAuth } from './src/hooks/useAuth';
 
 const Stack = createStackNavigator();
@@ -192,9 +195,12 @@ export default function App() {
         Friends: 'friends',
         UserProfile: 'user/:userId',
         SearchUsers: 'search-users',
+        About: 'about',
+        Terms: 'terms',
+        Privacy: 'privacy',
       },
     },
-  } as const;
+  };
 
   useEffect(() => {
     // Notifications handler behavior
@@ -202,7 +208,10 @@ export default function App() {
       handleNotification: async () => ({ 
         shouldShowAlert: true, 
         shouldPlaySound: false, 
-        shouldSetBadge: false 
+        shouldSetBadge: false,
+        shouldShowBanner: true,
+        shouldShowList: true,
+        priority: Notifications.AndroidNotificationPriority.HIGH,
       }),
     });
   }, []);
@@ -240,7 +249,7 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer linking={linking} ref={navRef}>
+    <NavigationContainer linking={linking as any} ref={navRef}>
       <StatusBar style="auto" />
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Tabs" component={Tabs} />
@@ -254,6 +263,9 @@ export default function App() {
         <Stack.Screen name="Friends" component={FriendsScreen} />
         <Stack.Screen name="UserProfile" component={UserProfileScreen} />
         <Stack.Screen name="SearchUsers" component={SearchUsersScreen} />
+        <Stack.Screen name="About" component={AboutScreen} />
+        <Stack.Screen name="Terms" component={TermsScreen} />
+        <Stack.Screen name="Privacy" component={PrivacyScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );
