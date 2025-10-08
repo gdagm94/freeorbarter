@@ -172,35 +172,60 @@ export default function HistoryScreen() {
   );
 
   const renderFilterTabs = () => (
-    <View style={styles.filterContainer}>
-      {[
-        { key: 'all', label: 'All', emoji: '📝' },
-        { key: 'created', label: 'Created', emoji: '✨' },
-        { key: 'watched', label: 'Watched', emoji: '⭐' },
-        { key: 'viewed', label: 'Viewed', emoji: '👁️' },
-        { key: 'contacted', label: 'Contacted', emoji: '💬' },
-      ].map((filter) => (
-        <TouchableOpacity
-          key={filter.key}
-          style={[
-            styles.filterTab,
-            activeFilter === filter.key && styles.activeFilterTab,
-          ]}
-          onPress={() => {
-            setActiveFilter(filter.key as any);
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          }}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.filterEmoji}>{filter.emoji}</Text>
-          <Text style={[
-            styles.filterText,
-            activeFilter === filter.key && styles.activeFilterText,
-          ]}>
-            {filter.label}
-          </Text>
-        </TouchableOpacity>
-      ))}
+    <View style={styles.filterContainerWrapper}>
+      <View style={styles.filterContainer}>
+        {[
+          { key: 'all', label: 'All' },
+          { key: 'created', label: 'Created' },
+          { key: 'watched', label: 'Watched' },
+        ].map((filter) => (
+          <TouchableOpacity
+            key={filter.key}
+            style={[
+              styles.filterTab,
+              activeFilter === filter.key && styles.activeFilterTab,
+            ]}
+            onPress={() => {
+              setActiveFilter(filter.key as any);
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
+            activeOpacity={0.7}
+          >
+            <Text style={[
+              styles.filterText,
+              activeFilter === filter.key && styles.activeFilterText,
+            ]}>
+              {filter.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <View style={styles.filterContainer}>
+        {[
+          { key: 'viewed', label: 'Viewed' },
+          { key: 'contacted', label: 'Contacted' },
+        ].map((filter) => (
+          <TouchableOpacity
+            key={filter.key}
+            style={[
+              styles.filterTab,
+              activeFilter === filter.key && styles.activeFilterTab,
+            ]}
+            onPress={() => {
+              setActiveFilter(filter.key as any);
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
+            activeOpacity={0.7}
+          >
+            <Text style={[
+              styles.filterText,
+              activeFilter === filter.key && styles.activeFilterText,
+            ]}>
+              {filter.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
     </View>
   );
 
@@ -216,7 +241,7 @@ export default function HistoryScreen() {
             navigation.goBack();
           }}
         >
-          <Text style={styles.backButtonText}>← Back</Text>
+          <Text style={styles.backButtonIcon}>←</Text>
         </TouchableOpacity>
         <View style={styles.headerContent}>
           <Text style={styles.title}>History</Text>
@@ -276,10 +301,11 @@ const styles = StyleSheet.create({
   },
   backButton: {
     padding: 8,
-    minWidth: 80,
+    width: 40,
+    alignItems: 'center',
   },
-  backButtonText: {
-    fontSize: 16,
+  backButtonIcon: {
+    fontSize: 24,
     color: '#3B82F6',
     fontWeight: '600',
   },
@@ -288,7 +314,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerSpacer: {
-    minWidth: 80,
+    width: 40,
   },
   title: {
     fontSize: 20,
@@ -303,35 +329,47 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontWeight: '500',
   },
-  filterContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+  filterContainerWrapper: {
     backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
-    gap: 8,
+    gap: 12,
+  },
+  filterContainer: {
+    flexDirection: 'row',
+    gap: 10,
   },
   filterTab: {
     flex: 1,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#F1F5F9',
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   activeFilterTab: {
     backgroundColor: '#3B82F6',
-  },
-  filterEmoji: {
-    fontSize: 12,
-    marginRight: 4,
+    borderColor: '#3B82F6',
+    shadowColor: '#3B82F6',
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   filterText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#64748B',
+    color: '#475569',
+    letterSpacing: 0.3,
   },
   activeFilterText: {
     color: '#FFFFFF',
