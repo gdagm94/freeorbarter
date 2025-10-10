@@ -88,6 +88,14 @@ export default function SettingsScreen() {
     }
   }, [user]);
 
+  // Refresh data when screen comes into focus
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (user) fetchProfileData();
+    });
+    return unsubscribe;
+  }, [navigation, user]);
+
   const fetchProfileData = async () => {
     if (!user) return;
 
@@ -169,7 +177,7 @@ export default function SettingsScreen() {
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: 'Images',
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,

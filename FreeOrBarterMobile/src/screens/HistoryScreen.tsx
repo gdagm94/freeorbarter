@@ -40,6 +40,14 @@ export default function HistoryScreen() {
     }
   }, [user, activeFilter]);
 
+  // Refresh data when screen comes into focus
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (user) fetchHistory();
+    });
+    return unsubscribe;
+  }, [navigation, user, activeFilter]);
+
   const fetchHistory = async () => {
     if (!user) return;
 

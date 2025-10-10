@@ -63,6 +63,14 @@ export default function HomeScreen() {
     fetchItems();
   }, [searchQuery, activeFilter]);
 
+  // Refresh data when screen comes into focus
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      fetchItems();
+    });
+    return unsubscribe;
+  }, [navigation, searchQuery, activeFilter]);
+
   const onRefresh = () => {
     setRefreshing(true);
     fetchItems();

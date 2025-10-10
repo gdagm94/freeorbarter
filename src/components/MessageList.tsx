@@ -736,6 +736,110 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
                           This item is no longer available
                         </p>
                       )}
+                      
+                      {/* Accept/Decline Buttons - Only for received offers */}
+                      {message.is_offer && message.sender_id !== currentUserId && (
+                        <div className="mt-3 flex gap-2">
+                          <button
+                            onClick={async () => {
+                              if (!confirm('Are you sure you want to accept this barter offer?')) return;
+                              
+                              try {
+                                // Find the offer
+                                const { data: offers } = await supabase
+                                  .from('barter_offers')
+                                  .select('id')
+                                  .eq('offered_item_id', message.offer_item_id!)
+                                  .eq('requested_item_id', message.item_id)
+                                  .eq('sender_id', message.sender_id)
+                                  .eq('status', 'pending')
+                                  .limit(1);
+                                
+                                if (!offers || offers.length === 0) {
+                                  alert('Offer not found or already processed');
+                                  return;
+                                }
+                                
+                                // Update offer status
+                                await supabase
+                                  .from('barter_offers')
+                                  .update({ status: 'accepted' })
+                                  .eq('id', offers[0].id);
+                                
+                                // Send confirmation message
+                                await supabase
+                                  .from('messages')
+                                  .insert([{
+                                    sender_id: currentUserId,
+                                    receiver_id: otherUserId,
+                                    content: '✅ Barter offer accepted!',
+                                    item_id: itemId,
+                                    is_offer: false,
+                                    read: false,
+                                  }]);
+                                
+                                alert('Offer accepted successfully!');
+                                // Refresh messages
+                                window.location.reload();
+                              } catch (error) {
+                                console.error('Error accepting offer:', error);
+                                alert('Failed to accept offer');
+                              }
+                            }}
+                            className="flex-1 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm font-semibold transition-colors"
+                          >
+                            ✓ Accept
+                          </button>
+                          <button
+                            onClick={async () => {
+                              try {
+                                // Find the offer
+                                const { data: offers } = await supabase
+                                  .from('barter_offers')
+                                  .select('id')
+                                  .eq('offered_item_id', message.offer_item_id!)
+                                  .eq('requested_item_id', message.item_id)
+                                  .eq('sender_id', message.sender_id)
+                                  .eq('status', 'pending')
+                                  .limit(1);
+                                
+                                if (!offers || offers.length === 0) {
+                                  alert('Offer not found or already processed');
+                                  return;
+                                }
+                                
+                                // Update offer status
+                                await supabase
+                                  .from('barter_offers')
+                                  .update({ status: 'declined' })
+                                  .eq('id', offers[0].id);
+                                
+                                // Send confirmation message
+                                await supabase
+                                  .from('messages')
+                                  .insert([{
+                                    sender_id: currentUserId,
+                                    receiver_id: otherUserId,
+                                    content: '❌ Barter offer declined',
+                                    item_id: itemId,
+                                    is_offer: false,
+                                    read: false,
+                                  }]);
+                                
+                                alert('Offer declined');
+                                // Refresh messages
+                                window.location.reload();
+                              } catch (error) {
+                                console.error('Error declining offer:', error);
+                                alert('Failed to decline offer');
+                              }
+                            }}
+                            className="flex-1 bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-sm font-semibold transition-colors"
+                          >
+                            ✕ Decline
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                   

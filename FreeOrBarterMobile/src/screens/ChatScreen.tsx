@@ -25,6 +25,7 @@ export default function ChatScreen() {
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [offerActionLoading, setOfferActionLoading] = useState<string | null>(null);
   const [otherUser, setOtherUser] = useState<{username: string; avatar_url: string | null} | null>(null);
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -55,6 +56,17 @@ export default function ChatScreen() {
       channel.unsubscribe();
     };
   }, [otherUserId, user?.id]);
+
+  // Refresh data when screen comes into focus
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (otherUserId && user) {
+        fetchMessages();
+        fetchOtherUser();
+      }
+    });
+    return unsubscribe;
+  }, [navigation, otherUserId, user]);
 
   const fetchOtherUser = async () => {
     if (!otherUserId) return;
@@ -268,13 +280,58 @@ export default function ChatScreen() {
     }
   };
 
+  const handleOfferAction = async (messageId: string, offerId: string, action: 'accept' | 'decline') => {
+    setOfferActionLoading(messageId);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    try {
+      // Update the barter offer status
+      const { error: offerError } = await supabase
+        .from('barter_offers')
+        .update({ status: action === 'accept' ? 'accepted' : 'declined' })
+        .eq('id', offerId);
+
+      if (offerError) throw offerError;
+
+      // Send a system message about the action
+      const actionMessage = action === 'accept' 
+        ? '✅ Barter offer accepted!' 
+        : '❌ Barter offer declined';
+      
+      await supabase
+        .from('messages')
+        .insert([{
+          sender_id: user!.id,
+          receiver_id: otherUserId,
+          content: actionMessage,
+          item_id: itemId || null,
+          is_offer: false,
+          read: false,
+        }]);
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert('Success', `Offer ${action}ed successfully`);
+      
+      // Refresh messages
+      await fetchMessages();
+
+    } catch (error) {
+      console.error(`Error ${action}ing offer:`, error);
+      Alert.alert('Error', `Failed to ${action} offer`);
+    } finally {
+      setOfferActionLoading(null);
+    }
+  };
+
   const renderMessage = ({ item }: { item: Message }) => {
     const isOwnMessage = item.sender_id === user?.id;
+    const isOffer = item.is_offer && item.offer_item_id;
 
     return (
       <View style={[
         styles.messageContainer,
-        isOwnMessage ? styles.ownMessage : styles.otherMessage
+        isOwnMessage ? styles.ownMessage : styles.otherMessage,
+        isOffer && styles.offerMessage
       ]}>
         {item.image_url && (
           <TouchableOpacity 
@@ -294,11 +351,75 @@ export default function ChatScreen() {
         {item.content && (
         <Text style={[
           styles.messageText,
-          isOwnMessage ? styles.ownMessageText : styles.otherMessageText
+          isOwnMessage ? styles.ownMessageText : styles.otherMessageText,
+          isOffer && styles.offerMessageText
         ]}>
           {item.content}
         </Text>
         )}
+        
+        {/* Barter Offer Actions - Only show for received offers */}
+        {isOffer && !isOwnMessage && (
+          <View style={styles.offerActions}>
+            <TouchableOpacity
+              style={[styles.offerButton, styles.acceptButton]}
+              onPress={() => {
+                // We need the offer ID - let's fetch it
+                Alert.alert(
+                  'Accept Offer',
+                  'Are you sure you want to accept this barter offer?',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Accept',
+                      onPress: async () => {
+                        // Find the offer by message details
+                        const { data: offers } = await supabase
+                          .from('barter_offers')
+                          .select('id')
+                          .eq('offered_item_id', item.offer_item_id!)
+                          .eq('requested_item_id', item.item_id)
+                          .eq('sender_id', item.sender_id)
+                          .eq('status', 'pending')
+                          .limit(1);
+                        
+                        if (offers && offers.length > 0) {
+                          handleOfferAction(item.id, offers[0].id, 'accept');
+                        }
+                      }
+                    }
+                  ]
+                );
+              }}
+              disabled={offerActionLoading === item.id}
+            >
+              <Text style={styles.acceptButtonText}>✓ Accept</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[styles.offerButton, styles.declineButton]}
+              onPress={async () => {
+                // Find the offer by message details
+                const { data: offers } = await supabase
+                  .from('barter_offers')
+                  .select('id')
+                  .eq('offered_item_id', item.offer_item_id!)
+                  .eq('requested_item_id', item.item_id)
+                  .eq('sender_id', item.sender_id)
+                  .eq('status', 'pending')
+                  .limit(1);
+                
+                if (offers && offers.length > 0) {
+                  handleOfferAction(item.id, offers[0].id, 'decline');
+                }
+              }}
+              disabled={offerActionLoading === item.id}
+            >
+              <Text style={styles.declineButtonText}>✕ Decline</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        
         <Text style={styles.messageTime}>
           {new Date(item.created_at).toLocaleTimeString()}
         </Text>
@@ -320,9 +441,30 @@ export default function ChatScreen() {
           >
             <Text style={styles.backButton}>←</Text>
           </TouchableOpacity>
-          <Text style={styles.title} numberOfLines={1}>
-            {otherUser?.username || 'Loading...'}
-          </Text>
+          <TouchableOpacity 
+            style={styles.headerUserContainer}
+            onPress={() => {
+              if (otherUserId) {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                navigation.navigate('UserProfile', { userId: otherUserId });
+              }
+            }}
+            activeOpacity={0.7}
+          >
+            {otherUser?.avatar_url ? (
+              <Image 
+                source={{ uri: otherUser.avatar_url }} 
+                style={styles.headerAvatar}
+              />
+            ) : (
+              <View style={styles.headerAvatarPlaceholder}>
+                <Text style={styles.headerAvatarText}>👤</Text>
+              </View>
+            )}
+            <Text style={styles.title} numberOfLines={1}>
+              {otherUser?.username || 'Loading...'}
+            </Text>
+          </TouchableOpacity>
           <View style={styles.placeholder} />
         </View>
         <View style={styles.loadingContainer}>
@@ -348,12 +490,31 @@ export default function ChatScreen() {
             }}
           >
             <Text style={styles.backButton}>←</Text>
-        </TouchableOpacity>
-          <View style={styles.titleContainer}>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.headerUserContainer}
+            onPress={() => {
+              if (otherUserId) {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                navigation.navigate('UserProfile', { userId: otherUserId });
+              }
+            }}
+            activeOpacity={0.7}
+          >
+            {otherUser?.avatar_url ? (
+              <Image 
+                source={{ uri: otherUser.avatar_url }} 
+                style={styles.headerAvatar}
+              />
+            ) : (
+              <View style={styles.headerAvatarPlaceholder}>
+                <Text style={styles.headerAvatarText}>👤</Text>
+              </View>
+            )}
             <Text style={styles.title} numberOfLines={1}>
               {otherUser?.username || 'Chat'}
             </Text>
-          </View>
+          </TouchableOpacity>
           <View style={styles.placeholder} />
       </View>
 
@@ -435,6 +596,31 @@ const styles = StyleSheet.create({
     color: '#3B82F6',
     fontWeight: '600',
   },
+  headerUserContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  headerAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    marginRight: 10,
+  },
+  headerAvatarPlaceholder: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#E2E8F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  headerAvatarText: {
+    fontSize: 16,
+  },
   titleContainer: {
     flex: 1,
     alignItems: 'center',
@@ -491,6 +677,12 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
   },
+  offerMessage: {
+    maxWidth: '90%',
+    borderWidth: 2,
+    borderColor: '#F59E0B',
+    backgroundColor: '#FEF3C7',
+  },
   messageImageContainer: {
     marginBottom: 8,
   },
@@ -514,6 +706,38 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: 'rgba(255,255,255,0.7)',
     textAlign: 'right',
+  },
+  offerMessageText: {
+    color: '#92400E',
+    fontWeight: '600',
+  },
+  offerActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+  },
+  offerButton: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  acceptButton: {
+    backgroundColor: '#10B981',
+  },
+  acceptButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  declineButton: {
+    backgroundColor: '#EF4444',
+  },
+  declineButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
   emptyContainer: {
     flex: 1,

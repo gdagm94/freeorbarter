@@ -66,6 +66,14 @@ export default function NotificationsScreen() {
     return () => channel.unsubscribe();
   }, [user?.id]);
 
+  // Refresh data when screen comes into focus
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (user) fetchNotifications();
+    });
+    return unsubscribe;
+  }, [navigation, fetchNotifications]);
+
   const onRefresh = () => {
     setRefreshing(true);
     fetchNotifications();

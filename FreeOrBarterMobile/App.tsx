@@ -256,6 +256,7 @@ export default function App() {
         <Stack.Screen name="ItemDetails" component={ItemDetailsScreen} />
         <Stack.Screen name="Chat" component={ChatScreen} />
         <Stack.Screen name="BarterOffer" component={BarterOfferScreen} />
+        <Stack.Screen name="NewListing" component={NewListingScreen} />
         <Stack.Screen name="Auth" component={AuthScreen} />
         <Stack.Screen name="WatchedItems" component={WatchedItemsScreen} />
         <Stack.Screen name="History" component={HistoryScreen} />

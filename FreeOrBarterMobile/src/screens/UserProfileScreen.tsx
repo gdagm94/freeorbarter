@@ -11,6 +11,10 @@ import {
   FlatList,
   Alert,
   ActivityIndicator,
+  Share,
+  Clipboard,
+  Modal,
+  RefreshControl,
 } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -51,8 +55,11 @@ export default function UserProfileScreen() {
   const [items, setItems] = useState<Item[]>([]);
   const [friendshipStatus, setFriendshipStatus] = useState<FriendshipStatus>('none');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [friendActionLoading, setFriendActionLoading] = useState(false);
   const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
+  const [showManageMenu, setShowManageMenu] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
 
   useEffect(() => {
     if (userId) {
@@ -60,56 +67,248 @@ export default function UserProfileScreen() {
     }
   }, [userId]);
 
+  // Refresh data when screen comes into focus
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (userId) fetchUserData();
+    });
+    return unsubscribe;
+  }, [navigation, userId]);
+
   const fetchUserData = async () => {
     try {
-      setLoading(true);
+      if (!refreshing) setLoading(true);
 
-      // Fetch user profile
-      const { data: profileData, error: profileError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .single();
+      // Fetch all data in parallel for better performance
+      const [profileResult, itemsResult, friendshipResult, blockResult] = await Promise.all([
+        // Fetch user profile
+        supabase
+          .from('users')
+          .select('*')
+          .eq('id', userId)
+          .single(),
+        
+        // Fetch user's items
+        supabase
+          .from('items')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('status', 'available')
+          .order('created_at', { ascending: false }),
+        
+        // Fetch friendship status if viewing someone else's profile
+        user && user.id !== userId 
+          ? getFriendshipStatus(user.id, userId)
+          : Promise.resolve('none' as FriendshipStatus),
+        
+        // Check if user is blocked
+        user && user.id !== userId
+          ? supabase
+              .from('blocked_users')
+              .select('id')
+              .eq('blocker_id', user.id)
+              .eq('blocked_id', userId)
+              .limit(1)
+          : Promise.resolve({ data: null })
+      ]);
 
-      if (profileError) throw profileError;
-      setProfile(profileData);
+      // Handle profile
+      if (profileResult.error) throw profileResult.error;
+      setProfile(profileResult.data);
 
-      // Fetch user's items
-      const { data: itemsData, error: itemsError } = await supabase
-        .from('items')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('status', 'available')
-        .order('created_at', { ascending: false });
+      // Handle items
+      if (itemsResult.error) throw itemsResult.error;
+      setItems(itemsResult.data || []);
 
-      if (itemsError) throw itemsError;
-      setItems(itemsData || []);
+      // Handle friendship status
+      setFriendshipStatus(friendshipResult);
 
-      // Fetch friendship status if viewing someone else's profile
-      if (user && user.id !== userId) {
-        const status = await getFriendshipStatus(user.id, userId);
-        setFriendshipStatus(status);
-
-        // If there's a pending request, get the request ID
-        if (status === 'pending_received') {
-          const { data: requestData } = await supabase
-            .from('friend_requests')
-            .select('id')
-            .eq('sender_id', userId)
-            .eq('receiver_id', user.id)
-            .eq('status', 'pending')
-            .single();
-          
-          setPendingRequestId(requestData?.id || null);
-        }
+      // If there's a pending request received, get the request ID
+      if (friendshipResult === 'pending_received') {
+        const { data: requestData } = await supabase
+          .from('friend_requests')
+          .select('id')
+          .eq('sender_id', userId)
+          .eq('receiver_id', user!.id)
+          .eq('status', 'pending')
+          .single();
+        
+        setPendingRequestId(requestData?.id || null);
       }
+
+      // Handle blocked status
+      setIsBlocked(!!((blockResult as any).data && (blockResult as any).data.length > 0));
 
     } catch (error) {
       console.error('Error fetching user data:', error);
       Alert.alert('Error', 'Failed to load user profile');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchUserData();
+  };
+
+  const handleShareProfile = async () => {
+    if (!profile) return;
+    
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    
+    const profileUrl = `freeorbarter://user/${userId}`;
+    const message = `Check out ${profile.username}'s profile on FreeorBarter!`;
+    
+    Alert.alert(
+      'Share Profile',
+      'Choose an option',
+      [
+        {
+          text: 'Copy Link',
+          onPress: () => {
+            Clipboard.setString(profileUrl);
+            Alert.alert('Success', 'Profile link copied to clipboard!');
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          }
+        },
+        {
+          text: 'Share',
+          onPress: async () => {
+            try {
+              await Share.share({
+                message: `${message}\n${profileUrl}`,
+                title: `${profile.username} on FreeorBarter`
+              });
+            } catch (error) {
+              console.error('Error sharing profile:', error);
+            }
+          }
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        }
+      ]
+    );
+  };
+
+  const handleMessageUser = async () => {
+    if (!user || !userId) return;
+    
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    
+    // Check if there's an existing conversation
+    try {
+      const { data: messages } = await supabase
+        .from('messages')
+        .select('id')
+        .or(`and(sender_id.eq.${user.id},receiver_id.eq.${userId}),and(sender_id.eq.${userId},receiver_id.eq.${user.id})`)
+        .limit(1);
+      
+      // Navigate to chat screen (will open existing thread or create new one)
+      navigation.navigate('Chat', { otherUserId: userId, itemId: null });
+    } catch (error) {
+      console.error('Error checking messages:', error);
+      // Navigate anyway
+      navigation.navigate('Chat', { otherUserId: userId, itemId: null });
+    }
+  };
+
+  const handleBlockUser = async () => {
+    if (!user || !userId) return;
+    
+    Alert.alert(
+      'Block User',
+      `Are you sure you want to block ${profile?.username}? You will unfriend them and won't see their content.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Block',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setFriendActionLoading(true);
+              
+              // Unfriend first if they are friends
+              if (friendshipStatus === 'friends') {
+                const unfriendResult = await unfriend(user.id, userId);
+                if (unfriendResult.error) throw unfriendResult.error;
+              }
+              
+              // Add to blocked users
+              const { error: blockError } = await supabase
+                .from('blocked_users')
+                .insert([{
+                  blocker_id: user.id,
+                  blocked_id: userId
+                }]);
+              
+              if (blockError && blockError.code !== '23505') { // Ignore duplicate key error
+                throw blockError;
+              }
+              
+              Alert.alert('Success', 'User has been blocked');
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              
+              // Refresh status
+              const newStatus = await getFriendshipStatus(user.id, userId);
+              setFriendshipStatus(newStatus);
+              setIsBlocked(true);
+              setShowManageMenu(false);
+              
+            } catch (error) {
+              console.error('Error blocking user:', error);
+              Alert.alert('Error', 'Failed to block user');
+            } finally {
+              setFriendActionLoading(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleUnblockUser = async () => {
+    if (!user || !userId) return;
+    
+    Alert.alert(
+      'Unblock User',
+      `Are you sure you want to unblock ${profile?.username}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Unblock',
+          onPress: async () => {
+            try {
+              setFriendActionLoading(true);
+              
+              // Remove from blocked users
+              const { error: unblockError } = await supabase
+                .from('blocked_users')
+                .delete()
+                .eq('blocker_id', user.id)
+                .eq('blocked_id', userId);
+              
+              if (unblockError) throw unblockError;
+              
+              Alert.alert('Success', 'User has been unblocked');
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              
+              setIsBlocked(false);
+              setShowManageMenu(false);
+              
+            } catch (error) {
+              console.error('Error unblocking user:', error);
+              Alert.alert('Error', 'Failed to unblock user');
+            } finally {
+              setFriendActionLoading(false);
+            }
+          }
+        }
+      ]
+    );
   };
 
   const handleFriendAction = async (action: 'send' | 'accept' | 'decline' | 'cancel' | 'unfriend') => {
@@ -124,12 +323,14 @@ export default function UserProfileScreen() {
         case 'send':
           result = await sendFriendRequest(user.id, userId);
           if (result.error) throw result.error;
+          Alert.alert('Success', 'Friend request sent!');
           break;
 
         case 'accept':
           if (!pendingRequestId) throw new Error('No pending request found');
           result = await acceptFriendRequest(pendingRequestId);
           if (result.error) throw result.error;
+          Alert.alert('Success', 'You are now friends!');
           break;
 
         case 'decline':
@@ -157,6 +358,7 @@ export default function UserProfileScreen() {
         case 'unfriend':
           result = await unfriend(user.id, userId);
           if (result.error) throw result.error;
+          Alert.alert('Success', 'You are no longer friends');
           break;
 
         default:
@@ -167,6 +369,7 @@ export default function UserProfileScreen() {
       const newStatus = await getFriendshipStatus(user.id, userId);
       setFriendshipStatus(newStatus);
       setPendingRequestId(null);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     } catch (err) {
       console.error('Error performing friend action:', err);
@@ -179,6 +382,15 @@ export default function UserProfileScreen() {
   const renderFriendButton = () => {
     if (!user || user.id === userId) return null;
 
+    // Show loading state while fetching friendship status
+    if (loading) {
+      return (
+        <View style={[styles.friendButton, styles.loadingButton]}>
+          <ActivityIndicator size="small" color="#3B82F6" />
+        </View>
+      );
+    }
+
     const buttonConfig = {
       none: { text: 'Add Friend', action: 'send', style: styles.addFriendButton },
       pending_sent: { text: 'Request Sent', action: 'cancel', style: styles.pendingButton },
@@ -188,40 +400,26 @@ export default function UserProfileScreen() {
 
     const config = buttonConfig[friendshipStatus];
     
-    // If already friends, show message and unfriend buttons
+    // If already friends, show message and manage friendship buttons
     if (friendshipStatus === 'friends') {
       return (
         <View style={styles.friendActionsContainer}>
           <TouchableOpacity
             style={[styles.friendActionButton, styles.messageButton]}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              navigation.navigate('Chat', { otherUserId: userId, itemId: null });
-            }}
+            onPress={handleMessageUser}
           >
             <Text style={styles.friendActionButtonText}>💬 Message</Text>
           </TouchableOpacity>
           
           <TouchableOpacity
-            style={[styles.friendActionButton, styles.unfriendButton]}
+            style={[styles.friendActionButton, styles.manageButton]}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              Alert.alert(
-                'Unfriend',
-                `Are you sure you want to unfriend ${profile?.username}?`,
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Unfriend', style: 'destructive', onPress: () => handleFriendAction('unfriend') }
-                ]
-              );
+              setShowManageMenu(true);
             }}
             disabled={friendActionLoading}
           >
-            {friendActionLoading ? (
-              <ActivityIndicator size="small" color="#EF4444" />
-            ) : (
-              <Text style={styles.unfriendButtonText}>Unfriend</Text>
-            )}
+            <Text style={styles.manageButtonText}>⚙️ Manage</Text>
           </TouchableOpacity>
         </View>
       );
@@ -296,10 +494,26 @@ export default function UserProfileScreen() {
           <Text style={styles.headerBackButtonText}>←</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{profile.username}</Text>
-        <View style={styles.placeholder} />
+        <TouchableOpacity
+          style={styles.shareButton}
+          onPress={handleShareProfile}
+        >
+          <Text style={styles.shareButtonText}>🔗</Text>
+        </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.scrollView} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#3B82F6"
+            colors={['#3B82F6']}
+          />
+        }
+      >
         {/* Profile Card */}
         <View style={styles.profileCard}>
           <View style={styles.profileHeader}>
@@ -329,7 +543,9 @@ export default function UserProfileScreen() {
           </View>
 
           {/* Friend Button */}
-          {renderFriendButton()}
+          <View key={`friend-button-${friendshipStatus}-${isBlocked}`}>
+            {renderFriendButton()}
+          </View>
         </View>
 
         {/* Listings Section */}
@@ -357,6 +573,79 @@ export default function UserProfileScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* Manage Friendship Menu */}
+      <Modal
+        visible={showManageMenu}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowManageMenu(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowManageMenu(false)}
+        >
+          <View style={styles.manageMenuContainer}>
+            <Text style={styles.manageMenuTitle}>Manage Friendship</Text>
+            
+            {!isBlocked && friendshipStatus === 'friends' && (
+              <TouchableOpacity
+                style={styles.manageMenuItem}
+                onPress={() => {
+                  setShowManageMenu(false);
+                  Alert.alert(
+                    'Unfriend',
+                    `Are you sure you want to unfriend ${profile?.username}?`,
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      { 
+                        text: 'Unfriend', 
+                        style: 'destructive', 
+                        onPress: () => handleFriendAction('unfriend') 
+                      }
+                    ]
+                  );
+                }}
+              >
+                <Text style={styles.manageMenuItemIcon}>👋</Text>
+                <Text style={styles.manageMenuItemText}>Unfriend</Text>
+              </TouchableOpacity>
+            )}
+            
+            {isBlocked ? (
+              <TouchableOpacity
+                style={[styles.manageMenuItem, styles.successMenuItem]}
+                onPress={() => {
+                  setShowManageMenu(false);
+                  handleUnblockUser();
+                }}
+              >
+                <Text style={styles.manageMenuItemIcon}>✅</Text>
+                <Text style={[styles.manageMenuItemText, styles.successText]}>Unblock User</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.manageMenuItem, styles.dangerMenuItem]}
+                onPress={() => {
+                  setShowManageMenu(false);
+                  handleBlockUser();
+                }}
+              >
+                <Text style={styles.manageMenuItemIcon}>🚫</Text>
+                <Text style={[styles.manageMenuItemText, styles.dangerText]}>Block User</Text>
+              </TouchableOpacity>
+            )}
+            
+            <TouchableOpacity
+              style={styles.manageMenuCancelButton}
+              onPress={() => setShowManageMenu(false)}
+            >
+              <Text style={styles.manageMenuCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -422,8 +711,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1E293B',
   },
-  placeholder: {
-    width: 40,
+  shareButton: {
+    padding: 8,
+  },
+  shareButtonText: {
+    fontSize: 24,
   },
   scrollView: {
     flex: 1,
@@ -495,6 +787,9 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
+  loadingButton: {
+    backgroundColor: '#F1F5F9',
+  },
   addFriendButton: {
     backgroundColor: '#3B82F6',
   },
@@ -535,13 +830,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
-  unfriendButton: {
-    backgroundColor: '#FEE2E2',
+  manageButton: {
+    backgroundColor: '#F3F4F6',
     borderWidth: 1,
-    borderColor: '#FCA5A5',
+    borderColor: '#D1D5DB',
   },
-  unfriendButtonText: {
-    color: '#EF4444',
+  manageButtonText: {
+    color: '#374151',
     fontSize: 16,
     fontWeight: '700',
   },
@@ -580,5 +875,72 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#374151',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  manageMenuContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  manageMenuTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  manageMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  dangerMenuItem: {
+    backgroundColor: '#FEE2E2',
+  },
+  successMenuItem: {
+    backgroundColor: '#D1FAE5',
+  },
+  manageMenuItemIcon: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  manageMenuItemText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  dangerText: {
+    color: '#EF4444',
+  },
+  successText: {
+    color: '#10B981',
+  },
+  manageMenuCancelButton: {
+    padding: 16,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 12,
+    marginTop: 8,
+    alignItems: 'center',
+  },
+  manageMenuCancelText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#64748B',
   },
 });

@@ -55,6 +55,14 @@ export default function MessagesScreen() {
     };
   }, [user]);
 
+  // Refresh data when screen comes into focus
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (user) fetchConversations();
+    });
+    return unsubscribe;
+  }, [navigation, user]);
+
   const fetchConversations = async () => {
     if (!user) return;
     

@@ -46,6 +46,17 @@ export default function ItemDetailsScreen() {
     }
   }, [itemId, user]);
 
+  // Refresh data when screen comes into focus
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (itemId) {
+        fetchItem();
+        checkWatchStatus();
+      }
+    });
+    return unsubscribe;
+  }, [navigation, itemId]);
+
   const fetchItem = async () => {
     try {
       const { data, error } = await supabase

@@ -15,6 +15,7 @@ import {
 import { useAuth } from '../hooks/useAuth';
 import { useNavigation } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
+import { supabase } from '../lib/supabase';
 import {
   getFriendsList,
   getPendingRequests,
@@ -33,13 +34,26 @@ interface UserProfile {
   rating: number | null;
 }
 
+interface BlockedUser {
+  id: string;
+  blocked_user_id: string;
+  created_at: string;
+  blocked_user: {
+    id: string;
+    username: string;
+    avatar_url: string | null;
+    rating: number | null;
+  };
+}
+
 export default function FriendsScreen() {
   const { user } = useAuth();
   const navigation = useNavigation<any>();
-  const [activeTab, setActiveTab] = useState<'friends' | 'requests'>('friends');
+  const [activeTab, setActiveTab] = useState<'friends' | 'requests' | 'blocked'>('friends');
   const [friends, setFriends] = useState<FriendshipWithUser[]>([]);
   const [pendingRequests, setPendingRequests] = useState<FriendRequestWithUser[]>([]);
   const [sentRequests, setSentRequests] = useState<FriendRequestWithUser[]>([]);
+  const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -49,6 +63,14 @@ export default function FriendsScreen() {
       fetchFriendsData();
     }
   }, [user]);
+
+  // Refresh data when screen comes into focus
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (user) fetchFriendsData();
+    });
+    return unsubscribe;
+  }, [navigation, user]);
 
   const fetchFriendsData = async () => {
     if (!user) return;
@@ -70,6 +92,35 @@ export default function FriendsScreen() {
       const { data: sentData, error: sentError } = await getSentRequests(user.id);
       if (sentError) throw sentError;
       setSentRequests(sentData);
+
+      // Fetch blocked users
+      const { data: blockedData, error: blockedError } = await supabase
+        .from('blocked_users')
+        .select('*')
+        .eq('blocker_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (blockedError) {
+        console.log('Error fetching blocked users:', blockedError);
+        setBlockedUsers([]);
+      } else if (blockedData && blockedData.length > 0) {
+        // Fetch user data for each blocked user
+        const userIds = blockedData.map((b: any) => b.blocked_id);
+        const { data: usersData } = await supabase
+          .from('users')
+          .select('id, username, avatar_url, rating')
+          .in('id', userIds);
+
+        // Merge user data with blocked users
+        const mergedData = blockedData.map((blocked: any) => ({
+          ...blocked,
+          blocked_user_id: blocked.blocked_id,
+          blocked_user: usersData?.find(u => u.id === blocked.blocked_id) || null
+        }));
+        setBlockedUsers(mergedData);
+      } else {
+        setBlockedUsers([]);
+      }
 
     } catch (error) {
       console.error('Error fetching friends data:', error);
@@ -120,6 +171,39 @@ export default function FriendsScreen() {
     } finally {
       setActionLoading(null);
     }
+  };
+
+  const handleUnblock = async (blockId: string, username: string) => {
+    Alert.alert(
+      'Unblock User',
+      `Are you sure you want to unblock ${username}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Unblock',
+          onPress: async () => {
+            setActionLoading(blockId);
+            try {
+              const { error } = await supabase
+                .from('blocked_users')
+                .delete()
+                .eq('id', blockId);
+
+              if (error) throw error;
+
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              Alert.alert('Success', `${username} has been unblocked`);
+              await fetchFriendsData();
+            } catch (error) {
+              console.error('Error unblocking user:', error);
+              Alert.alert('Error', 'Failed to unblock user');
+            } finally {
+              setActionLoading(null);
+            }
+          }
+        }
+      ]
+    );
   };
 
   const renderFriendItem = ({ item }: { item: FriendshipWithUser }) => (
@@ -243,12 +327,58 @@ export default function FriendsScreen() {
     </View>
   );
 
+  const renderBlockedUser = ({ item }: { item: BlockedUser }) => (
+    <View style={styles.friendItem}>
+      <TouchableOpacity 
+        style={styles.friendInfo}
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          navigation.navigate('UserProfile', { userId: item.blocked_user_id });
+        }}
+        activeOpacity={0.7}
+      >
+        {item.blocked_user?.avatar_url ? (
+          <Image 
+            source={{ uri: item.blocked_user.avatar_url }} 
+            style={styles.friendAvatar}
+          />
+        ) : (
+          <View style={styles.friendAvatarPlaceholder}>
+            <Text style={styles.friendAvatarText}>👤</Text>
+          </View>
+        )}
+        <View style={styles.friendDetails}>
+          <Text style={styles.friendName}>{item.blocked_user?.username || 'Unknown User'}</Text>
+          {item.blocked_user?.rating && (
+            <Text style={styles.friendRating}>⭐ {item.blocked_user.rating.toFixed(1)}</Text>
+          )}
+          <Text style={styles.friendSubtext}>
+            Blocked {new Date(item.created_at).toLocaleDateString()}
+          </Text>
+        </View>
+      </TouchableOpacity>
+      
+      <TouchableOpacity
+        style={[styles.friendButton, styles.unblockButton]}
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          handleUnblock(item.id, item.blocked_user?.username || 'this user');
+        }}
+        disabled={actionLoading === item.id}
+      >
+        <Text style={styles.unblockButtonText}>Unblock</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
   const getCurrentData = () => {
     switch (activeTab) {
       case 'friends':
         return friends;
       case 'requests':
         return pendingRequests;
+      case 'blocked':
+        return blockedUsers;
       default:
         return sentRequests;
     }
@@ -267,6 +397,12 @@ export default function FriendsScreen() {
           emoji: '📥',
           title: 'No pending requests',
           subtitle: 'Friend requests will appear here'
+        };
+      case 'blocked':
+        return {
+          emoji: '✅',
+          title: 'No blocked users',
+          subtitle: 'Users you block will appear here'
         };
       default:
         return {
@@ -326,9 +462,9 @@ export default function FriendsScreen() {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           }}
         >
-          <Text style={styles.tabEmoji}>👥</Text>
+          <Text style={[styles.tabEmoji, activeTab === 'friends' && styles.activeTabEmoji]}>👥</Text>
           <Text style={[styles.tabText, activeTab === 'friends' && styles.activeTabText]}>
-            Friends ({friends.length})
+            {friends.length}
           </Text>
         </TouchableOpacity>
         
@@ -339,9 +475,22 @@ export default function FriendsScreen() {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           }}
         >
-          <Text style={styles.tabEmoji}>📥</Text>
+          <Text style={[styles.tabEmoji, activeTab === 'requests' && styles.activeTabEmoji]}>📥</Text>
           <Text style={[styles.tabText, activeTab === 'requests' && styles.activeTabText]}>
-            Requests ({pendingRequests.length})
+            {pendingRequests.length}
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'blocked' && styles.activeTab]}
+          onPress={() => {
+            setActiveTab('blocked');
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          }}
+        >
+          <Text style={[styles.tabEmoji, activeTab === 'blocked' && styles.activeTabEmoji]}>🚫</Text>
+          <Text style={[styles.tabText, activeTab === 'blocked' && styles.activeTabText]}>
+            {blockedUsers.length}
           </Text>
         </TouchableOpacity>
       </View>
@@ -357,7 +506,7 @@ export default function FriendsScreen() {
           />
         }
       >
-        {activeTab === 'friends' ? (
+        {activeTab === 'friends' && (
           friends.length > 0 ? (
             <FlatList
               data={friends}
@@ -373,11 +522,31 @@ export default function FriendsScreen() {
               <Text style={styles.emptySubtitle}>{emptyMessage.subtitle}</Text>
             </View>
           )
-        ) : (
+        )}
+        
+        {activeTab === 'requests' && (
           pendingRequests.length > 0 ? (
             <FlatList
               data={pendingRequests}
               renderItem={renderRequestItem}
+              keyExtractor={(item) => item.id}
+              scrollEnabled={false}
+              contentContainerStyle={styles.listContainer}
+            />
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyEmoji}>{emptyMessage.emoji}</Text>
+              <Text style={styles.emptyTitle}>{emptyMessage.title}</Text>
+              <Text style={styles.emptySubtitle}>{emptyMessage.subtitle}</Text>
+            </View>
+          )
+        )}
+        
+        {activeTab === 'blocked' && (
+          blockedUsers.length > 0 ? (
+            <FlatList
+              data={blockedUsers}
+              renderItem={renderBlockedUser}
               keyExtractor={(item) => item.id}
               scrollEnabled={false}
               contentContainerStyle={styles.listContainer}
@@ -442,21 +611,24 @@ const styles = StyleSheet.create({
   },
   tabContainer: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    margin: 16,
+    backgroundColor: '#F1F5F9',
+    marginHorizontal: 16,
+    marginVertical: 12,
     borderRadius: 12,
     padding: 4,
+    gap: 4,
   },
   tab: {
     flex: 1,
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingVertical: 10,
+    borderRadius: 10,
+    gap: 4,
   },
   activeTab: {
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#FFFFFF',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -464,16 +636,18 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   tabEmoji: {
-    fontSize: 16,
-    marginRight: 6,
+    fontSize: 20,
+  },
+  activeTabEmoji: {
+    transform: [{ scale: 1.1 }],
   },
   tabText: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '700',
     color: '#64748B',
   },
   activeTabText: {
-    color: '#1E293B',
+    color: '#3B82F6',
   },
   content: {
     flex: 1,
@@ -533,6 +707,16 @@ const styles = StyleSheet.create({
     color: '#F59E0B',
     fontWeight: '500',
   },
+  friendSubtext: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 2,
+  },
+  friendButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
   unfriendButton: {
     backgroundColor: '#EF4444',
     paddingHorizontal: 16,
@@ -543,6 +727,17 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
+  },
+  unblockButton: {
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  unblockButtonText: {
+    color: '#10B981',
+    fontSize: 14,
+    fontWeight: '700',
   },
   requestItem: {
     flexDirection: 'row',

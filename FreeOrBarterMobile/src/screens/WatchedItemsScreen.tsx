@@ -66,6 +66,14 @@ const WatchedItemsScreen: React.FC = () => {
     }
   }, [user]);
 
+  // Refresh data when screen comes into focus
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (user) fetchWatchedItems();
+    });
+    return unsubscribe;
+  }, [navigation, user]);
+
   const fetchWatchedItems = async () => {
     try {
       setLoading(true);
@@ -341,7 +349,7 @@ const WatchedItemsScreen: React.FC = () => {
             navigation.goBack();
           }}
         >
-          <Text style={styles.backButtonText}>← Back</Text>
+          <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
         <View style={styles.headerContent}>
           <Text style={styles.title}>Watchlist</Text>
@@ -535,10 +543,9 @@ const styles = StyleSheet.create({
   },
   backButton: {
     padding: 8,
-    minWidth: 80,
   },
   backButtonText: {
-    fontSize: 16,
+    fontSize: 24,
     color: '#3B82F6',
     fontWeight: '600',
   },

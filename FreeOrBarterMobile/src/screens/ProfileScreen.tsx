@@ -10,6 +10,7 @@ import {
   ScrollView,
   Image,
   FlatList,
+  RefreshControl,
 } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabase';
@@ -35,6 +36,7 @@ export default function ProfileScreen() {
   const [items, setItems] = useState<Item[]>([]);
   const [activeTab, setActiveTab] = useState<'free' | 'barter'>('free');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -57,6 +59,8 @@ export default function ProfileScreen() {
     if (!user) return;
 
     try {
+      if (!refreshing) setLoading(true);
+      
       // Fetch user profile
       const { data: profileData, error: profileError } = await supabase
         .from('users')
@@ -82,7 +86,13 @@ export default function ProfileScreen() {
       console.error('Error fetching profile data:', error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchProfileData();
   };
 
   const handleSignOut = async () => {
@@ -133,7 +143,18 @@ export default function ProfileScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.scrollView} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#3B82F6"
+            colors={['#3B82F6']}
+          />
+        }
+      >
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.title}>Profile</Text>
