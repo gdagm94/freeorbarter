@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { User } from '../types';
-import * as WebBrowser from 'expo-web-browser';
-import { makeRedirectUri } from 'expo-auth-session';
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
@@ -12,7 +10,7 @@ export function useAuth() {
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
-        setUser(session.user as User);
+        setUser({ ...session.user, full_name: (session.user.user_metadata?.full_name ?? "") } as User);
       }
       setLoading(false);
     });
@@ -21,7 +19,10 @@ export function useAuth() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (session?.user) {
-          setUser(session.user as User);
+          setUser({ 
+            ...session.user, 
+            full_name: (session.user.user_metadata?.full_name ?? "") 
+          } as User);
         } else {
           setUser(null);
         }
@@ -63,75 +64,6 @@ export function useAuth() {
     return { error };
   };
 
-  const signInWithGoogle = async () => {
-    try {
-      const redirectUrl = makeRedirectUri({ scheme: 'freeorbarter' });
-      
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: redirectUrl,
-          skipBrowserRedirect: true,
-        },
-      });
-
-      if (error) {
-        console.error('OAuth setup error:', error);
-        return { error: new Error(`Failed to start Google sign in: ${error.message}`) };
-      }
-
-      if (!data.url) {
-        return { error: new Error('No OAuth URL received from Supabase') };
-      }
-
-      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
-      
-      if (result.type === 'cancel') {
-        return { error: new Error('User cancelled the sign in process') };
-      }
-      
-      if (result.type === 'dismiss') {
-        return { error: new Error('Sign in was dismissed') };
-      }
-      
-      if (result.type === 'success' && result.url) {
-        try {
-          // Extract the URL fragment that contains the access token
-          const url = new URL(result.url);
-          const accessToken = url.searchParams.get('access_token');
-          const refreshToken = url.searchParams.get('refresh_token');
-          
-          if (!accessToken || !refreshToken) {
-            return { error: new Error('No authentication tokens received from Google') };
-          }
-          
-          const { error: sessionError } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
-          
-          if (sessionError) {
-            console.error('Session setup error:', sessionError);
-            return { error: new Error(`Failed to create session: ${sessionError.message}`) };
-          }
-          
-          return { error: null };
-        } catch (urlError) {
-          console.error('URL parsing error:', urlError);
-          return { error: new Error('Failed to process authentication response') };
-        }
-      }
-
-      return { error: new Error('Unexpected response from OAuth flow') };
-    } catch (error) {
-      console.error('Google OAuth error:', error);
-      if (error instanceof Error) {
-        return { error };
-      }
-      return { error: new Error('An unexpected error occurred during Google sign in') };
-    }
-  };
-
   return {
     user,
     loading,
@@ -139,6 +71,5 @@ export function useAuth() {
     signUp,
     signOut,
     resetPassword,
-    signInWithGoogle,
   };
 }
