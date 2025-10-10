@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   StatusBar,
   KeyboardAvoidingView,
   Platform,
+  Animated,
 } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
 
@@ -20,9 +21,24 @@ export default function AuthScreen() {
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const spinValue = useRef(new Animated.Value(0)).current;
 
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, signInWithGoogle } = useAuth();
+
+  useEffect(() => {
+    if (googleLoading) {
+      const spin = Animated.loop(
+        Animated.timing(spinValue, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        })
+      );
+      spin.start();
+    }
+  }, [googleLoading, spinValue]);
 
   const handleSubmit = async () => {
     if (!email || !password) {
@@ -64,6 +80,35 @@ export default function AuthScreen() {
       Alert.alert('Error', 'An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setGoogleLoading(true);
+    
+    try {
+      const { error } = await signInWithGoogle();
+      if (error) {
+        let errorMessage = 'Google sign in failed. Please try again.';
+        
+        // Handle specific error cases
+        if (error.message.includes('popup_closed')) {
+          errorMessage = 'Sign in was cancelled. Please try again.';
+        } else if (error.message.includes('network')) {
+          errorMessage = 'Network error. Please check your connection and try again.';
+        } else if (error.message.includes('access_denied')) {
+          errorMessage = 'Access denied. Please try again or contact support.';
+        } else if (error.message) {
+          errorMessage = `Sign in failed: ${error.message}`;
+        }
+        
+        Alert.alert('Google Sign In Failed', errorMessage);
+      }
+    } catch (error) {
+      console.error('Google OAuth error:', error);
+      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -145,14 +190,50 @@ export default function AuthScreen() {
             </View>
 
             <TouchableOpacity
-              style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+              style={[styles.submitButton, (loading || googleLoading) && styles.submitButtonDisabled]}
               onPress={handleSubmit}
-              disabled={loading}
+              disabled={loading || googleLoading}
               activeOpacity={0.8}
             >
               <Text style={styles.submitButtonText}>
                 {loading ? 'Please wait...' : isLogin ? 'Sign In' : 'Create Account'}
               </Text>
+            </TouchableOpacity>
+
+            {/* Divider */}
+            <View style={styles.dividerContainer}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>OR</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            {/* Google Sign In Button */}
+            <TouchableOpacity
+              style={[styles.googleButton, (googleLoading || loading) && styles.submitButtonDisabled]}
+              onPress={handleGoogleSignIn}
+              disabled={googleLoading || loading}
+              activeOpacity={0.8}
+            >
+              <View style={styles.googleButtonContent}>
+                {googleLoading && (
+                  <Animated.View 
+                    style={[
+                      styles.loadingSpinner,
+                      {
+                        transform: [{
+                          rotate: spinValue.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: ['0deg', '360deg'],
+                          }),
+                        }],
+                      },
+                    ]}
+                  />
+                )}
+                <Text style={styles.googleButtonText}>
+                  {googleLoading ? 'Signing in...' : '🔍 Continue with Google'}
+                </Text>
+              </View>
             </TouchableOpacity>
 
             {/* Toggle Form Type */}
@@ -317,5 +398,54 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     textAlign: 'center',
     lineHeight: 18,
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E2E8F0',
+  },
+  dividerText: {
+    marginHorizontal: 16,
+    fontSize: 14,
+    color: '#9CA3AF',
+    fontWeight: '500',
+  },
+  googleButton: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: 18,
+    marginBottom: 24,
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  googleButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  googleButtonText: {
+    color: '#374151',
+    textAlign: 'center',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  loadingSpinner: {
+    width: 16,
+    height: 16,
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+    borderTopColor: '#3B82F6',
+    borderRadius: 8,
   },
 });
