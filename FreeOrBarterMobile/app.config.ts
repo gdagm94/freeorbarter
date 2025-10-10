@@ -27,14 +27,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   android: {
     package: 'com.freeorbarter.mobile'
   },
-  plugins: [
-    [
-      'expo-auth-session',
-      {
-        schemes: ['freeorbarter']
-      }
-    ]
-  ],
+  plugins: [],
   extra: {
     supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
     supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
