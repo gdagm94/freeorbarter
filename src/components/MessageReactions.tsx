@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Smile, X } from 'lucide-react';
 
@@ -95,32 +95,6 @@ export function MessageReactions({ messageId, currentUserId, onReactionChange }:
     }
   };
 
-  const removeReaction = async (reactionId: string) => {
-    try {
-      setLoading(true);
-      
-      const { error } = await supabase
-        .from('message_reactions')
-        .delete()
-        .eq('id', reactionId);
-
-      if (error) {
-        console.error('Error removing reaction:', error);
-        return;
-      }
-
-      // Refresh reactions
-      await fetchReactions();
-      
-      if (onReactionChange) {
-        onReactionChange();
-      }
-    } catch (err) {
-      console.error('Error in removeReaction:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Group reactions by emoji
   const groupedReactions = reactions.reduce((acc, reaction) => {
