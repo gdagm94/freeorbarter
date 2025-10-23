@@ -914,6 +914,10 @@ const styles = StyleSheet.create({
   placeholder: {
     width: 40,
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
