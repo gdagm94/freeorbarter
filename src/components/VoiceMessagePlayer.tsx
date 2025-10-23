@@ -12,6 +12,8 @@ export function VoiceMessagePlayer({ audioUrl, duration, isOwnMessage = false }:
   const [currentTime, setCurrentTime] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(1);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -21,29 +23,58 @@ export function VoiceMessagePlayer({ audioUrl, duration, isOwnMessage = false }:
     }
   }, [isMuted, volume]);
 
+  // Preload audio when component mounts
+  useEffect(() => {
+    const audio = new Audio(audioUrl);
+    audioRef.current = audio;
+    
+    const handleCanPlay = () => {
+      setIsLoading(false);
+      setHasError(false);
+    };
+    
+    const handleError = () => {
+      setIsLoading(false);
+      setHasError(true);
+    };
+    
+    const handleLoadStart = () => {
+      setIsLoading(true);
+    };
+    
+    audio.addEventListener('canplay', handleCanPlay);
+    audio.addEventListener('error', handleError);
+    audio.addEventListener('loadstart', handleLoadStart);
+    
+    // Preload the audio
+    audio.load();
+    
+    return () => {
+      audio.removeEventListener('canplay', handleCanPlay);
+      audio.removeEventListener('error', handleError);
+      audio.removeEventListener('loadstart', handleLoadStart);
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
+  }, [audioUrl]);
+
   const playPause = () => {
-    if (!audioRef.current) {
-      const audio = new Audio(audioUrl);
-      audioRef.current = audio;
-      
-      audio.onplay = () => setIsPlaying(true);
-      audio.onpause = () => setIsPlaying(false);
-      audio.onended = () => {
-        setIsPlaying(false);
-        setCurrentTime(0);
-      };
-      
-      audio.ontimeupdate = () => {
-        setCurrentTime(audio.currentTime);
-      };
-      
-      audio.volume = isMuted ? 0 : volume;
+    if (!audioRef.current || hasError) return;
+    
+    if (isLoading) {
+      // Wait for audio to load
+      return;
     }
 
     if (isPlaying) {
       audioRef.current.pause();
     } else {
-      audioRef.current.play();
+      audioRef.current.play().catch((error) => {
+        console.error('Error playing audio:', error);
+        setHasError(true);
+      });
     }
   };
 
@@ -82,13 +113,19 @@ export function VoiceMessagePlayer({ audioUrl, duration, isOwnMessage = false }:
       {/* Play/Pause Button */}
       <button
         onClick={playPause}
+        disabled={isLoading || hasError}
         className={`p-2 rounded-full transition-colors ${
           isOwnMessage
-            ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-            : 'bg-gray-600 text-white hover:bg-gray-700'
+            ? 'bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-indigo-400'
+            : 'bg-gray-600 text-white hover:bg-gray-700 disabled:bg-gray-400'
         }`}
+        title={hasError ? 'Error loading audio' : isLoading ? 'Loading...' : isPlaying ? 'Pause' : 'Play'}
       >
-        {isPlaying ? (
+        {hasError ? (
+          <span className="w-4 h-4 text-xs">⚠️</span>
+        ) : isLoading ? (
+          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+        ) : isPlaying ? (
           <Pause className="w-4 h-4" />
         ) : (
           <Play className="w-4 h-4" />

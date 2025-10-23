@@ -14,11 +14,12 @@ interface MessageReactionsProps {
   messageId: string;
   currentUserId: string;
   onReactionChange?: () => void;
+  showPicker?: boolean;
 }
 
 const COMMON_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '😡', '🎉', '👏'];
 
-export function MessageReactions({ messageId, currentUserId, onReactionChange }: MessageReactionsProps) {
+export function MessageReactions({ messageId, currentUserId, onReactionChange, showPicker = false }: MessageReactionsProps) {
   const [reactions, setReactions] = useState<MessageReaction[]>([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -26,6 +27,12 @@ export function MessageReactions({ messageId, currentUserId, onReactionChange }:
   useEffect(() => {
     fetchReactions();
   }, [messageId]);
+
+  useEffect(() => {
+    if (showPicker) {
+      setShowEmojiPicker(true);
+    }
+  }, [showPicker]);
 
   const fetchReactions = async () => {
     try {
@@ -107,17 +114,7 @@ export function MessageReactions({ messageId, currentUserId, onReactionChange }:
   }, {} as Record<string, MessageReaction[]>);
 
   if (reactions.length === 0 && !showEmojiPicker) {
-    return (
-      <View style={styles.container}>
-        <TouchableOpacity
-          onPress={() => setShowEmojiPicker(true)}
-          disabled={loading}
-          style={styles.addReactionButton}
-        >
-          <Text style={styles.addReactionText}>😊</Text>
-        </TouchableOpacity>
-      </View>
-    );
+    return null;
   }
 
   return (

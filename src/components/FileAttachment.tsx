@@ -193,9 +193,10 @@ interface FileDisplayProps {
   fileName: string;
   fileType: string;
   fileSize?: number;
+  onPress?: () => void;
 }
 
-export function FileDisplay({ fileUrl, fileName, fileType, fileSize }: FileDisplayProps) {
+export function FileDisplay({ fileUrl, fileName, fileType, fileSize, onPress }: FileDisplayProps) {
   const getFileIcon = () => {
     if (fileType.startsWith('image/')) {
       return <ImageIcon className="w-6 h-6 text-blue-500" />;
@@ -214,7 +215,13 @@ export function FileDisplay({ fileUrl, fileName, fileType, fileSize }: FileDispl
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const handleDownload = () => {
+  const handleFilePress = () => {
+    if (onPress) {
+      onPress();
+      return;
+    }
+    
+    // Fallback to direct download
     const link = document.createElement('a');
     link.href = fileUrl;
     link.download = fileName;
@@ -239,9 +246,9 @@ export function FileDisplay({ fileUrl, fileName, fileType, fileSize }: FileDispl
           )}
         </div>
         <button
-          onClick={handleDownload}
+          onClick={handleFilePress}
           className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
-          title="Download file"
+          title="View/Download file"
         >
           <Download className="w-4 h-4" />
         </button>

@@ -62,13 +62,13 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   unreadText: {
-    fontSize: 10,
+    fontSize: 9,
     color: '#9CA3AF',
     fontStyle: 'italic',
   },
   readText: {
-    fontSize: 10,
-    color: '#10B981',
-    fontWeight: '500',
+    fontSize: 9,
+    color: '#6B7280',
+    fontWeight: '400',
   },
 });

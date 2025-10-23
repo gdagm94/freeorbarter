@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList, Modal } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
 
 interface SearchResult {
@@ -52,7 +52,7 @@ export function MessageSearch({
           )
         `)
         .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${currentUserId})`)
-        .textSearch('content', query)
+        .ilike('content', `%${query}%`)
         .order('created_at', { ascending: false })
         .limit(10);
 
@@ -70,7 +70,12 @@ export function MessageSearch({
         return;
       }
 
-      setSearchResults(data || []);
+      setSearchResults((data || []).map((msg: any) => ({
+        id: msg.id,
+        content: msg.content,
+        created_at: msg.created_at,
+        sender: { username: msg.sender?.username || 'Unknown' }
+      })));
       setShowResults(true);
     } catch (err) {
       console.error('Error in searchMessages:', err);
@@ -127,10 +132,13 @@ export function MessageSearch({
       <Modal
         visible={showResults}
         transparent={true}
-        animationType="slide"
+        animationType="fade"
         onRequestClose={() => setShowResults(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView 
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
           <View style={styles.searchModal}>
             <View style={styles.searchHeader}>
               <TextInput
@@ -181,7 +189,7 @@ export function MessageSearch({
               </View>
             )}
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -202,13 +210,14 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
+    paddingTop: 60,
   },
   searchModal: {
     backgroundColor: 'white',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '80%',
+    flex: 1,
     paddingTop: 20,
   },
   searchHeader: {

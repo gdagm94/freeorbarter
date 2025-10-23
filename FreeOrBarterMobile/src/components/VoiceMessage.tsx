@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase';
 import * as Haptics from 'expo-haptics';
 
 interface VoiceMessageProps {
-  onSend: (audioBlob: Blob, duration: number) => void;
+  onSend: (audioUri: string, duration: number) => void;
   onCancel: () => void;
   isVisible: boolean;
 }
@@ -76,11 +76,8 @@ export function VoiceMessage({ onSend, onCancel, isVisible }: VoiceMessageProps)
       
       const uri = recording.getURI();
       if (uri) {
-        // Convert URI to Blob for upload
-        const response = await fetch(uri);
-        const audioBlob = await response.blob();
-        
-        onSend(audioBlob, recordingDuration);
+        // Pass the URI directly instead of converting to blob
+        onSend(uri, recordingDuration);
       }
       
       setRecording(null);

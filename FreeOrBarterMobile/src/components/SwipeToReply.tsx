@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
+  Animated,
 } from 'react-native';
+import { PanGestureHandler, State } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
 
 interface SwipeToReplyProps {
@@ -23,6 +24,8 @@ export function SwipeToReply({
   children,
 }: SwipeToReplyProps) {
   const [isReplying, setIsReplying] = useState(false);
+  const translateX = useRef(new Animated.Value(0)).current;
+  const replyIconOpacity = useRef(new Animated.Value(0)).current;
 
   const handleReply = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -37,15 +40,67 @@ export function SwipeToReply({
     }, 1000);
   };
 
+  const onGestureEvent = Animated.event(
+    [{ nativeEvent: { translationX: translateX } }],
+    { useNativeDriver: true }
+  );
+
+  const onHandlerStateChange = (event: any) => {
+    if (event.nativeEvent.state === State.ACTIVE) {
+      // Show reply icon when swiping
+      Animated.timing(replyIconOpacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    } else if (event.nativeEvent.state === State.END) {
+      const { translationX } = event.nativeEvent;
+      
+      // If swiped right more than 50px, trigger reply
+      if (translationX > 50) {
+        handleReply();
+      }
+      
+      // Reset position and hide icon
+      Animated.parallel([
+        Animated.spring(translateX, {
+          toValue: 0,
+          useNativeDriver: true,
+        }),
+        Animated.timing(replyIconOpacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  };
+
   return (
     <View style={styles.container}>
-      <TouchableOpacity
-        onLongPress={handleReply}
-        delayLongPress={500}
-        style={styles.messageContainer}
+      <PanGestureHandler
+        onGestureEvent={onGestureEvent}
+        onHandlerStateChange={onHandlerStateChange}
+        activeOffsetX={10}
+        failOffsetY={[-5, 5]}
       >
-        {children}
-      </TouchableOpacity>
+        <Animated.View style={[
+          styles.messageContainer,
+          {
+            transform: [{ translateX }],
+          },
+        ]}>
+          {children}
+        </Animated.View>
+      </PanGestureHandler>
+      
+      {/* Reply Icon */}
+      <Animated.View style={[
+        styles.replyIcon,
+        { opacity: replyIconOpacity },
+      ]}>
+        <Text style={styles.replyIconText}>↩️</Text>
+      </Animated.View>
       
       {/* Reply Indicator */}
       {isReplying && (
@@ -65,6 +120,26 @@ const styles = StyleSheet.create({
   },
   messageContainer: {
     backgroundColor: 'transparent',
+  },
+  replyIcon: {
+    position: 'absolute',
+    left: 10,
+    top: '50%',
+    transform: [{ translateY: -15 }],
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#3B82F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  replyIconText: {
+    fontSize: 16,
   },
   replyIndicator: {
     position: 'absolute',

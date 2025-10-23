@@ -29,6 +29,16 @@ export function VoiceMessagePlayer({ audioUrl, duration, isOwnMessage }: VoiceMe
   const loadSound = async () => {
     try {
       setIsLoading(true);
+      
+      // Set audio mode to use speaker instead of earpiece
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false, // Play through speaker
+      });
+      
       const { sound: newSound } = await Audio.Sound.createAsync(
         { uri: audioUrl },
         { shouldPlay: false }
@@ -60,10 +70,25 @@ export function VoiceMessagePlayer({ audioUrl, duration, isOwnMessage }: VoiceMe
   const playPause = async () => {
     if (!sound) {
       await loadSound();
+      // After loading, check if sound is ready and play
+      if (sound) {
+        const status = await sound.getStatusAsync();
+        if (status.isLoaded) {
+          await sound.playAsync();
+          startPositionUpdate();
+        }
+      }
       return;
     }
 
     try {
+      // Check if sound is loaded before playing
+      const status = await sound.getStatusAsync();
+      if (!status.isLoaded) {
+        await loadSound();
+        return;
+      }
+
       if (isPlaying) {
         await sound.pauseAsync();
         if (intervalRef.current) {

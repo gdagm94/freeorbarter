@@ -27,6 +27,15 @@ import { MessageDrafts, useMessageDrafts } from '../components/MessageDrafts';
 import { FileAttachment } from '../components/FileAttachment';
 import { VoiceMessage } from '../components/VoiceMessage';
 import { VoiceMessagePlayer } from '../components/VoiceMessagePlayer';
+import { AttachmentMenu } from '../components/AttachmentMenu';
+import { FileDisplay } from '../components/FileDisplay';
+import { ImageViewer } from '../components/ImageViewer';
+import { FileViewer } from '../components/FileViewer';
+import { MessageThreading } from '../components/MessageThreading';
+import { CreateThreadFromMessage } from '../components/CreateThreadFromMessage';
+import { OfferTemplates } from '../components/OfferTemplates';
+import { BulkOffers } from '../components/BulkOffers';
+import { CounterOffers } from '../components/CounterOffers';
 
 export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -38,7 +47,19 @@ export default function ChatScreen() {
   const [replyingTo, setReplyingTo] = useState<{id: string; content: string; senderName: string} | null>(null);
   const [showFileAttachment, setShowFileAttachment] = useState(false);
   const [showVoiceMessage, setShowVoiceMessage] = useState(false);
+  const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
+  const [showReactionPicker, setShowReactionPicker] = useState<string | null>(null);
+  const [lastTap, setLastTap] = useState(0);
+  const [showImageViewer, setShowImageViewer] = useState(false);
+  const [selectedImageUrl, setSelectedImageUrl] = useState('');
+  const [showFileViewer, setShowFileViewer] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<{url: string; name: string; type: string; size?: number} | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const [showCreateThread, setShowCreateThread] = useState(false);
+  const [showOfferTemplates, setShowOfferTemplates] = useState(false);
+  const [showBulkOffers, setShowBulkOffers] = useState(false);
+  const [showCounterOffers, setShowCounterOffers] = useState<string | null>(null);
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { user } = useAuth();
@@ -429,9 +450,13 @@ export default function ChatScreen() {
     }
   };
 
-  const handleVoiceMessageUpload = async (audioBlob: Blob, duration: number) => {
+  const handleVoiceMessageUpload = async (audioUri: string, duration: number) => {
     try {
       setUploading(true);
+
+      // Read the file from URI
+      const response = await fetch(audioUri);
+      const arrayBuffer = await response.arrayBuffer();
 
       // Create a unique filename
       const fileName = `voice_${Date.now()}.m4a`;
@@ -440,7 +465,7 @@ export default function ChatScreen() {
       // Upload to Supabase Storage
       const { data, error } = await supabase.storage
         .from('message-files')
-        .upload(filePath, audioBlob, {
+        .upload(filePath, arrayBuffer, {
           contentType: 'audio/m4a',
         });
 
@@ -484,23 +509,50 @@ export default function ChatScreen() {
     }
   };
 
+  const handleDoubleTap = (messageId: string) => {
+    const now = Date.now();
+    const DOUBLE_PRESS_DELAY = 300;
+    
+    if (lastTap && (now - lastTap) < DOUBLE_PRESS_DELAY) {
+      // Double tap detected - show emoji picker
+      setShowReactionPicker(messageId);
+    } else {
+      setLastTap(now);
+    }
+  };
+
   const renderMessage = ({ item }: { item: Message }) => {
     const isOwnMessage = item.sender_id === user?.id;
     const isOffer = item.is_offer && item.offer_item_id;
     const senderName = isOwnMessage ? 'You' : (otherUser?.username || 'Unknown');
 
     const messageContent = (
-      <View style={[
-        styles.messageContainer,
-        isOwnMessage ? styles.ownMessage : styles.otherMessage,
-        isOffer && styles.offerMessage
-      ]}>
+      <View style={isOwnMessage ? styles.ownMessageWrapper : styles.otherMessageWrapper}>
+        {/* Timestamp above message */}
+        <Text style={[
+          styles.messageTime,
+          isOwnMessage ? styles.ownMessageTime : styles.otherMessageTime
+        ]}>
+          {new Date(item.created_at).toLocaleTimeString()}
+        </Text>
+        
+        <TouchableOpacity
+          style={[
+            styles.messageContainer,
+            isOwnMessage ? styles.ownMessage : styles.otherMessage,
+            isOffer && styles.offerMessage
+          ]}
+          onPress={() => handleDoubleTap(item.id)}
+          activeOpacity={0.7}
+        >
         {item.image_url && (
           <TouchableOpacity 
             style={styles.messageImageContainer}
             onPress={() => {
-              // TODO: Add image viewer
-              Alert.alert('Image', 'Tap to view full size');
+              if (item.image_url) {
+                setSelectedImageUrl(item.image_url);
+                setShowImageViewer(true);
+              }
             }}
           >
             <Image 
@@ -518,6 +570,25 @@ export default function ChatScreen() {
         ]}>
           {item.content}
         </Text>
+        )}
+        
+        {/* File Display for non-image files */}
+        {(item as any).file_url && !item.image_url && !item.content?.includes('🎤') && (
+          <FileDisplay
+            fileUrl={(item as any).file_url}
+            fileName={(item as any).file_name || 'Unknown file'}
+            fileType={(item as any).file_type || 'unknown'}
+            fileSize={(item as any).file_size}
+            onPress={() => {
+              setSelectedFile({
+                url: (item as any).file_url,
+                name: (item as any).file_name || 'Unknown file',
+                type: (item as any).file_type || 'unknown',
+                size: (item as any).file_size
+              });
+              setShowFileViewer(true);
+            }}
+          />
         )}
         
         {/* Barter Offer Actions - Only show for received offers */}
@@ -582,11 +653,9 @@ export default function ChatScreen() {
           </View>
         )}
         
-        <Text style={styles.messageTime}>
-          {new Date(item.created_at).toLocaleTimeString()}
-        </Text>
+        {/* Timestamp moved to be positioned above message bubble */}
         
-        {/* Message Reactions */}
+        {/* Message Reactions - Only show if they exist */}
         <MessageReactions
           messageId={item.id}
           currentUserId={user?.id || ''}
@@ -599,13 +668,14 @@ export default function ChatScreen() {
         />
         
         {/* Voice Message Player */}
-        {item.file_url && item.content?.includes('🎤') && (
+        {(item as any).file_url && item.content?.includes('🎤') && (
           <VoiceMessagePlayer
-            audioUrl={item.file_url}
+            audioUrl={(item as any).file_url}
             duration={0} // TODO: Store duration in DB
             isOwnMessage={isOwnMessage}
           />
         )}
+        </TouchableOpacity>
       </View>
     );
 
@@ -782,26 +852,10 @@ export default function ChatScreen() {
       <View style={styles.inputContainer}>
           <TouchableOpacity 
             style={styles.attachButton}
-            onPress={showImagePicker}
+            onPress={() => setShowAttachmentMenu(true)}
             disabled={uploading}
           >
-            <Text style={styles.attachButtonText}>📷</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.attachButton}
-            onPress={() => setShowFileAttachment(true)}
-            disabled={uploading}
-          >
-            <Text style={styles.attachButtonText}>📎</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.attachButton}
-            onPress={() => setShowVoiceMessage(true)}
-            disabled={uploading}
-          >
-            <Text style={styles.attachButtonText}>🎤</Text>
+            <Text style={styles.attachButtonText}>+</Text>
           </TouchableOpacity>
           
         <TextInput
@@ -842,6 +896,110 @@ export default function ChatScreen() {
           isVisible={showVoiceMessage}
         />
       )}
+
+      {/* Attachment Menu Modal */}
+      <AttachmentMenu
+        visible={showAttachmentMenu}
+        onClose={() => setShowAttachmentMenu(false)}
+        onCamera={showImagePicker}
+        onDocument={() => setShowFileAttachment(true)}
+        onVoice={() => setShowVoiceMessage(true)}
+      />
+
+
+      {/* Reaction Picker Modal */}
+      {showReactionPicker && (
+        <MessageReactions
+          messageId={showReactionPicker}
+          currentUserId={user?.id || ''}
+          onReactionChange={() => setShowReactionPicker(null)}
+          showPicker={true}
+        />
+      )}
+
+      {/* Image Viewer Modal */}
+      <ImageViewer
+        visible={showImageViewer}
+        imageUrl={selectedImageUrl}
+        onClose={() => setShowImageViewer(false)}
+      />
+
+      {/* File Viewer Modal */}
+      {selectedFile && (
+        <FileViewer
+          visible={showFileViewer}
+          fileUrl={selectedFile.url}
+          fileName={selectedFile.name}
+          fileType={selectedFile.type}
+          fileSize={selectedFile.size}
+          onClose={() => {
+            setShowFileViewer(false);
+            setSelectedFile(null);
+          }}
+        />
+      )}
+
+      {/* Message Threading Modal */}
+      <MessageThreading
+        currentUserId={user?.id || ''}
+        otherUserId={otherUserId}
+        itemId={itemId}
+        conversationType={itemId ? 'item' : 'direct_message'}
+        selectedThreadId={selectedThreadId}
+        onThreadSelect={setSelectedThreadId}
+        onThreadCreated={(threadId, threadTitle) => {
+          setSelectedThreadId(threadId);
+          setShowCreateThread(false);
+        }}
+      />
+
+      {/* Create Thread Modal */}
+      <CreateThreadFromMessage
+        visible={showCreateThread}
+        messageId="sample-message-id" // This would be the actual message ID
+        messageContent="Sample message content"
+        currentUserId={user?.id || ''}
+        otherUserId={otherUserId}
+        itemId={itemId}
+        conversationType={itemId ? 'item' : 'direct_message'}
+        onThreadCreated={(threadId, threadTitle) => {
+          setSelectedThreadId(threadId);
+          setShowCreateThread(false);
+        }}
+        onClose={() => setShowCreateThread(false)}
+      />
+
+      {/* Offer Templates Modal */}
+      <OfferTemplates
+        visible={showOfferTemplates}
+        onTemplateSelect={(template) => {
+          setNewMessage(template.content);
+          setShowOfferTemplates(false);
+        }}
+        onClose={() => setShowOfferTemplates(false)}
+      />
+
+      {/* Bulk Offers Modal */}
+      <BulkOffers
+        visible={showBulkOffers}
+        currentUserId={user?.id || ''}
+        otherUserId={otherUserId}
+        onClose={() => setShowBulkOffers(false)}
+        onOffersSent={() => {
+          // Refresh messages or show success message
+        }}
+      />
+
+      {/* Counter Offers Modal */}
+      <CounterOffers
+        visible={!!showCounterOffers}
+        messageId={showCounterOffers}
+        currentUserId={user?.id || ''}
+        onClose={() => setShowCounterOffers(null)}
+        onOfferResponse={() => {
+          // Refresh messages or show success message
+        }}
+      />
     </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -864,7 +1022,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
-    minHeight: 60,
+    minHeight: 70,
   },
   backButtonContainer: {
     padding: 8,
@@ -883,15 +1041,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   headerAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     marginRight: 10,
   },
   headerAvatarPlaceholder: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#E2E8F0',
     justifyContent: 'center',
     alignItems: 'center',
@@ -906,8 +1064,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   title: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 19,
+    fontWeight: '600',
     color: '#1E293B',
     textAlign: 'center',
   },
@@ -929,17 +1087,32 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   messagesContainer: {
-    padding: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 20,
     flexGrow: 1,
   },
+  messageWrapper: {
+    marginBottom: 20,
+    maxWidth: '85%',
+  },
+  ownMessageWrapper: {
+    marginBottom: 20,
+    maxWidth: '85%',
+    alignSelf: 'flex-end',
+    marginLeft: 'auto',
+  },
+  otherMessageWrapper: {
+    marginBottom: 20,
+    maxWidth: '85%',
+    alignSelf: 'flex-start',
+  },
   messageContainer: {
-    marginBottom: 12,
-    maxWidth: '80%',
+    // Remove marginBottom as it's now on wrapper
   },
   ownMessage: {
     alignSelf: 'flex-end',
     backgroundColor: '#3B82F6',
-    borderRadius: 18,
+    borderRadius: 20,
     padding: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -950,7 +1123,7 @@ const styles = StyleSheet.create({
   otherMessage: {
     alignSelf: 'flex-start',
     backgroundColor: '#FFFFFF',
-    borderRadius: 18,
+    borderRadius: 20,
     padding: 12,
     borderWidth: 1,
     borderColor: '#E2E8F0',
@@ -967,16 +1140,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF3C7',
   },
   messageImageContainer: {
-    marginBottom: 8,
+    marginBottom: 6,
   },
   messageImage: {
-    width: 200,
-    height: 150,
+    width: 240,
+    height: 180,
     borderRadius: 12,
   },
   messageText: {
-    fontSize: 16,
-    lineHeight: 20,
+    fontSize: 17,
+    lineHeight: 24,
     marginBottom: 4,
   },
   ownMessageText: {
@@ -986,9 +1159,15 @@ const styles = StyleSheet.create({
     color: '#1E293B',
   },
   messageTime: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.7)',
+    fontSize: 10,
+    color: '#9CA3AF',
+    marginBottom: 4,
+  },
+  ownMessageTime: {
     textAlign: 'right',
+  },
+  otherMessageTime: {
+    textAlign: 'left',
   },
   offerMessageText: {
     color: '#92400E',
@@ -997,7 +1176,7 @@ const styles = StyleSheet.create({
   offerActions: {
     flexDirection: 'row',
     gap: 8,
-    marginTop: 12,
+    marginTop: 8,
   },
   offerButton: {
     flex: 1,
@@ -1041,11 +1220,11 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    padding: 16,
+    padding: 20,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
-    gap: 12,
+    gap: 8,
   },
   attachButton: {
     padding: 12,
@@ -1065,7 +1244,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 16,
     maxHeight: 100,
-    minHeight: 44,
+    minHeight: 48,
     borderWidth: 1,
     borderColor: 'transparent',
   },

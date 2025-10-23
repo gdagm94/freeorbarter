@@ -3,7 +3,7 @@ import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { Message } from '../types';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Check, CheckCheck, Image as ImageIcon, Send } from 'lucide-react';
+import { ArrowRight, Image as ImageIcon, Send } from 'lucide-react';
 import pusherClient from '../lib/pusher';
 import { debounce } from 'throttle-debounce';
 import { MessageReactions } from './MessageReactions';
@@ -18,6 +18,12 @@ import { CreateThreadFromMessage } from './CreateThreadFromMessage';
 import { OfferTemplates } from './OfferTemplates';
 import { CounterOffers } from './CounterOffers';
 import { BulkOffers } from './BulkOffers';
+import { ImageViewer } from './ImageViewer';
+import { FileViewer } from './FileViewer';
+import { SwipeToReply } from './SwipeToReply';
+import { AttachmentMenu } from './AttachmentMenu';
+import { MessageContextMenu } from './MessageContextMenu';
+import { hapticFeedback } from '../utils/hapticFeedback';
 
 interface MessageListProps {
   itemId: string | null; // Made nullable for unified conversations
@@ -45,6 +51,11 @@ interface MessageWithOfferItem extends Message {
     images: string[];
   };
   read_at?: string | null;
+  file_url?: string;
+  file_name?: string;
+  file_type?: string;
+  file_size?: number;
+  thread_id?: string;
 }
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -70,6 +81,16 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
   const [showOfferTemplates, setShowOfferTemplates] = useState(false);
   const [showBulkOffers, setShowBulkOffers] = useState(false);
   const [showCounterOffers, setShowCounterOffers] = useState<string | null>(null);
+  const [showImageViewer, setShowImageViewer] = useState(false);
+  const [selectedImageUrl, setSelectedImageUrl] = useState('');
+  const [showFileViewer, setShowFileViewer] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<{url: string; name: string; type: string; size?: number} | null>(null);
+  const [lastClickTime, setLastClickTime] = useState(0);
+  const [showReactionPicker, setShowReactionPicker] = useState<string | null>(null);
+  const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
+  const [showContextMenu, setShowContextMenu] = useState(false);
+  const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
+  const [contextMenuMessageId, setContextMenuMessageId] = useState<string | null>(null);
 
   // Message drafts hook
   const { saveDraft, clearDrafts } = useMessageDrafts(currentUserId, otherUserId, conversationType, itemId);
@@ -604,7 +625,7 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
     setNewMessage(draft.content);
   };
 
-  const handleFileUpload = async (fileUrl: string, fileName: string, fileType: string) => {
+  const handleFileUpload = async (fileUrl: string, fileName: string) => {
     try {
       setSending(true);
       setIsTyping(false);
@@ -614,6 +635,8 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
         {
           content: `📎 ${fileName}`,
           file_url: fileUrl,
+          file_name: fileName,
+          file_type: 'application/octet-stream',
           item_id: conversationType === 'unified' ? null : itemId,
           sender_id: currentUserId,
           receiver_id: otherUserId,
@@ -768,6 +791,59 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
     }
   };
 
+  // Handle double-click for reactions
+  const handleMessageDoubleClick = (messageId: string) => {
+    const now = Date.now();
+    const DOUBLE_CLICK_DELAY = 300;
+    
+    if (lastClickTime && (now - lastClickTime) < DOUBLE_CLICK_DELAY) {
+      // Double click detected - show emoji picker
+      setShowReactionPicker(messageId);
+      hapticFeedback.medium();
+    } else {
+      setLastClickTime(now);
+    }
+  };
+
+  // Handle right-click context menu
+  const handleMessageRightClick = (e: React.MouseEvent, messageId: string) => {
+    e.preventDefault();
+    setContextMenuPosition({ x: e.clientX, y: e.clientY });
+    setContextMenuMessageId(messageId);
+    setShowContextMenu(true);
+    hapticFeedback.light();
+  };
+
+  // Handle reply to message
+  const handleReplyToMessage = (_messageId: string, content: string, senderName: string) => {
+    // For now, just show a notification or add to input field
+    setNewMessage(`Replying to ${senderName}: ${content.substring(0, 50)}... `);
+  };
+
+  // Handle copy message
+  const handleCopyMessage = (content: string) => {
+    navigator.clipboard.writeText(content);
+    hapticFeedback.success();
+  };
+
+  // Handle delete message
+  const handleDeleteMessage = async (messageId: string) => {
+    try {
+      const { error } = await supabase
+        .from('messages')
+        .update({ archived: true })
+        .eq('id', messageId);
+
+      if (error) throw error;
+
+      setMessages(prev => prev.filter(msg => msg.id !== messageId));
+      hapticFeedback.success();
+    } catch (err) {
+      console.error('Error deleting message:', err);
+      hapticFeedback.error();
+    }
+  };
+
   return (
     <div className="flex h-[500px]">
       {/* Threading Sidebar */}
@@ -850,13 +926,21 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
                   highlightedMessageId === message.id ? 'bg-yellow-100 rounded-lg p-2' : ''
                 }`}
               >
-                <div
-                  className={`max-w-[80%] rounded-lg px-4 py-2 ${
-                    message.sender_id === currentUserId
-                      ? 'bg-indigo-600 text-white'
-                      : 'bg-gray-100'
-                  }`}
+                <SwipeToReply
+                  messageId={message.id}
+                  messageContent={message.content}
+                  senderName={message.sender?.username || 'Unknown'}
+                  onReply={handleReplyToMessage}
                 >
+                  <div
+                    className={`max-w-[80%] rounded-lg px-4 py-2 cursor-pointer ${
+                      message.sender_id === currentUserId
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-gray-100'
+                    }`}
+                    onDoubleClick={() => handleMessageDoubleClick(message.id)}
+                    onContextMenu={(e) => handleMessageRightClick(e, message.id)}
+                  >
                   {message.sender_id !== currentUserId && message.sender && (
                     <div className="flex items-center mb-1">
                       <div className="w-5 h-5 rounded-full bg-gray-300 overflow-hidden mr-2">
@@ -877,11 +961,16 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
                   {/* Message Image */}
                   {message.image_url && (
                     <div className="mt-2">
-                      <img 
+                        <img 
                         src={message.image_url} 
                         alt="Message attachment"
                         className="max-w-xs h-auto rounded-lg cursor-pointer border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
-                        onClick={() => window.open(message.image_url, '_blank')}
+                        onClick={() => {
+                          if (message.image_url) {
+                            setSelectedImageUrl(message.image_url);
+                            setShowImageViewer(true);
+                          }
+                        }}
                         onError={(e) => {
                           console.error('Image failed to load:', message.image_url);
                           e.currentTarget.style.display = 'none';
@@ -897,6 +986,15 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
                         fileUrl={message.file_url}
                         fileName={message.content?.replace('📎 ', '') || 'Unknown file'}
                         fileType="application/octet-stream" // We'll need to store this in the database
+                        onPress={() => {
+                          setSelectedFile({
+                            url: message.file_url!,
+                            name: message.content?.replace('📎 ', '') || 'Unknown file',
+                            type: "application/octet-stream",
+                            size: undefined
+                          });
+                          setShowFileViewer(true);
+                        }}
                       />
                     </div>
                   )}
@@ -1178,11 +1276,17 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
                     </p>
                     
                     <ReadReceipt
-                      message={message}
+                      message={{
+                        read: message.read,
+                        read_at: message.read_at || null,
+                        created_at: message.created_at,
+                        sender_id: message.sender_id
+                      }}
                       currentUserId={currentUserId}
                     />
                   </div>
-                </div>
+                  </div>
+                </SwipeToReply>
               </div>
             ))}
             {otherUserTyping && (
@@ -1211,30 +1315,12 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
           />
           <button
             type="button"
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => setShowAttachmentMenu(true)}
             disabled={uploading}
             className="bg-gray-100 text-gray-600 px-3 py-2 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-            title="Attach image"
+            title="Attach"
           >
             <ImageIcon className="w-5 h-5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowFileAttachment(true)}
-            disabled={uploading}
-            className="bg-gray-100 text-gray-600 px-3 py-2 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-            title="Attach file"
-          >
-            📎
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowVoiceMessage(true)}
-            disabled={uploading}
-            className="bg-gray-100 text-gray-600 px-3 py-2 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-            title="Voice message"
-          >
-            🎤
           </button>
           <input
             type="text"
@@ -1291,7 +1377,7 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
           otherUserId={otherUserId}
           itemId={itemId}
           conversationType={conversationType}
-          onThreadCreated={(threadId, threadTitle) => {
+          onThreadCreated={(threadId, _threadTitle) => {
             setSelectedThreadId(threadId);
             setShowCreateThread(false);
           }}
@@ -1351,6 +1437,94 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
           </div>
         </div>
       )}
+
+      {/* Image Viewer Modal */}
+      <ImageViewer
+        visible={showImageViewer}
+        imageUrl={selectedImageUrl}
+        onClose={() => setShowImageViewer(false)}
+      />
+
+      {/* File Viewer Modal */}
+      {selectedFile && (
+        <FileViewer
+          visible={showFileViewer}
+          fileUrl={selectedFile.url}
+          fileName={selectedFile.name}
+          fileType={selectedFile.type}
+          fileSize={selectedFile.size}
+          onClose={() => {
+            setShowFileViewer(false);
+            setSelectedFile(null);
+          }}
+        />
+      )}
+
+      {/* Reaction Picker Modal */}
+      {showReactionPicker && (
+        <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white rounded-lg p-6 max-w-sm w-full mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Add Reaction</h3>
+              <button
+                onClick={() => setShowReactionPicker(null)}
+                className="p-1 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+              >
+                ✕
+              </button>
+            </div>
+            <MessageReactions
+              messageId={showReactionPicker}
+              currentUserId={currentUserId}
+              onReactionChange={() => setShowReactionPicker(null)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Attachment Menu Modal */}
+      <AttachmentMenu
+        visible={showAttachmentMenu}
+        onClose={() => setShowAttachmentMenu(false)}
+        onCamera={() => fileInputRef.current?.click()}
+        onDocument={() => setShowFileAttachment(true)}
+        onVoice={() => setShowVoiceMessage(true)}
+      />
+
+      {/* Context Menu */}
+      <MessageContextMenu
+        visible={showContextMenu}
+        x={contextMenuPosition.x}
+        y={contextMenuPosition.y}
+        onClose={() => setShowContextMenu(false)}
+        onReact={() => {
+          if (contextMenuMessageId) {
+            setShowReactionPicker(contextMenuMessageId);
+          }
+        }}
+        onReply={() => {
+          if (contextMenuMessageId) {
+            const message = messages.find(m => m.id === contextMenuMessageId);
+            if (message) {
+              handleReplyToMessage(message.id, message.content, message.sender?.username || 'Unknown');
+            }
+          }
+        }}
+        onCopy={() => {
+          if (contextMenuMessageId) {
+            const message = messages.find(m => m.id === contextMenuMessageId);
+            if (message) {
+              handleCopyMessage(message.content);
+            }
+          }
+        }}
+        onDelete={() => {
+          if (contextMenuMessageId) {
+            handleDeleteMessage(contextMenuMessageId);
+          }
+        }}
+        isOwnMessage={contextMenuMessageId ? messages.find(m => m.id === contextMenuMessageId)?.sender_id === currentUserId : false}
+      />
     </div>
   );
 }
