@@ -19,6 +19,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { Message } from '../types';
 import * as Haptics from 'expo-haptics';
+import SwipeToReply from '../components/SwipeToReply';
 
 export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -27,6 +28,7 @@ export default function ChatScreen() {
   const [uploading, setUploading] = useState(false);
   const [offerActionLoading, setOfferActionLoading] = useState<string | null>(null);
   const [otherUser, setOtherUser] = useState<{username: string; avatar_url: string | null} | null>(null);
+  const [replyingTo, setReplyingTo] = useState<{id: string; content: string; senderName: string} | null>(null);
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { user } = useAuth();
@@ -323,11 +325,54 @@ export default function ChatScreen() {
     }
   };
 
+  const handleReply = (messageId: string, content: string, senderName: string) => {
+    setReplyingTo({ id: messageId, content, senderName });
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const cancelReply = () => {
+    setReplyingTo(null);
+  };
+
+  const sendReply = async () => {
+    if (!replyingTo || !newMessage.trim()) return;
+
+    try {
+      const replyContent = `Replying to "${replyingTo.content}": ${newMessage.trim()}`;
+      
+      const { error } = await supabase
+        .from('messages')
+        .insert([{
+          sender_id: user!.id,
+          receiver_id: otherUserId,
+          content: replyContent,
+          item_id: itemId || null,
+          read: false,
+          is_offer: false,
+        }]);
+
+      if (error) {
+        console.error('Error sending reply:', error);
+        Alert.alert('Error', 'Failed to send reply');
+        return;
+      }
+
+      setNewMessage('');
+      setReplyingTo(null);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      fetchMessages();
+    } catch (error) {
+      console.error('Error in sendReply:', error);
+      Alert.alert('Error', 'Failed to send reply');
+    }
+  };
+
   const renderMessage = ({ item }: { item: Message }) => {
     const isOwnMessage = item.sender_id === user?.id;
     const isOffer = item.is_offer && item.offer_item_id;
+    const senderName = isOwnMessage ? 'You' : (otherUser?.username || 'Unknown');
 
-    return (
+    const messageContent = (
       <View style={[
         styles.messageContainer,
         isOwnMessage ? styles.ownMessage : styles.otherMessage,
@@ -425,6 +470,22 @@ export default function ChatScreen() {
         </Text>
       </View>
     );
+
+    // Only allow swiping to reply for messages from other users
+    if (!isOwnMessage) {
+      return (
+        <SwipeToReply
+          messageId={item.id}
+          messageContent={item.content || ''}
+          senderName={senderName}
+          onReply={handleReply}
+        >
+          {messageContent}
+        </SwipeToReply>
+      );
+    }
+
+    return messageContent;
   };
 
   if (loading) {
@@ -535,6 +596,21 @@ export default function ChatScreen() {
         }
       />
 
+      {/* Reply Context */}
+      {replyingTo && (
+        <View style={styles.replyContext}>
+          <View style={styles.replyContextContent}>
+            <Text style={styles.replyContextLabel}>Replying to {replyingTo.senderName}</Text>
+            <Text style={styles.replyContextMessage} numberOfLines={1}>
+              {replyingTo.content}
+            </Text>
+          </View>
+          <TouchableOpacity onPress={cancelReply} style={styles.cancelReplyButton}>
+            <Text style={styles.cancelReplyText}>✕</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <View style={styles.inputContainer}>
           <TouchableOpacity 
             style={styles.attachButton}
@@ -548,14 +624,14 @@ export default function ChatScreen() {
           style={styles.textInput}
           value={newMessage}
           onChangeText={setNewMessage}
-          placeholder="Type a message..."
+          placeholder={replyingTo ? "Type your reply..." : "Type a message..."}
           multiline
             maxLength={1000}
         />
           
         <TouchableOpacity 
             style={[styles.sendButton, (!newMessage.trim() && !uploading) && styles.sendButtonDisabled]}
-            onPress={() => sendMessage()}
+            onPress={replyingTo ? sendReply : () => sendMessage()}
             disabled={!newMessage.trim() || uploading}
         >
             <Text style={styles.sendButtonText}>
@@ -801,6 +877,38 @@ const styles = StyleSheet.create({
   sendButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
+    fontWeight: '600',
+  },
+  replyContext: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  replyContextContent: {
+    flex: 1,
+  },
+  replyContextLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#3B82F6',
+    marginBottom: 2,
+  },
+  replyContextMessage: {
+    fontSize: 14,
+    color: '#64748B',
+  },
+  cancelReplyButton: {
+    padding: 8,
+    borderRadius: 16,
+    backgroundColor: '#E2E8F0',
+  },
+  cancelReplyText: {
+    fontSize: 14,
+    color: '#64748B',
     fontWeight: '600',
   },
 });

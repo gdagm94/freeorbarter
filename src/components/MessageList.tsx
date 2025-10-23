@@ -6,6 +6,18 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, Check, CheckCheck, Image as ImageIcon, Send } from 'lucide-react';
 import pusherClient from '../lib/pusher';
 import { debounce } from 'throttle-debounce';
+import { MessageReactions } from './MessageReactions';
+import { ReadReceipt } from './ReadReceipt';
+import { MessageSearch } from './MessageSearch';
+import { MessageDrafts, useMessageDrafts } from './MessageDrafts';
+import { FileAttachment, FileDisplay } from './FileAttachment';
+import { VoiceMessage } from './VoiceMessage';
+import { VoiceMessagePlayer } from './VoiceMessagePlayer';
+import { MessageThreading } from './MessageThreading';
+import { CreateThreadFromMessage } from './CreateThreadFromMessage';
+import { OfferTemplates } from './OfferTemplates';
+import { CounterOffers } from './CounterOffers';
+import { BulkOffers } from './BulkOffers';
 
 interface MessageListProps {
   itemId: string | null; // Made nullable for unified conversations
@@ -32,6 +44,7 @@ interface MessageWithOfferItem extends Message {
     title: string;
     images: string[];
   };
+  read_at?: string | null;
 }
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -49,6 +62,17 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  const [showFileAttachment, setShowFileAttachment] = useState(false);
+  const [showVoiceMessage, setShowVoiceMessage] = useState(false);
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const [showCreateThread, setShowCreateThread] = useState(false);
+  const [showOfferTemplates, setShowOfferTemplates] = useState(false);
+  const [showBulkOffers, setShowBulkOffers] = useState(false);
+  const [showCounterOffers, setShowCounterOffers] = useState<string | null>(null);
+
+  // Message drafts hook
+  const { saveDraft, clearDrafts } = useMessageDrafts(currentUserId, otherUserId, conversationType, itemId);
 
   // Debounced function to emit typing status
   const emitTypingStatus = debounce(1000, async (isTyping: boolean) => {
@@ -202,6 +226,13 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
         }
         // For unified conversations, we don't filter by item_id - we get all messages between these users
 
+        // Apply thread filter if a thread is selected
+        if (selectedThreadId) {
+          query = query.eq('thread_id', selectedThreadId);
+        } else {
+          query = query.is('thread_id', null);
+        }
+
         const { data, error } = await query;
 
         if (error) {
@@ -339,7 +370,14 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
   }, [messages, hasMarkedAsRead, loading]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setNewMessage(e.target.value);
+    const value = e.target.value;
+    setNewMessage(value);
+    
+    // Save draft as user types (debounced)
+    if (value.trim()) {
+      saveDraft(value);
+    }
+    
     if (!isTyping) {
       setIsTyping(true);
       emitTypingStatus(true);
@@ -508,6 +546,9 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
 
       if (data) {
         setMessages(prev => [...prev, data]);
+        
+        // Clear drafts after successful send
+        clearDrafts();
 
         // Trigger Pusher event for new message
         const channelName = conversationType === 'unified' 
@@ -546,8 +587,241 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Handle search result click
+  const handleSearchResultClick = (messageId: string) => {
+    setHighlightedMessageId(messageId);
+    // Scroll to the message
+    const messageElement = document.getElementById(`message-${messageId}`);
+    if (messageElement) {
+      messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Remove highlight after 3 seconds
+      setTimeout(() => setHighlightedMessageId(null), 3000);
+    }
+  };
+
+  // Handle draft selection
+  const handleDraftSelect = (draft: { content: string }) => {
+    setNewMessage(draft.content);
+  };
+
+  const handleFileUpload = async (fileUrl: string, fileName: string, fileType: string) => {
+    try {
+      setSending(true);
+      setIsTyping(false);
+      emitTypingStatus(false);
+
+      const { data, error } = await supabase.from('messages').insert([
+        {
+          content: `📎 ${fileName}`,
+          file_url: fileUrl,
+          item_id: conversationType === 'unified' ? null : itemId,
+          sender_id: currentUserId,
+          receiver_id: otherUserId,
+          read: false,
+          is_offer: false
+        },
+      ]).select(`
+        *,
+        offer_item:offer_item_id (
+          id,
+          title,
+          images,
+          condition,
+          description
+        ),
+        sender:sender_id (
+          username,
+          avatar_url
+        ),
+        items:item_id (
+          id,
+          title,
+          images
+        )
+      `).single();
+
+      if (error) {
+        console.error('Error sending file:', error);
+        return;
+      }
+
+      if (data) {
+        setMessages(prev => [...prev, data]);
+        
+        // Clear drafts after successful send
+        clearDrafts();
+
+        // Trigger Pusher event for new message
+        const channelName = conversationType === 'unified' 
+          ? `private-user-${[currentUserId, otherUserId].sort().join('-')}`
+          : conversationType === 'direct_message' 
+          ? `private-dm-${[currentUserId, otherUserId].sort().join('-')}`
+          : `private-messages-${itemId}`;
+
+        await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pusher-trigger`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            channel: channelName,
+            event: 'new-message',
+            data: { messageId: data.id }
+          })
+        });
+      }
+    } catch (err) {
+      console.error('Error sending file:', err);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleVoiceMessageUpload = async (audioBlob: Blob, duration: number) => {
+    try {
+      setSending(true);
+      setIsTyping(false);
+      emitTypingStatus(false);
+
+      // Upload audio file
+      const fileExt = 'webm';
+      const fileName = `voice-${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('message-files')
+        .upload(fileName, audioBlob);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('message-files')
+        .getPublicUrl(fileName);
+
+      // Send message with voice attachment
+      const { data, error } = await supabase.from('messages').insert([
+        {
+          content: `🎤 Voice message (${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')})`,
+          file_url: publicUrl,
+          item_id: conversationType === 'unified' ? null : itemId,
+          sender_id: currentUserId,
+          receiver_id: otherUserId,
+          read: false,
+          is_offer: false
+        },
+      ]).select(`
+        *,
+        offer_item:offer_item_id (
+          id,
+          title,
+          images,
+          condition,
+          description
+        ),
+        sender:sender_id (
+          username,
+          avatar_url
+        ),
+        items:item_id (
+          id,
+          title,
+          images
+        )
+      `).single();
+
+      if (error) {
+        console.error('Error sending voice message:', error);
+        return;
+      }
+
+      if (data) {
+        setMessages(prev => [...prev, data]);
+        
+        // Clear drafts after successful send
+        clearDrafts();
+
+        // Trigger Pusher event for new message
+        const channelName = conversationType === 'unified' 
+          ? `private-user-${[currentUserId, otherUserId].sort().join('-')}`
+          : conversationType === 'direct_message' 
+          ? `private-dm-${[currentUserId, otherUserId].sort().join('-')}`
+          : `private-messages-${itemId}`;
+
+        await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pusher-trigger`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            channel: channelName,
+            event: 'new-message',
+            data: { messageId: data.id }
+          })
+        });
+      }
+    } catch (err) {
+      console.error('Error sending voice message:', err);
+    } finally {
+      setSending(false);
+      setShowVoiceMessage(false);
+    }
+  };
+
   return (
-    <div className="flex flex-col h-[500px]">
+    <div className="flex h-[500px]">
+      {/* Threading Sidebar */}
+      <MessageThreading
+        currentUserId={currentUserId}
+        otherUserId={otherUserId}
+        itemId={itemId}
+        conversationType={conversationType}
+        selectedThreadId={selectedThreadId}
+        onThreadSelect={setSelectedThreadId}
+        onThreadCreate={(title) => {
+          // Thread created, refresh messages
+          console.log('Thread created:', title);
+        }}
+      />
+
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col">
+        {/* Header with search and drafts */}
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white">
+          <div className="flex items-center gap-2">
+            <MessageSearch
+              currentUserId={currentUserId}
+              otherUserId={otherUserId}
+              conversationType={conversationType}
+              itemId={itemId}
+              onResultClick={handleSearchResultClick}
+            />
+            <MessageDrafts
+              currentUserId={currentUserId}
+              otherUserId={otherUserId}
+              conversationType={conversationType}
+              itemId={itemId}
+              onDraftSelect={handleDraftSelect}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowOfferTemplates(true)}
+              className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-gray-800 transition-colors"
+              title="Offer templates"
+            >
+              📝
+            </button>
+            <button
+              onClick={() => setShowBulkOffers(true)}
+              className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-gray-800 transition-colors"
+              title="Bulk offers"
+            >
+              📦
+            </button>
+          </div>
+        </div>
+      
       <div 
         ref={messagesContainerRef} 
         className="flex-1 overflow-y-auto p-4 space-y-4"
@@ -569,8 +843,11 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
             {messages.map((message) => (
               <div
                 key={message.id}
-                className={`flex ${
+                id={`message-${message.id}`}
+                className={`flex group ${
                   message.sender_id === currentUserId ? 'justify-end' : 'justify-start'
+                } ${
+                  highlightedMessageId === message.id ? 'bg-yellow-100 rounded-lg p-2' : ''
                 }`}
               >
                 <div
@@ -612,10 +889,56 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
                       />
                     </div>
                   )}
+
+                  {/* File Attachment */}
+                  {message.file_url && !message.image_url && !message.content?.includes('🎤') && (
+                    <div className="mt-2">
+                      <FileDisplay
+                        fileUrl={message.file_url}
+                        fileName={message.content?.replace('📎 ', '') || 'Unknown file'}
+                        fileType="application/octet-stream" // We'll need to store this in the database
+                      />
+                    </div>
+                  )}
+
+                  {/* Voice Message */}
+                  {message.file_url && message.content?.includes('🎤') && (
+                    <div className="mt-2">
+                      <VoiceMessagePlayer
+                        audioUrl={message.file_url}
+                        duration={0} // We'll need to store duration in the database
+                        isOwnMessage={message.sender_id === currentUserId}
+                      />
+                    </div>
+                  )}
                   
                   {/* Message Content */}
                   {message.content && (
                     <p>{message.content}</p>
+                  )}
+
+                  {/* Thread Creation Button */}
+                  {message.sender_id !== currentUserId && !message.thread_id && (
+                    <div className="mt-2">
+                      <button
+                        onClick={() => setShowCreateThread(true)}
+                        className="text-xs text-indigo-600 hover:text-indigo-700 underline"
+                      >
+                        Create thread from this message
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Counter Offers Button for Offer Messages */}
+                  {message.is_offer && message.sender_id === currentUserId && (
+                    <div className="mt-2">
+                      <button
+                        onClick={() => setShowCounterOffers(message.id)}
+                        className="text-xs text-indigo-600 hover:text-indigo-700 underline"
+                      >
+                        View counter offers
+                      </button>
+                    </div>
                   )}
                   
                   {/* Show item context for unified conversations */}
@@ -843,20 +1166,21 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
                     </div>
                   )}
                   
+                  {/* Message Reactions */}
+                  <MessageReactions
+                    messageId={message.id}
+                    currentUserId={currentUserId}
+                  />
+                  
                   <div className="flex items-center justify-between mt-1">
                     <p className="text-xs opacity-70">
                       {format(new Date(message.created_at), 'MMM d, h:mm a')}
                     </p>
                     
-                    {message.sender_id === currentUserId && (
-                      <span className="ml-2">
-                        {message.read ? (
-                          <CheckCheck className="w-3 h-3 text-indigo-200" />
-                        ) : (
-                          <Check className="w-3 h-3 text-indigo-200" />
-                        )}
-                      </span>
-                    )}
+                    <ReadReceipt
+                      message={message}
+                      currentUserId={currentUserId}
+                    />
                   </div>
                 </div>
               </div>
@@ -894,6 +1218,24 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
           >
             <ImageIcon className="w-5 h-5" />
           </button>
+          <button
+            type="button"
+            onClick={() => setShowFileAttachment(true)}
+            disabled={uploading}
+            className="bg-gray-100 text-gray-600 px-3 py-2 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+            title="Attach file"
+          >
+            📎
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowVoiceMessage(true)}
+            disabled={uploading}
+            className="bg-gray-100 text-gray-600 px-3 py-2 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+            title="Voice message"
+          >
+            🎤
+          </button>
           <input
             type="text"
             value={newMessage}
@@ -919,6 +1261,96 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
           </button>
         </div>
       </form>
+      </div>
+
+      {/* File Attachment Modal */}
+      {showFileAttachment && (
+        <FileAttachment
+          onFileUpload={handleFileUpload}
+          onClose={() => setShowFileAttachment(false)}
+          uploading={uploading}
+          setUploading={setUploading}
+        />
+      )}
+
+      {/* Voice Message Modal */}
+      {showVoiceMessage && (
+        <VoiceMessage
+          onSend={handleVoiceMessageUpload}
+          onCancel={() => setShowVoiceMessage(false)}
+          isVisible={showVoiceMessage}
+        />
+      )}
+
+      {/* Create Thread Modal */}
+      {showCreateThread && (
+        <CreateThreadFromMessage
+          messageId={highlightedMessageId || ''}
+          messageContent="Sample message content"
+          currentUserId={currentUserId}
+          otherUserId={otherUserId}
+          itemId={itemId}
+          conversationType={conversationType}
+          onThreadCreated={(threadId, threadTitle) => {
+            setSelectedThreadId(threadId);
+            setShowCreateThread(false);
+          }}
+          onClose={() => setShowCreateThread(false)}
+        />
+      )}
+
+      {/* Offer Templates Modal */}
+      {showOfferTemplates && (
+        <OfferTemplates
+          currentUserId={currentUserId}
+          onTemplateSelect={(template) => {
+            setNewMessage(template.content);
+            setShowOfferTemplates(false);
+          }}
+          onClose={() => setShowOfferTemplates(false)}
+          isVisible={showOfferTemplates}
+        />
+      )}
+
+      {/* Bulk Offers Modal */}
+      {showBulkOffers && (
+        <BulkOffers
+          currentUserId={currentUserId}
+          targetUserId={otherUserId}
+          onOffersSent={(count) => {
+            console.log(`${count} offers sent`);
+            setShowBulkOffers(false);
+          }}
+          onClose={() => setShowBulkOffers(false)}
+          isVisible={showBulkOffers}
+        />
+      )}
+
+      {/* Counter Offers Modal */}
+      {showCounterOffers && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Counter Offers</h3>
+              <button
+                onClick={() => setShowCounterOffers(null)}
+                className="p-1 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              <CounterOffers
+                currentUserId={currentUserId}
+                offerId={showCounterOffers}
+                onCounterOfferResponse={(counterOfferId, status) => {
+                  console.log(`Counter offer ${counterOfferId} ${status}`);
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
