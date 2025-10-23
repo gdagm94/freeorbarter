@@ -19,7 +19,14 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { Message } from '../types';
 import * as Haptics from 'expo-haptics';
-import SwipeToReply from '../components/SwipeToReply';
+import { SwipeToReply } from '../components/SwipeToReply';
+import { MessageReactions } from '../components/MessageReactions';
+import { ReadReceipt } from '../components/ReadReceipt';
+import { MessageSearch } from '../components/MessageSearch';
+import { MessageDrafts, useMessageDrafts } from '../components/MessageDrafts';
+import { FileAttachment } from '../components/FileAttachment';
+import { VoiceMessage } from '../components/VoiceMessage';
+import { VoiceMessagePlayer } from '../components/VoiceMessagePlayer';
 
 export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -29,11 +36,22 @@ export default function ChatScreen() {
   const [offerActionLoading, setOfferActionLoading] = useState<string | null>(null);
   const [otherUser, setOtherUser] = useState<{username: string; avatar_url: string | null} | null>(null);
   const [replyingTo, setReplyingTo] = useState<{id: string; content: string; senderName: string} | null>(null);
+  const [showFileAttachment, setShowFileAttachment] = useState(false);
+  const [showVoiceMessage, setShowVoiceMessage] = useState(false);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { user } = useAuth();
   const { otherUserId, itemId } = route.params || {};
   const flatListRef = useRef<FlatList>(null);
+  
+  // Message drafts hook
+  const { saveDraft, clearDrafts } = useMessageDrafts(
+    user?.id || '',
+    otherUserId,
+    itemId ? 'item' : 'direct_message',
+    itemId
+  );
 
   useEffect(() => {
     if (!otherUserId || !user) return;
@@ -367,6 +385,105 @@ export default function ChatScreen() {
     }
   };
 
+  // New handler functions for advanced features
+  const handleSearchResultClick = (messageId: string) => {
+    setHighlightedMessageId(messageId);
+    // Scroll to message
+    const messageIndex = messages.findIndex(msg => msg.id === messageId);
+    if (messageIndex !== -1) {
+      flatListRef.current?.scrollToIndex({ index: messageIndex, animated: true });
+    }
+    // Clear highlight after 3 seconds
+    setTimeout(() => setHighlightedMessageId(null), 3000);
+  };
+
+  const handleDraftSelect = (content: string) => {
+    setNewMessage(content);
+  };
+
+  const handleFileUpload = async (fileUrl: string, fileName: string, fileType: string) => {
+    try {
+      const { error } = await supabase
+        .from('messages')
+        .insert([{
+          sender_id: user!.id,
+          receiver_id: otherUserId,
+          content: `📎 ${fileName}`,
+          file_url: fileUrl,
+          item_id: itemId || null,
+          read: false,
+          is_offer: false,
+        }]);
+
+      if (error) {
+        console.error('Error sending file:', error);
+        Alert.alert('Error', 'Failed to send file');
+        return;
+      }
+
+      setShowFileAttachment(false);
+      fetchMessages();
+    } catch (error) {
+      console.error('Error in handleFileUpload:', error);
+      Alert.alert('Error', 'Failed to send file');
+    }
+  };
+
+  const handleVoiceMessageUpload = async (audioBlob: Blob, duration: number) => {
+    try {
+      setUploading(true);
+
+      // Create a unique filename
+      const fileName = `voice_${Date.now()}.m4a`;
+      const filePath = `message-files/${fileName}`;
+
+      // Upload to Supabase Storage
+      const { data, error } = await supabase.storage
+        .from('message-files')
+        .upload(filePath, audioBlob, {
+          contentType: 'audio/m4a',
+        });
+
+      if (error) {
+        console.error('Error uploading voice message:', error);
+        Alert.alert('Error', 'Failed to upload voice message');
+        return;
+      }
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('message-files')
+        .getPublicUrl(filePath);
+
+      // Insert message
+      const { error: messageError } = await supabase
+        .from('messages')
+        .insert([{
+          sender_id: user!.id,
+          receiver_id: otherUserId,
+          content: `🎤 Voice message (${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')})`,
+          file_url: urlData.publicUrl,
+          item_id: itemId || null,
+          read: false,
+          is_offer: false,
+        }]);
+
+      if (messageError) {
+        console.error('Error sending voice message:', messageError);
+        Alert.alert('Error', 'Failed to send voice message');
+        return;
+      }
+
+      setShowVoiceMessage(false);
+      fetchMessages();
+    } catch (error) {
+      console.error('Error in handleVoiceMessageUpload:', error);
+      Alert.alert('Error', 'Failed to send voice message');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const renderMessage = ({ item }: { item: Message }) => {
     const isOwnMessage = item.sender_id === user?.id;
     const isOffer = item.is_offer && item.offer_item_id;
@@ -468,6 +585,27 @@ export default function ChatScreen() {
         <Text style={styles.messageTime}>
           {new Date(item.created_at).toLocaleTimeString()}
         </Text>
+        
+        {/* Message Reactions */}
+        <MessageReactions
+          messageId={item.id}
+          currentUserId={user?.id || ''}
+        />
+        
+        {/* Read Receipt */}
+        <ReadReceipt
+          message={item}
+          currentUserId={user?.id || ''}
+        />
+        
+        {/* Voice Message Player */}
+        {item.file_url && item.content?.includes('🎤') && (
+          <VoiceMessagePlayer
+            audioUrl={item.file_url}
+            duration={0} // TODO: Store duration in DB
+            isOwnMessage={isOwnMessage}
+          />
+        )}
       </View>
     );
 
@@ -526,7 +664,22 @@ export default function ChatScreen() {
               {otherUser?.username || 'Loading...'}
             </Text>
           </TouchableOpacity>
-          <View style={styles.placeholder} />
+          <View style={styles.headerActions}>
+            <MessageSearch
+              currentUserId={user?.id || ''}
+              otherUserId={otherUserId}
+              conversationType={itemId ? 'item' : 'direct_message'}
+              itemId={itemId}
+              onResultClick={handleSearchResultClick}
+            />
+            <MessageDrafts
+              currentUserId={user?.id || ''}
+              otherUserId={otherUserId}
+              conversationType={itemId ? 'item' : 'direct_message'}
+              itemId={itemId}
+              onDraftSelect={handleDraftSelect}
+            />
+          </View>
         </View>
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>Loading messages...</Text>
@@ -576,7 +729,22 @@ export default function ChatScreen() {
               {otherUser?.username || 'Chat'}
             </Text>
           </TouchableOpacity>
-          <View style={styles.placeholder} />
+          <View style={styles.headerActions}>
+            <MessageSearch
+              currentUserId={user?.id || ''}
+              otherUserId={otherUserId}
+              conversationType={itemId ? 'item' : 'direct_message'}
+              itemId={itemId}
+              onResultClick={handleSearchResultClick}
+            />
+            <MessageDrafts
+              currentUserId={user?.id || ''}
+              otherUserId={otherUserId}
+              conversationType={itemId ? 'item' : 'direct_message'}
+              itemId={itemId}
+              onDraftSelect={handleDraftSelect}
+            />
+          </View>
       </View>
 
       <FlatList
@@ -620,6 +788,22 @@ export default function ChatScreen() {
             <Text style={styles.attachButtonText}>📷</Text>
           </TouchableOpacity>
           
+          <TouchableOpacity 
+            style={styles.attachButton}
+            onPress={() => setShowFileAttachment(true)}
+            disabled={uploading}
+          >
+            <Text style={styles.attachButtonText}>📎</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.attachButton}
+            onPress={() => setShowVoiceMessage(true)}
+            disabled={uploading}
+          >
+            <Text style={styles.attachButtonText}>🎤</Text>
+          </TouchableOpacity>
+          
         <TextInput
           style={styles.textInput}
           value={newMessage}
@@ -639,6 +823,25 @@ export default function ChatScreen() {
             </Text>
         </TouchableOpacity>
       </View>
+      
+      {/* File Attachment Modal */}
+      {showFileAttachment && (
+        <FileAttachment
+          onFileUpload={handleFileUpload}
+          onClose={() => setShowFileAttachment(false)}
+          uploading={uploading}
+          setUploading={setUploading}
+        />
+      )}
+      
+      {/* Voice Message Modal */}
+      {showVoiceMessage && (
+        <VoiceMessage
+          onSend={handleVoiceMessageUpload}
+          onCancel={() => setShowVoiceMessage(false)}
+          isVisible={showVoiceMessage}
+        />
+      )}
     </KeyboardAvoidingView>
     </SafeAreaView>
   );
