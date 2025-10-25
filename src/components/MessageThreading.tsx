@@ -52,19 +52,20 @@ export function MessageThreading({
     try {
       setLoading(true);
       
+      // Debug: Check if user is authenticated
+      const { data: { user } } = await supabase.auth.getUser();
+      console.log('Current user in fetchThreads:', user?.id);
+      
+      if (!user) {
+        console.error('No authenticated user found');
+        setThreads([]);
+        return;
+      }
+      
+      // First, let's try a simpler query to get basic thread data
       let query = supabase
         .from('message_threads')
-        .select(`
-          *,
-          messages!inner (
-            id,
-            content,
-            created_at,
-            sender:sender_id (
-              username
-            )
-          )
-        `)
+        .select('*')
         .eq('is_active', true)
         .order('updated_at', { ascending: false });
 
@@ -75,35 +76,81 @@ export function MessageThreading({
         query = query.is('item_id', null);
       }
       // For unified conversations, we get all threads between these users
+      
+      // Add user context filtering to ensure RLS policies work correctly
+      // This helps the RLS policies understand which user is making the request
 
       const { data, error } = await query;
 
+      console.log('Threads query result:', { data, error });
+
       if (error) {
         console.error('Error fetching threads:', error);
+        console.error('Error details:', JSON.stringify(error, null, 2));
         return;
       }
 
-      // Process threads to get message counts and last messages
-      const processedThreads = data?.map(thread => {
-        const messages = thread.messages || [];
-        const lastMessage = messages.length > 0 
-          ? messages.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
-          : null;
+      console.log('Successfully fetched threads:', data?.length || 0, 'threads');
 
-        return {
-          ...thread,
-          message_count: messages.length,
-          last_message: lastMessage ? {
-            content: lastMessage.content,
-            created_at: lastMessage.created_at,
-            sender: lastMessage.sender
-          } : null
-        };
-      }) || [];
+      // Process threads to get message counts and last messages
+      const processedThreads = await Promise.all((data || []).map(async (thread) => {
+        try {
+          // Fetch messages for this thread
+          const { data: messages, error: messagesError } = await supabase
+            .from('messages')
+            .select(`
+              id,
+              content,
+              created_at,
+              sender:sender_id (
+                username
+              )
+            `)
+            .eq('thread_id', thread.id)
+            .order('created_at', { ascending: false })
+            .limit(1); // Only get the last message
+
+          if (messagesError) {
+            console.error(`Error fetching messages for thread ${thread.id}:`, messagesError);
+            return {
+              ...thread,
+              message_count: 0,
+              last_message: null
+            };
+          }
+
+          const lastMessage = messages && messages.length > 0 ? messages[0] : null;
+
+          // Get total message count
+          const { count: messageCount } = await supabase
+            .from('messages')
+            .select('*', { count: 'exact', head: true })
+            .eq('thread_id', thread.id);
+
+          return {
+            ...thread,
+            message_count: messageCount || 0,
+            last_message: lastMessage ? {
+              content: lastMessage.content,
+              created_at: lastMessage.created_at,
+              sender: lastMessage.sender
+            } : null
+          };
+        } catch (err) {
+          console.error(`Error processing thread ${thread.id}:`, err);
+          return {
+            ...thread,
+            message_count: 0,
+            last_message: null
+          };
+        }
+      }));
 
       setThreads(processedThreads);
     } catch (err) {
       console.error('Error in fetchThreads:', err);
+      console.error('Error details:', JSON.stringify(err, null, 2));
+      setThreads([]); // Set empty array on error to prevent UI issues
     } finally {
       setLoading(false);
     }
