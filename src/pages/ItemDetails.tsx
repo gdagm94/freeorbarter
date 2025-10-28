@@ -393,19 +393,35 @@ function ItemDetails() {
                   <Share2 className="w-5 h-5 text-gray-600" />
                 </button>
                 {isOwnItem && (
-                  <div className="flex space-x-2">
+                  <div className="relative group">
                     <button
-                      onClick={handleEditItem}
                       className="bg-gray-100 p-2 rounded-full shadow-sm hover:bg-gray-200 transition-colors"
+                      title="Manage Listing"
                     >
-                      <Edit className="w-5 h-5 text-gray-600" />
+                      <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                      </svg>
                     </button>
-                    <button
-                      onClick={handleDeleteItem}
-                      className="bg-gray-100 p-2 rounded-full shadow-sm hover:bg-gray-200 transition-colors"
-                    >
-                      <Trash2 className="w-5 h-5 text-red-500" />
-                    </button>
+                    
+                    {/* Dropdown Menu */}
+                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                      <div className="py-1">
+                        <button
+                          onClick={handleEditItem}
+                          className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                        >
+                          <Edit className="w-4 h-4 mr-3" />
+                          Edit Listing
+                        </button>
+                        <button
+                          onClick={handleDeleteItem}
+                          className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4 mr-3" />
+                          Delete Listing
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>

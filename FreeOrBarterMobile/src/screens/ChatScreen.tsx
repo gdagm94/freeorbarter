@@ -31,8 +31,6 @@ import { AttachmentMenu } from '../components/AttachmentMenu';
 import { FileDisplay } from '../components/FileDisplay';
 import { ImageViewer } from '../components/ImageViewer';
 import { FileViewer } from '../components/FileViewer';
-import { MessageThreading } from '../components/MessageThreading';
-import { CreateThreadFromMessage } from '../components/CreateThreadFromMessage';
 import { OfferTemplates } from '../components/OfferTemplates';
 import { BulkOffers } from '../components/BulkOffers';
 import { CounterOffers } from '../components/CounterOffers';
@@ -55,8 +53,6 @@ export default function ChatScreen() {
   const [showFileViewer, setShowFileViewer] = useState(false);
   const [selectedFile, setSelectedFile] = useState<{url: string; name: string; type: string; size?: number} | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
-  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
-  const [showCreateThread, setShowCreateThread] = useState(false);
   const [showOfferTemplates, setShowOfferTemplates] = useState(false);
   const [showBulkOffers, setShowBulkOffers] = useState(false);
   const [showCounterOffers, setShowCounterOffers] = useState<string | null>(null);
@@ -939,35 +935,7 @@ export default function ChatScreen() {
         />
       )}
 
-      {/* Message Threading Modal */}
-      <MessageThreading
-        currentUserId={user?.id || ''}
-        otherUserId={otherUserId}
-        itemId={itemId}
-        conversationType={itemId ? 'item' : 'direct_message'}
-        selectedThreadId={selectedThreadId}
-        onThreadSelect={setSelectedThreadId}
-        onThreadCreated={(threadId, threadTitle) => {
-          setSelectedThreadId(threadId);
-          setShowCreateThread(false);
-        }}
-      />
 
-      {/* Create Thread Modal */}
-      <CreateThreadFromMessage
-        visible={showCreateThread}
-        messageId="sample-message-id" // This would be the actual message ID
-        messageContent="Sample message content"
-        currentUserId={user?.id || ''}
-        otherUserId={otherUserId}
-        itemId={itemId}
-        conversationType={itemId ? 'item' : 'direct_message'}
-        onThreadCreated={(threadId, threadTitle) => {
-          setSelectedThreadId(threadId);
-          setShowCreateThread(false);
-        }}
-        onClose={() => setShowCreateThread(false)}
-      />
 
       {/* Offer Templates Modal */}
       <OfferTemplates

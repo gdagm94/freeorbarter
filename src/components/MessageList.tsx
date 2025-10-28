@@ -13,8 +13,6 @@ import { MessageDrafts, useMessageDrafts } from './MessageDrafts';
 import { FileAttachment, FileDisplay } from './FileAttachment';
 import { VoiceMessage } from './VoiceMessage';
 import { VoiceMessagePlayer } from './VoiceMessagePlayer';
-import { MessageThreading } from './MessageThreading';
-import { CreateThreadFromMessage } from './CreateThreadFromMessage';
 import { OfferTemplates } from './OfferTemplates';
 import { CounterOffers } from './CounterOffers';
 import { BulkOffers } from './BulkOffers';
@@ -55,7 +53,6 @@ interface MessageWithOfferItem extends Message {
   file_name?: string;
   file_type?: string;
   file_size?: number;
-  thread_id?: string;
 }
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -76,8 +73,6 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const [showFileAttachment, setShowFileAttachment] = useState(false);
   const [showVoiceMessage, setShowVoiceMessage] = useState(false);
-  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
-  const [showCreateThread, setShowCreateThread] = useState(false);
   const [showOfferTemplates, setShowOfferTemplates] = useState(false);
   const [showBulkOffers, setShowBulkOffers] = useState(false);
   const [showCounterOffers, setShowCounterOffers] = useState<string | null>(null);
@@ -247,12 +242,6 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
         }
         // For unified conversations, we don't filter by item_id - we get all messages between these users
 
-        // Apply thread filter if a thread is selected
-        if (selectedThreadId) {
-          query = query.eq('thread_id', selectedThreadId);
-        } else {
-          query = query.is('thread_id', null);
-        }
 
         const { data, error } = await query;
 
@@ -846,20 +835,6 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
 
   return (
     <div className="flex h-[500px]">
-      {/* Threading Sidebar */}
-      <MessageThreading
-        currentUserId={currentUserId}
-        otherUserId={otherUserId}
-        itemId={itemId}
-        conversationType={conversationType}
-        selectedThreadId={selectedThreadId}
-        onThreadSelect={setSelectedThreadId}
-        onThreadCreate={(title) => {
-          // Thread created, refresh messages
-          console.log('Thread created:', title);
-        }}
-      />
-
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col">
         {/* Header with search and drafts */}
@@ -1015,17 +990,6 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
                     <p>{message.content}</p>
                   )}
 
-                  {/* Thread Creation Button */}
-                  {message.sender_id !== currentUserId && !message.thread_id && (
-                    <div className="mt-2">
-                      <button
-                        onClick={() => setShowCreateThread(true)}
-                        className="text-xs text-indigo-600 hover:text-indigo-700 underline"
-                      >
-                        Create thread from this message
-                      </button>
-                    </div>
-                  )}
 
                   {/* Counter Offers Button for Offer Messages */}
                   {message.is_offer && message.sender_id === currentUserId && (
@@ -1368,22 +1332,6 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
         />
       )}
 
-      {/* Create Thread Modal */}
-      {showCreateThread && (
-        <CreateThreadFromMessage
-          messageId={highlightedMessageId || ''}
-          messageContent="Sample message content"
-          currentUserId={currentUserId}
-          otherUserId={otherUserId}
-          itemId={itemId}
-          conversationType={conversationType}
-          onThreadCreated={(threadId, _threadTitle) => {
-            setSelectedThreadId(threadId);
-            setShowCreateThread(false);
-          }}
-          onClose={() => setShowCreateThread(false)}
-        />
-      )}
 
       {/* Offer Templates Modal */}
       {showOfferTemplates && (

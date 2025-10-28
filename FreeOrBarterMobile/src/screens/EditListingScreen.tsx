@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,14 +15,14 @@ import {
   Dimensions,
   Modal,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-// No FileSystem import needed for this approach
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as Haptics from 'expo-haptics';
+import { Item } from '../types';
 
 const CONDITIONS = ['new', 'like-new', 'good', 'fair', 'poor'] as const;
 const TYPES = ['free', 'barter'] as const;
@@ -62,9 +62,12 @@ interface LocationData {
   longitude: number;
 }
 
-export default function NewListingScreen() {
+export default function EditListingScreen() {
   const { user } = useAuth();
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
+  const { item } = route.params || {};
+  const { width } = Dimensions.get('window');
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -78,7 +81,6 @@ export default function NewListingScreen() {
   // Success/Error modal states
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
-  const [createdItemId, setCreatedItemId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
   // Location states
@@ -92,6 +94,68 @@ export default function NewListingScreen() {
     zipcode: ''
   });
 
+  // Initialize form with item data
+  useEffect(() => {
+    if (item) {
+      setTitle(item.title || '');
+      setDescription(item.description || '');
+      setCategory(item.category || '');
+      setCondition(item.condition || 'good');
+      setType(item.type || 'free');
+      setImageUris(item.images || []);
+      
+      // Set location if available
+      if (item.location && item.latitude && item.longitude) {
+        setSelectedLocation({
+          label: item.location,
+          city: '', // We don't store these separately, so we'll leave empty
+          state: '',
+          zipcode: '',
+          latitude: item.latitude,
+          longitude: item.longitude
+        });
+      }
+    }
+  }, [item]);
+
+  const uploadImage = async (uri: string): Promise<string> => {
+    try {
+      // Resize and compress the image
+      const manipulatedImage = await ImageManipulator.manipulateAsync(
+        uri,
+        [{ resize: { width: 800 } }],
+        { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
+      );
+
+      const fileExt = manipulatedImage.uri.split('.').pop()?.toLowerCase() || 'jpg';
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+      const filePath = `public/${fileName}`;
+
+      // Create FormData for upload
+      const formData = new FormData();
+      formData.append('file', {
+        uri: manipulatedImage.uri,
+        type: `image/${fileExt}`,
+        name: `image.${fileExt}`,
+      } as any);
+
+      const { error: uploadError } = await supabase.storage
+        .from('item-images')
+        .upload(filePath, formData, { upsert: false, contentType: `image/${fileExt}` });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('item-images')
+        .getPublicUrl(filePath);
+
+      return publicUrl;
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      throw error;
+    }
+  };
+
   const pickImages = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
@@ -100,60 +164,81 @@ export default function NewListingScreen() {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      allowsMultipleSelection: true,
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.9,
-      selectionLimit: 5 - imageUris.length,
+      allowsMultipleSelection: true,
+      quality: 1,
+      allowsEditing: false,
     });
 
-    if (!result.canceled) {
-      const uris = result.assets.map(a => a.uri).filter(Boolean) as string[];
-      setImageUris(prev => [...prev, ...uris].slice(0, 5));
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (!result.canceled && result.assets) {
+      const newImages = result.assets.map(asset => asset.uri);
+      const totalImages = imageUris.length + newImages.length;
+      
+      if (totalImages > 5) {
+        Alert.alert('Too Many Images', 'You can only upload up to 5 images total.');
+        return;
+      }
+      
+      setImageUris(prev => [...prev, ...newImages]);
     }
   };
 
   const takePhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Required', 'We need camera access to take photos.');
+      Alert.alert('Permission Required', 'We need access to your camera to take photos.');
       return;
     }
 
     const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.9,
+      quality: 1,
+      allowsEditing: false,
     });
 
-    if (!result.canceled && result.assets[0]) {
-      setImageUris(prev => [...prev, result.assets[0].uri].slice(0, 5));
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (!result.canceled && result.assets) {
+      const newImage = result.assets[0].uri;
+      const totalImages = imageUris.length + 1;
+      
+      if (totalImages > 5) {
+        Alert.alert('Too Many Images', 'You can only upload up to 5 images total.');
+        return;
+      }
+      
+      setImageUris(prev => [...prev, newImage]);
     }
   };
 
+  const showImageOptions = () => {
+    Alert.alert(
+      'Add Photos',
+      'Choose how you want to add photos',
+      [
+        { text: 'Camera', onPress: takePhoto },
+        { text: 'Photo Library', onPress: pickImages },
+        { text: 'Cancel', style: 'cancel' }
+      ]
+    );
+  };
+
   const removeImageAt = (index: number) => {
-    setImageUris(prev => prev.filter((_, i) => i !== index));
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setImageUris(prev => prev.filter((_, i) => i !== index));
   };
 
   const getCurrentLocation = async () => {
     try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setIsLocating(true);
       setError(null);
 
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Required', 'We need location access to use your current location.');
+        setError('Location permission denied');
         return;
       }
 
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-
+      const location = await Location.getCurrentPositionAsync({});
       const { latitude, longitude } = location.coords;
-      
+
       const response = await fetch(
         `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
       );
@@ -168,11 +253,11 @@ export default function NewListingScreen() {
       const zipcode = address.postcode || '';
       
       if (!city || !state) {
-        throw new Error('Could not determine your location');
+        throw new Error('Could not determine city and state');
       }
 
       const locationData: LocationData = {
-        label: `${city}, ${state}`,
+        label: `${city}, ${state} ${zipcode}`.trim(),
         city,
         state,
         zipcode,
@@ -181,89 +266,39 @@ export default function NewListingScreen() {
       };
 
       setSelectedLocation(locationData);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (err) {
+      setUseCurrentLocation(false);
+    } catch (err: any) {
       console.error('Error getting location:', err);
       setError('Could not determine your location. Please enter it manually.');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setIsLocating(false);
     }
   };
 
   const handleManualLocationSubmit = () => {
-    const { city, state, zipcode } = manualFormData;
-    
-    if (!city || !state || !zipcode) {
-      setError('All fields are required for manual entry');
-      return;
-    }
-
-    if (!/^\d{5}(-\d{4})?$/.test(zipcode)) {
-      setError('Please enter a valid ZIP code');
+    if (!manualFormData.city || !manualFormData.state || !manualFormData.zipcode) {
+      setError('Please fill in all location fields');
       return;
     }
 
     const locationData: LocationData = {
-      label: `${city}, ${state}`,
-      city,
-      state,
-      zipcode,
-      latitude: 0, // Will be geocoded if needed
+      label: `${manualFormData.city}, ${manualFormData.state} ${manualFormData.zipcode}`,
+      city: manualFormData.city,
+      state: manualFormData.state,
+      zipcode: manualFormData.zipcode,
+      latitude: 0, // We'll need to geocode this
       longitude: 0
     };
 
     setSelectedLocation(locationData);
     setShowManualEntry(false);
     setManualFormData({ city: '', state: '', zipcode: '' });
-    setError(null);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  };
-
-  const compressImage = async (uri: string): Promise<string> => {
-    try {
-      const manipulated = await ImageManipulator.manipulateAsync(
-        uri,
-        [{ resize: { width: 1280 } }],
-        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
-      );
-      return manipulated.uri;
-    } catch {
-      return uri;
-    }
-  };
-
-  const uploadImage = async (uri: string): Promise<string> => {
-    const toUpload = await compressImage(uri);
-    const ext = toUpload.split('.').pop() || 'jpg';
-    const filePath = `mobile/${user?.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-
-    // Create a FormData object for the upload
-    const formData = new FormData();
-    formData.append('file', {
-      uri: toUpload,
-      type: `image/${ext}`,
-      name: `image.${ext}`,
-    } as any);
-
-    // Upload using Supabase storage with FormData
-    const { error: uploadError } = await supabase.storage
-      .from('item-images')
-      .upload(filePath, formData, { upsert: false, contentType: `image/${ext}` });
-
-    if (uploadError) throw uploadError;
-
-    const { data: publicData } = supabase.storage
-      .from('item-images')
-      .getPublicUrl(filePath);
-
-    return publicData.publicUrl;
   };
 
   const handleSubmit = async () => {
     setError(null);
     if (!user) {
-      Alert.alert('Sign In Required', 'Please sign in to create a listing.');
+      Alert.alert('Sign In Required', 'Please sign in to edit a listing.');
       return;
     }
     if (!title.trim() || !description.trim() || !selectedLocation || !category) {
@@ -278,39 +313,41 @@ export default function NewListingScreen() {
     setSubmitting(true);
     try {
       const uploadedUrls: string[] = [];
+      
+      // Upload new images (filter out existing URLs)
       for (const uri of imageUris) {
-        const url = await uploadImage(uri);
-        uploadedUrls.push(url);
+        if (uri.startsWith('http')) {
+          // This is an existing image URL, keep it
+          uploadedUrls.push(uri);
+        } else {
+          // This is a new image, upload it
+          const url = await uploadImage(uri);
+          uploadedUrls.push(url);
+        }
       }
 
-      const { data: insertData, error: insertError } = await supabase
+      const { error: updateError } = await supabase
         .from('items')
-        .insert([
-          {
-            title: title.trim(),
-            description: description.trim(),
-            images: uploadedUrls,
-            condition,
-            category: category.toLowerCase(),
-            user_id: user.id,
-            location: selectedLocation.label,
-            latitude: selectedLocation.latitude,
-            longitude: selectedLocation.longitude,
-            status: 'available',
-            type,
-          },
-        ])
-        .select('id')
-        .single();
+        .update({
+          title: title.trim(),
+          description: description.trim(),
+          images: uploadedUrls,
+          condition,
+          category: category.toLowerCase(),
+          location: selectedLocation.label,
+          latitude: selectedLocation.latitude,
+          longitude: selectedLocation.longitude,
+          type,
+        })
+        .eq('id', item.id);
 
-      if (insertError) throw insertError;
+      if (updateError) throw updateError;
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setCreatedItemId(insertData.id);
       setShowSuccessModal(true);
     } catch (err: any) {
-      console.error('Error creating listing:', err);
-      setErrorMessage(err?.message || 'Failed to create listing.');
+      console.error('Error updating listing:', err);
+      setErrorMessage(err?.message || 'Failed to update listing.');
       setShowErrorModal(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
@@ -318,38 +355,19 @@ export default function NewListingScreen() {
     }
   };
 
-  const resetForm = () => {
-    setTitle('');
-    setDescription('');
-    setCategory('');
-    setCondition('good');
-    setType('free');
-    setSelectedLocation(null);
-    setImageUris([]);
-    setError(null);
-    setShowManualEntry(false);
-    setManualFormData({ city: '', state: '', zipcode: '' });
-    setShowSuccessModal(false);
-    setShowErrorModal(false);
-    setCreatedItemId(null);
-    setErrorMessage(null);
-  };
-
   const handleViewListing = () => {
-    if (createdItemId) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      // Navigate to ItemDetails and then to Home tab to ensure proper navigation stack
-      navigation.navigate('ItemDetails', { itemId: createdItemId });
-      // Navigate to Home tab after a brief delay to ensure ItemDetails loads
-      setTimeout(() => {
-        navigation.navigate('Tabs', { screen: 'Home' });
-      }, 100);
-    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Navigate to ItemDetails and then to Home tab to ensure proper navigation stack
+    navigation.navigate('ItemDetails', { itemId: item.id });
+    // Navigate to Home tab after a brief delay to ensure ItemDetails loads
+    setTimeout(() => {
+      navigation.navigate('Tabs', { screen: 'Home' });
+    }, 100);
   };
 
-  const handleUploadAnother = () => {
+  const handleEditAnother = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    resetForm();
+    setShowSuccessModal(false);
     // Navigate back to Home tab so user can access all tabs
     navigation.navigate('Tabs', { screen: 'Home' });
   };
@@ -360,23 +378,21 @@ export default function NewListingScreen() {
     setErrorMessage(null);
   };
 
-  const handleCancelUpload = () => {
+  const handleCancelEdit = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    resetForm();
     navigation.goBack();
   };
 
-  const showImageOptions = () => {
-    Alert.alert(
-      'Add Photos',
-      'Choose how you want to add photos',
-      [
-        { text: 'Camera', onPress: takePhoto },
-        { text: 'Photo Library', onPress: pickImages },
-        { text: 'Cancel', style: 'cancel' },
-      ]
+  if (!item) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading item data...</Text>
+        </View>
+      </SafeAreaView>
     );
-  };
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -388,13 +404,29 @@ export default function NewListingScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <View style={styles.headerContent}>
-            <Text style={styles.title}>Create Listing</Text>
-            <Text style={styles.subtitle}>Share something amazing with your community</Text>
-          </View>
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.headerButtonText}>Cancel</Text>
+          </TouchableOpacity>
+          <Text style={styles.title}>Edit Listing</Text>
+          <TouchableOpacity
+            style={[styles.headerButton, styles.saveButton]}
+            onPress={handleSubmit}
+            disabled={submitting}
+          >
+            <Text style={[
+              styles.headerButtonText,
+              styles.saveButtonText,
+              submitting && styles.saveButtonTextDisabled
+            ]}>
+              {submitting ? 'Saving...' : 'Save'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
-        <ScrollView 
+        <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
@@ -406,7 +438,7 @@ export default function NewListingScreen() {
             </View>
           )}
 
-          {/* Step 1: Photos First */}
+          {/* Step 1: Photos */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>📸 Photos</Text>
@@ -414,10 +446,10 @@ export default function NewListingScreen() {
             </View>
             <View style={styles.photosContainer}>
               {imageUris.map((uri, index) => (
-                <View key={uri} style={styles.photoWrapper}>
+                <View key={`${uri}-${index}`} style={styles.photoWrapper}>
                   <Image source={{ uri }} style={styles.photo} />
-                  <TouchableOpacity 
-                    style={styles.removePhoto} 
+                  <TouchableOpacity
+                    style={styles.removePhoto}
                     onPress={() => removeImageAt(index)}
                   >
                     <Text style={styles.removePhotoText}>✕</Text>
@@ -425,8 +457,8 @@ export default function NewListingScreen() {
                 </View>
               ))}
               {imageUris.length < 5 && (
-                <TouchableOpacity 
-                  style={styles.addPhoto} 
+                <TouchableOpacity
+                  style={styles.addPhoto}
                   onPress={showImageOptions}
                   activeOpacity={0.8}
                 >
@@ -458,7 +490,7 @@ export default function NewListingScreen() {
                     {t === 'free' ? '🎁' : '🔄'}
                   </Text>
                   <Text style={[
-                    styles.typeText, 
+                    styles.typeText,
                     type === t && styles.typeTextSelected
                   ]}>
                     {t === 'free' ? 'Free' : 'Barter'}
@@ -480,7 +512,7 @@ export default function NewListingScreen() {
               <Text style={styles.sectionTitle}>📝 Basic Information</Text>
               <Text style={styles.sectionSubtitle}>Tell us about your item</Text>
             </View>
-            
+
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Title *</Text>
               <View style={styles.inputContainer}>
@@ -527,11 +559,11 @@ export default function NewListingScreen() {
               <Text style={styles.sectionTitle}>🏷️ Item Details</Text>
               <Text style={styles.sectionSubtitle}>Help others find your item</Text>
             </View>
-            
+
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Category *</Text>
-              <ScrollView 
-                horizontal 
+              <ScrollView
+                horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.categoryScroll}
               >
@@ -561,8 +593,8 @@ export default function NewListingScreen() {
 
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Condition</Text>
-              <ScrollView 
-                horizontal 
+              <ScrollView
+                horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.conditionScroll}
               >
@@ -597,7 +629,7 @@ export default function NewListingScreen() {
               <Text style={styles.sectionTitle}>📍 Location</Text>
               <Text style={styles.sectionSubtitle}>Where is this item located?</Text>
             </View>
-            
+
             {selectedLocation ? (
               <View style={styles.locationCard}>
                 <Text style={styles.locationIcon}>📍</Text>
@@ -605,7 +637,7 @@ export default function NewListingScreen() {
                   <Text style={styles.locationLabel}>Selected Location</Text>
                   <Text style={styles.locationText}>{selectedLocation.label}</Text>
                 </View>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.locationChangeButton}
                   onPress={() => setSelectedLocation(null)}
                 >
@@ -614,7 +646,7 @@ export default function NewListingScreen() {
               </View>
             ) : (
               <View style={styles.locationOptions}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.locationOption}
                   onPress={getCurrentLocation}
                   disabled={isLocating}
@@ -625,8 +657,8 @@ export default function NewListingScreen() {
                     {isLocating ? 'Getting location...' : 'Use my current location'}
                   </Text>
                 </TouchableOpacity>
-                
-                <TouchableOpacity 
+
+                <TouchableOpacity
                   style={styles.locationOption}
                   onPress={() => setShowManualEntry(true)}
                   activeOpacity={0.8}
@@ -649,7 +681,7 @@ export default function NewListingScreen() {
               {submitting ? '🚀' : '✨'}
             </Text>
             <Text style={styles.submitText}>
-              {submitting ? 'Creating Listing...' : 'Create Listing'}
+              {submitting ? 'Saving Changes...' : 'Save Changes'}
             </Text>
           </TouchableOpacity>
         </ScrollView>
@@ -665,14 +697,14 @@ export default function NewListingScreen() {
             <View style={styles.modalContainer}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Enter Location</Text>
-                <TouchableOpacity 
+                <TouchableOpacity
                   onPress={() => setShowManualEntry(false)}
                   style={styles.modalCloseButton}
                 >
                   <Text style={styles.modalCloseText}>✕</Text>
                 </TouchableOpacity>
               </View>
-              
+
               <ScrollView style={styles.modalContent}>
                 <View style={styles.modalField}>
                   <Text style={styles.modalFieldLabel}>City *</Text>
@@ -684,11 +716,11 @@ export default function NewListingScreen() {
                     placeholderTextColor="#9CA3AF"
                   />
                 </View>
-                
+
                 <View style={styles.modalField}>
                   <Text style={styles.modalFieldLabel}>State *</Text>
-                  <ScrollView 
-                    horizontal 
+                  <ScrollView
+                    horizontal
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.stateContainer}
                   >
@@ -712,7 +744,7 @@ export default function NewListingScreen() {
                     ))}
                   </ScrollView>
                 </View>
-                
+
                 <View style={styles.modalField}>
                   <Text style={styles.modalFieldLabel}>ZIP Code *</Text>
                   <TextInput
@@ -726,15 +758,15 @@ export default function NewListingScreen() {
                   />
                 </View>
               </ScrollView>
-              
+
               <View style={styles.modalActions}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.modalCancelButton}
                   onPress={() => setShowManualEntry(false)}
                 >
                   <Text style={styles.modalCancelText}>Cancel</Text>
                 </TouchableOpacity>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.modalSaveButton}
                   onPress={handleManualLocationSubmit}
                 >
@@ -763,11 +795,11 @@ export default function NewListingScreen() {
               onPress={() => {}} // Prevent modal from closing when tapping inside
             >
               <View style={styles.successIconContainer}>
-                <Text style={styles.successIcon}>🎉</Text>
+                <Text style={styles.successIcon}>✅</Text>
               </View>
-              <Text style={styles.successTitle}>Listing Created Successfully!</Text>
+              <Text style={styles.successTitle}>Listing Updated Successfully!</Text>
               <Text style={styles.successMessage}>
-                Your item has been listed and is now visible to the community.
+                Your changes have been saved and are now visible to the community.
               </Text>
               <View style={styles.successButtons}>
                 <TouchableOpacity
@@ -775,14 +807,14 @@ export default function NewListingScreen() {
                   onPress={handleViewListing}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.successPrimaryButtonText}>View My Listing</Text>
+                  <Text style={styles.successPrimaryButtonText}>View Updated Listing</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.successSecondaryButton}
-                  onPress={handleUploadAnother}
+                  onPress={handleEditAnother}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.successSecondaryButtonText}>Upload Another Item</Text>
+                  <Text style={styles.successSecondaryButtonText}>Edit Another Field</Text>
                 </TouchableOpacity>
               </View>
             </TouchableOpacity>
@@ -809,9 +841,9 @@ export default function NewListingScreen() {
               <View style={styles.errorIconContainer}>
                 <Text style={styles.errorIcon}>⚠️</Text>
               </View>
-              <Text style={styles.errorTitle}>Upload Failed</Text>
+              <Text style={styles.errorTitle}>Update Failed</Text>
               <Text style={styles.errorMessage}>
-                {errorMessage || 'Something went wrong while creating your listing.'}
+                {errorMessage || 'Something went wrong while updating your listing.'}
               </Text>
               <View style={styles.errorButtons}>
                 <TouchableOpacity
@@ -823,10 +855,10 @@ export default function NewListingScreen() {
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.errorSecondaryButton}
-                  onPress={handleCancelUpload}
+                  onPress={handleCancelEdit}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.errorSecondaryButtonText}>Cancel Upload</Text>
+                  <Text style={styles.errorSecondaryButtonText}>Cancel</Text>
                 </TouchableOpacity>
               </View>
             </TouchableOpacity>
@@ -844,42 +876,64 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8FAFC',
   },
-  keyboardView: {
+  loadingContainer: {
     flex: 1,
-  },
-  header: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 24,
-    paddingVertical: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  headerContent: {
+    justifyContent: 'center',
     alignItems: 'center',
   },
+  loadingText: {
+    fontSize: 16,
+    color: '#64748B',
+    fontWeight: '500',
+    marginTop: 12,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  headerButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  headerButtonText: {
+    fontSize: 16,
+    color: '#3B82F6',
+    fontWeight: '600',
+  },
   title: {
-    fontSize: 28,
+    fontSize: 20,
     fontWeight: '700',
     color: '#111827',
-    marginBottom: 8,
   },
-  subtitle: {
-    fontSize: 16,
-    color: '#6B7280',
-    fontWeight: '500',
-    textAlign: 'center',
+  saveButton: {
+    backgroundColor: '#3B82F6',
+    borderRadius: 8,
+  },
+  saveButtonText: {
+    color: '#FFFFFF',
+  },
+  saveButtonTextDisabled: {
+    color: '#9CA3AF',
+  },
+  keyboardView: {
+    flex: 1,
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 24,
-    paddingVertical: 24,
     paddingBottom: 40,
   },
   errorBanner: {
@@ -888,7 +942,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 12,
     padding: 16,
-    marginBottom: 24,
+    margin: 20,
+    marginBottom: 0,
   },
   errorText: {
     color: '#DC2626',
@@ -897,7 +952,16 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   section: {
-    marginBottom: 32,
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 20,
+    marginTop: 20,
+    borderRadius: 16,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   sectionHeader: {
     marginBottom: 20,
@@ -913,13 +977,67 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     fontWeight: '500',
   },
+  photosContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  photoWrapper: {
+    position: 'relative',
+    width: (width - 88) / 3,
+    height: (width - 88) / 3,
+  },
+  photo: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 12,
+  },
+  removePhoto: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    backgroundColor: '#EF4444',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  removePhotoText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  addPhoto: {
+    width: (width - 88) / 3,
+    height: (width - 88) / 3,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    borderStyle: 'dashed',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addPhotoIcon: {
+    fontSize: 24,
+    marginBottom: 8,
+  },
+  addPhotoLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+    textAlign: 'center',
+  },
   typeSelector: {
     flexDirection: 'row',
-    gap: 16,
+    gap: 12,
   },
   typeOption: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8FAFC',
     borderWidth: 2,
     borderColor: '#E5E7EB',
     borderRadius: 16,
@@ -927,22 +1045,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
+    shadowOpacity: 0.02,
+    shadowRadius: 2,
     elevation: 1,
   },
   typeOptionSelected: {
+    backgroundColor: '#3B82F6',
     borderColor: '#3B82F6',
-    backgroundColor: '#EFF6FF',
     shadowColor: '#3B82F6',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 4,
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   typeEmoji: {
     fontSize: 32,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   typeText: {
     fontSize: 16,
@@ -951,7 +1069,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   typeTextSelected: {
-    color: '#1E40AF',
+    color: '#FFFFFF',
   },
   typeDescription: {
     fontSize: 12,
@@ -960,63 +1078,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   typeDescriptionSelected: {
-    color: '#3730A3',
-  },
-  photosContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 16,
-  },
-  photoWrapper: {
-    width: 100,
-    height: 100,
-    position: 'relative',
-  },
-  photo: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 16,
-  },
-  removePhoto: {
-    position: 'absolute',
-    top: -8,
-    right: -8,
-    backgroundColor: '#EF4444',
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  removePhotoText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  addPhoto: {
-    width: 100,
-    height: 100,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: '#D1D5DB',
-    borderStyle: 'dashed',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-  },
-  addPhotoIcon: {
-    fontSize: 32,
-    marginBottom: 8,
-  },
-  addPhotoLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-    fontWeight: '600',
+    color: '#E5E7EB',
   },
   inputGroup: {
     marginBottom: 24,
@@ -1025,109 +1087,98 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#374151',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    position: 'relative',
+  },
+  inputIcon: {
+    position: 'absolute',
+    left: 16,
+    top: 16,
+    fontSize: 18,
+    zIndex: 1,
+  },
+  input: {
     borderWidth: 2,
     borderColor: '#E5E7EB',
-    borderRadius: 16,
+    borderRadius: 12,
     paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingVertical: 14,
+    paddingLeft: 48,
+    fontSize: 16,
+    color: '#111827',
+    backgroundColor: '#FFFFFF',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 1,
   },
-  inputIcon: {
-    fontSize: 18,
-    marginRight: 12,
-    color: '#6B7280',
-  },
-  input: {
-    flex: 1,
-    fontSize: 16,
-    color: '#111827',
-    fontWeight: '500',
-  },
   textArea: {
-    minHeight: 120,
+    height: 100,
     textAlignVertical: 'top',
   },
   characterCount: {
     fontSize: 12,
     color: '#9CA3AF',
     textAlign: 'right',
-    marginTop: 8,
-    fontWeight: '500',
+    marginTop: 4,
   },
   categoryScroll: {
-    paddingRight: 24,
+    paddingRight: 20,
   },
   categoryChip: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8FAFC',
     borderWidth: 2,
     borderColor: '#E5E7EB',
-    borderRadius: 24,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    marginRight: 12,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginRight: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.02,
     shadowRadius: 2,
     elevation: 1,
   },
   categoryChipSelected: {
     backgroundColor: '#3B82F6',
     borderColor: '#3B82F6',
-    shadowColor: '#3B82F6',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 2,
   },
   categoryText: {
     fontSize: 14,
-    fontWeight: '600',
     color: '#374151',
+    fontWeight: '600',
   },
   categoryTextSelected: {
     color: '#FFFFFF',
   },
   conditionScroll: {
-    paddingRight: 24,
+    paddingRight: 20,
   },
   conditionChip: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8FAFC',
     borderWidth: 2,
     borderColor: '#E5E7EB',
     borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    marginRight: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginRight: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.02,
     shadowRadius: 2,
     elevation: 1,
   },
   conditionChipSelected: {
     backgroundColor: '#10B981',
     borderColor: '#10B981',
-    shadowColor: '#10B981',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 2,
   },
   conditionText: {
     fontSize: 12,
-    fontWeight: '700',
     color: '#374151',
+    fontWeight: '700',
   },
   conditionTextSelected: {
     color: '#FFFFFF',
@@ -1138,8 +1189,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#F0FDF4',
     borderColor: '#BBF7D0',
     borderWidth: 2,
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: 12,
+    padding: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -1147,17 +1198,17 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   locationIcon: {
-    fontSize: 24,
-    marginRight: 16,
+    fontSize: 20,
+    marginRight: 12,
   },
   locationInfo: {
     flex: 1,
   },
   locationLabel: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#166534',
-    fontWeight: '500',
-    marginBottom: 4,
+    fontWeight: '600',
+    marginBottom: 2,
   },
   locationText: {
     fontSize: 16,
@@ -1165,9 +1216,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   locationChangeButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
   },
   locationChangeText: {
     fontSize: 14,
@@ -1175,7 +1225,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   locationOptions: {
-    gap: 16,
+    gap: 12,
   },
   locationOption: {
     flexDirection: 'row',
@@ -1183,9 +1233,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderColor: '#E5E7EB',
     borderWidth: 2,
-    borderRadius: 16,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -1193,9 +1243,8 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   locationOptionIcon: {
-    fontSize: 20,
-    marginRight: 16,
-    color: '#6B7280',
+    fontSize: 18,
+    marginRight: 12,
   },
   locationOptionText: {
     fontSize: 16,
@@ -1203,23 +1252,25 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   submitButton: {
-    backgroundColor: '#3B82F6',
-    borderRadius: 20,
-    paddingVertical: 20,
-    paddingHorizontal: 24,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 24,
+    backgroundColor: '#3B82F6',
+    borderRadius: 16,
+    paddingVertical: 18,
+    marginHorizontal: 20,
+    marginTop: 20,
+    marginBottom: 40,
     shadowColor: '#3B82F6',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   submitDisabled: {
     backgroundColor: '#9CA3AF',
-    shadowOpacity: 0.1,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   submitIcon: {
     fontSize: 20,

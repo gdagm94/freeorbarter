@@ -14,6 +14,8 @@ import ItemDetailsScreen from './src/screens/ItemDetailsScreen';
 import MessagesScreen from './src/screens/MessagesScreen';
 import ChatScreen from './src/screens/ChatScreen';
 import NewListingScreen from './src/screens/NewListingScreen';
+import EditListingScreen from './src/screens/EditListingScreen';
+import ManageListingScreen from './src/screens/ManageListingScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import BarterOfferScreen from './src/screens/BarterOfferScreen';
@@ -254,6 +256,8 @@ export default function App() {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Tabs" component={Tabs} />
         <Stack.Screen name="ItemDetails" component={ItemDetailsScreen} />
+        <Stack.Screen name="EditListing" component={EditListingScreen} />
+        <Stack.Screen name="ManageListing" component={ManageListingScreen} />
         <Stack.Screen name="Chat" component={ChatScreen} />
         <Stack.Screen name="BarterOffer" component={BarterOfferScreen} />
         <Stack.Screen name="NewListing" component={NewListingScreen} />

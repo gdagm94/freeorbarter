@@ -12,6 +12,9 @@ import {
   TextInput,
   Modal,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Dimensions,
 } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabase';
@@ -379,119 +382,146 @@ export default function SettingsScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity 
-          style={styles.backButton}
+          style={styles.headerButton}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             navigation.goBack();
           }}
         >
-          <Text style={styles.backButtonText}>← Back</Text>
+          <Text style={styles.headerButtonText}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Settings</Text>
+        <Text style={styles.title}>Edit Profile</Text>
         <TouchableOpacity 
-          style={styles.saveButton}
+          style={[styles.headerButton, styles.saveButton, saving && styles.saveButtonDisabled]}
           onPress={handleSave}
           disabled={saving}
         >
-          <Text style={[styles.saveButtonText, saving && styles.saveButtonDisabled]}>
+          <Text style={[styles.headerButtonText, styles.saveButtonText, saving && styles.saveButtonTextDisabled]}>
             {saving ? 'Saving...' : 'Save'}
           </Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {error && (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        )}
+      <KeyboardAvoidingView 
+        style={styles.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView 
+          style={styles.scrollView} 
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          {error && (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          )}
 
-        {/* Profile Picture */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Profile Picture</Text>
-          <TouchableOpacity style={styles.avatarContainer} onPress={handleImagePicker}>
-            {avatarUri ? (
-              <Image source={{ uri: avatarUri }} style={styles.avatar} />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Text style={styles.avatarText}>👤</Text>
+          {/* Profile Picture Section */}
+          <View style={styles.profileSection}>
+            <TouchableOpacity style={styles.avatarContainer} onPress={handleImagePicker}>
+              {avatarUri ? (
+                <Image source={{ uri: avatarUri }} style={styles.avatar} />
+              ) : (
+                <View style={styles.avatarPlaceholder}>
+                  <Text style={styles.avatarIcon}>👤</Text>
+                </View>
+              )}
+              <View style={styles.avatarEditButton}>
+                <Text style={styles.avatarEditIcon}>📷</Text>
               </View>
-            )}
-            <View style={styles.avatarOverlay}>
-              <Text style={styles.avatarOverlayText}>📷</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
-
-        {/* Username */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Username *</Text>
-          <TextInput
-            style={styles.input}
-            value={formData.username}
-            onChangeText={(value) => handleInputChange('username', value)}
-            placeholder="Enter your username"
-            placeholderTextColor="#9CA3AF"
-          />
-        </View>
-
-        {/* Location */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Location *</Text>
-          {selectedLocation && (
-            <View style={styles.selectedLocation}>
-              <Text style={styles.selectedLocationText}>✓ {selectedLocation.label}</Text>
-            </View>
-          )}
-          
-          <TouchableOpacity 
-            style={[styles.locationButton, isLocating && styles.locationButtonDisabled]}
-            onPress={handleCurrentLocation}
-            disabled={isLocating}
-          >
-            <Text style={styles.locationButtonText}>
-              📍 {isLocating ? 'Getting location...' : 'Use my current location'}
-            </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.locationButton}
-            onPress={() => setShowManualEntry(true)}
-          >
-            <Text style={styles.locationButtonText}>✏️ Enter manually</Text>
-          </TouchableOpacity>
-
-          {!selectedLocation && (
-            <Text style={styles.locationError}>
-              Please select your location using one of the options above
-            </Text>
-          )}
-        </View>
-
-        {/* Gender */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Gender</Text>
-          <View style={styles.genderContainer}>
-            {['male', 'female', ''].map((gender) => (
-              <TouchableOpacity
-                key={gender}
-                style={[
-                  styles.genderOption,
-                  formData.gender === gender && styles.genderOptionSelected
-                ]}
-                onPress={() => handleInputChange('gender', gender)}
-              >
-                <Text style={[
-                  styles.genderOptionText,
-                  formData.gender === gender && styles.genderOptionTextSelected
-                ]}>
-                  {gender === '' ? 'Prefer not to say' : gender.charAt(0).toUpperCase() + gender.slice(1)}
-                </Text>
-              </TouchableOpacity>
-            ))}
+            </TouchableOpacity>
+            <Text style={styles.avatarLabel}>Tap to change photo</Text>
           </View>
-        </View>
-      </ScrollView>
+
+          {/* Form Fields */}
+          <View style={styles.formSection}>
+            {/* Username Field */}
+            <View style={styles.fieldContainer}>
+              <Text style={styles.fieldLabel}>Username</Text>
+              <TextInput
+                style={[styles.input, !formData.username && styles.inputEmpty]}
+                value={formData.username}
+                onChangeText={(value) => handleInputChange('username', value)}
+                placeholder="Enter your username"
+                placeholderTextColor="#9CA3AF"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+
+            {/* Location Field */}
+            <View style={styles.fieldContainer}>
+              <Text style={styles.fieldLabel}>Location</Text>
+              {selectedLocation ? (
+                <View style={styles.locationDisplay}>
+                  <Text style={styles.locationIcon}>📍</Text>
+                  <Text style={styles.locationText}>{selectedLocation.label}</Text>
+                  <TouchableOpacity 
+                    style={styles.locationChangeButton}
+                    onPress={() => setSelectedLocation(null)}
+                  >
+                    <Text style={styles.locationChangeText}>Change</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.locationOptions}>
+                  <TouchableOpacity 
+                    style={[styles.locationOption, isLocating && styles.locationOptionDisabled]}
+                    onPress={handleCurrentLocation}
+                    disabled={isLocating}
+                  >
+                    <Text style={styles.locationOptionIcon}>📍</Text>
+                    <Text style={styles.locationOptionText}>
+                      {isLocating ? 'Getting location...' : 'Use current location'}
+                    </Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={styles.locationOption}
+                    onPress={() => setShowManualEntry(true)}
+                  >
+                    <Text style={styles.locationOptionIcon}>✏️</Text>
+                    <Text style={styles.locationOptionText}>Enter manually</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+
+            {/* Gender Field */}
+            <View style={styles.fieldContainer}>
+              <Text style={styles.fieldLabel}>Gender</Text>
+              <View style={styles.genderOptions}>
+                {[
+                  { value: 'male', label: 'Male', icon: '👨' },
+                  { value: 'female', label: 'Female', icon: '👩' },
+                  { value: '', label: 'Prefer not to say', icon: '🤐' }
+                ].map((option) => (
+                  <TouchableOpacity
+                    key={option.value}
+                    style={[
+                      styles.genderOption,
+                      formData.gender === option.value && styles.genderOptionSelected
+                    ]}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      handleInputChange('gender', option.value);
+                    }}
+                  >
+                    <Text style={styles.genderOptionIcon}>{option.icon}</Text>
+                    <Text style={[
+                      styles.genderOptionText,
+                      formData.gender === option.value && styles.genderOptionTextSelected
+                    ]}>
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Manual Location Entry Modal */}
       <Modal
@@ -503,34 +533,35 @@ export default function SettingsScreen() {
           <View style={styles.modalHeader}>
             <TouchableOpacity 
               onPress={() => setShowManualEntry(false)}
-              style={styles.modalCancelButton}
+              style={styles.modalButton}
             >
-              <Text style={styles.modalCancelText}>Cancel</Text>
+              <Text style={styles.modalButtonText}>Cancel</Text>
             </TouchableOpacity>
             <Text style={styles.modalTitle}>Enter Location</Text>
             <TouchableOpacity 
               onPress={handleManualLocationSubmit}
-              style={styles.modalSaveButton}
+              style={[styles.modalButton, styles.modalSaveButton]}
             >
-              <Text style={styles.modalSaveText}>Save</Text>
+              <Text style={[styles.modalButtonText, styles.modalSaveButtonText]}>Save</Text>
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.modalContent}>
-            <View style={styles.modalSection}>
-              <Text style={styles.modalSectionTitle}>City</Text>
+          <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+            <View style={styles.modalField}>
+              <Text style={styles.modalFieldLabel}>City</Text>
               <TextInput
                 style={styles.modalInput}
                 value={manualFormData.city}
                 onChangeText={(value) => setManualFormData(prev => ({ ...prev, city: value }))}
                 placeholder="Enter city"
                 placeholderTextColor="#9CA3AF"
+                autoCapitalize="words"
               />
             </View>
 
-            <View style={styles.modalSection}>
-              <Text style={styles.modalSectionTitle}>State</Text>
-              <ScrollView style={styles.stateScrollView} nestedScrollEnabled>
+            <View style={styles.modalField}>
+              <Text style={styles.modalFieldLabel}>State</Text>
+              <View style={styles.stateContainer}>
                 {Object.entries(stateAbbreviations).map(([abbr, name]) => (
                   <TouchableOpacity
                     key={abbr}
@@ -538,7 +569,10 @@ export default function SettingsScreen() {
                       styles.stateOption,
                       manualFormData.state === name && styles.stateOptionSelected
                     ]}
-                    onPress={() => setManualFormData(prev => ({ ...prev, state: name }))}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setManualFormData(prev => ({ ...prev, state: name }));
+                    }}
                   >
                     <Text style={[
                       styles.stateOptionText,
@@ -548,11 +582,11 @@ export default function SettingsScreen() {
                     </Text>
                   </TouchableOpacity>
                 ))}
-              </ScrollView>
+              </View>
             </View>
 
-            <View style={styles.modalSection}>
-              <Text style={styles.modalSectionTitle}>ZIP Code</Text>
+            <View style={styles.modalField}>
+              <Text style={styles.modalFieldLabel}>ZIP Code</Text>
               <TextInput
                 style={styles.modalInput}
                 value={manualFormData.zipcode}
@@ -569,6 +603,8 @@ export default function SettingsScreen() {
     </SafeAreaView>
   );
 }
+
+const { width } = Dimensions.get('window');
 
 const styles = StyleSheet.create({
   container: {
@@ -594,162 +630,257 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    borderBottomColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  backButton: {
-    padding: 8,
+  headerButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
   },
-  backButtonText: {
+  headerButtonText: {
     fontSize: 16,
     color: '#3B82F6',
     fontWeight: '600',
   },
   title: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
-    color: '#1E293B',
+    color: '#111827',
   },
   saveButton: {
-    padding: 8,
+    backgroundColor: '#3B82F6',
+    borderRadius: 8,
   },
   saveButtonText: {
-    fontSize: 16,
-    color: '#3B82F6',
-    fontWeight: '600',
+    color: '#FFFFFF',
   },
   saveButtonDisabled: {
+    backgroundColor: '#E5E7EB',
+  },
+  saveButtonTextDisabled: {
     color: '#9CA3AF',
+  },
+  keyboardView: {
+    flex: 1,
   },
   scrollView: {
     flex: 1,
   },
-  errorContainer: {
-    backgroundColor: '#FEE2E2',
+  scrollContent: {
+    paddingBottom: 40,
+  },
+  errorBanner: {
+    backgroundColor: '#FEF2F2',
     borderColor: '#FECACA',
     borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
-    margin: 16,
+    borderRadius: 12,
+    padding: 16,
+    margin: 20,
+    marginBottom: 0,
   },
   errorText: {
     color: '#DC2626',
     fontSize: 14,
     fontWeight: '500',
+    textAlign: 'center',
   },
-  section: {
-    backgroundColor: '#FFFFFF',
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 12,
-    padding: 20,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 12,
+  profileSection: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    paddingHorizontal: 20,
   },
   avatarContainer: {
-    alignSelf: 'center',
     position: 'relative',
+    marginBottom: 12,
   },
   avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 4,
+    borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   avatarPlaceholder: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#E2E8F0',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#E5E7EB',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 4,
+    borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  avatarText: {
-    fontSize: 40,
+  avatarIcon: {
+    fontSize: 48,
+    color: '#9CA3AF',
   },
-  avatarOverlay: {
+  avatarEditButton: {
     position: 'absolute',
     bottom: 0,
     right: 0,
     backgroundColor: '#3B82F6',
-    borderRadius: 16,
-    width: 32,
-    height: 32,
+    borderRadius: 20,
+    width: 40,
+    height: 40,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  avatarOverlayText: {
+  avatarEditIcon: {
+    fontSize: 18,
+  },
+  avatarLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  formSection: {
+    paddingHorizontal: 20,
+  },
+  fieldContainer: {
+    marginBottom: 24,
+  },
+  fieldLabel: {
     fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
     fontSize: 16,
-    color: '#1E293B',
+    color: '#111827',
     backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
-  selectedLocation: {
-    backgroundColor: '#D1FAE5',
-    borderColor: '#10B981',
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
+  inputEmpty: {
+    borderColor: '#F3F4F6',
   },
-  selectedLocationText: {
-    color: '#059669',
+  locationDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    borderColor: '#BBF7D0',
+    borderWidth: 2,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  locationIcon: {
+    fontSize: 18,
+    marginRight: 12,
+  },
+  locationText: {
+    flex: 1,
+    fontSize: 16,
+    color: '#166534',
+    fontWeight: '500',
+  },
+  locationChangeButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  locationChangeText: {
     fontSize: 14,
+    color: '#3B82F6',
     fontWeight: '600',
   },
-  locationButton: {
-    backgroundColor: '#F3F4F6',
-    borderColor: '#D1D5DB',
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginBottom: 8,
-    alignItems: 'center',
+  locationOptions: {
+    gap: 12,
   },
-  locationButtonDisabled: {
-    backgroundColor: '#F9FAFB',
+  locationOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E5E7EB',
+    borderWidth: 2,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  locationOptionDisabled: {
     opacity: 0.6,
   },
-  locationButtonText: {
-    fontSize: 14,
+  locationOptionIcon: {
+    fontSize: 18,
+    marginRight: 12,
+  },
+  locationOptionText: {
+    fontSize: 16,
     color: '#374151',
     fontWeight: '500',
   },
-  locationError: {
-    color: '#DC2626',
-    fontSize: 12,
-    marginTop: 8,
-  },
-  genderContainer: {
+  genderOptions: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 12,
   },
   genderOption: {
     flex: 1,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    paddingVertical: 12,
     alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E5E7EB',
+    borderWidth: 2,
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   genderOptionSelected: {
     backgroundColor: '#3B82F6',
     borderColor: '#3B82F6',
   },
+  genderOptionIcon: {
+    fontSize: 24,
+    marginBottom: 8,
+  },
   genderOptionText: {
     fontSize: 14,
     color: '#374151',
-    fontWeight: '500',
+    fontWeight: '600',
+    textAlign: 'center',
   },
   genderOptionTextSelected: {
     color: '#FFFFFF',
@@ -766,65 +897,81 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    borderBottomColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  modalCancelButton: {
-    padding: 8,
+  modalButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
   },
-  modalCancelText: {
+  modalButtonText: {
     fontSize: 16,
     color: '#6B7280',
     fontWeight: '500',
   },
+  modalSaveButton: {
+    backgroundColor: '#3B82F6',
+  },
+  modalSaveButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
   modalTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1E293B',
-  },
-  modalSaveButton: {
-    padding: 8,
-  },
-  modalSaveText: {
-    fontSize: 16,
-    color: '#3B82F6',
-    fontWeight: '600',
+    color: '#111827',
   },
   modalContent: {
     flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 20,
   },
-  modalSection: {
-    backgroundColor: '#FFFFFF',
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 12,
-    padding: 20,
+  modalField: {
+    marginBottom: 24,
   },
-  modalSectionTitle: {
+  modalFieldLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 12,
+    color: '#374151',
+    marginBottom: 8,
   },
   modalInput: {
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
     fontSize: 16,
-    color: '#1E293B',
+    color: '#111827',
     backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
-  stateScrollView: {
-    maxHeight: 200,
+  stateContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   stateOption: {
-    borderWidth: 1,
+    backgroundColor: '#FFFFFF',
     borderColor: '#E5E7EB',
-    borderRadius: 6,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginBottom: 8,
+    borderWidth: 2,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   stateOptionSelected: {
     backgroundColor: '#3B82F6',

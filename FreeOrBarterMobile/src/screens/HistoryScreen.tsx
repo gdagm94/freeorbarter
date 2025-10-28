@@ -9,6 +9,7 @@ import {
   StatusBar,
   RefreshControl,
   Image,
+  ScrollView,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
@@ -17,90 +18,72 @@ import { Item } from '../types';
 import ItemCard from '../components/ItemCard';
 import * as Haptics from 'expo-haptics';
 
-interface HistoryItem {
+interface HistoryEntry {
   id: string;
-  item_id: string;
-  user_id: string;
-  action: 'created' | 'viewed' | 'contacted' | 'watched' | 'unwatched';
+  action_type: 'created' | 'edited' | 'deleted';
+  item_id: string | null;
+  item_title: string;
+  item_description: string | null;
+  item_images: string[];
+  item_category: string;
+  item_condition: string;
+  item_type: string;
+  changes: any;
   created_at: string;
-  items: Item;
 }
 
 export default function HistoryScreen() {
   const { user } = useAuth();
   const navigation = useNavigation<any>();
-  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [archivedItems, setArchivedItems] = useState<Item[]>([]);
+  const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<'all' | 'created' | 'viewed' | 'contacted' | 'watched'>('all');
+  const [activeTab, setActiveTab] = useState<'archived' | 'history'>('archived');
 
   useEffect(() => {
     if (user) {
-      fetchHistory();
+      fetchData();
     }
-  }, [user, activeFilter]);
+  }, [user]);
 
   // Refresh data when screen comes into focus
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
-      if (user) fetchHistory();
+      if (user) fetchData();
     });
     return unsubscribe;
-  }, [navigation, user, activeFilter]);
+  }, [navigation, user]);
 
-  const fetchHistory = async () => {
+  const fetchData = async () => {
     if (!user) return;
 
     try {
       setLoading(true);
       
-      if (activeFilter === 'created') {
-        // Fetch user's created items
-        const { data, error } = await supabase
-          .from('items')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
+      // Fetch archived items (completed trades)
+      const { data: archivedData, error: archivedError } = await supabase
+        .from('items')
+        .select('*')
+        .eq('user_id', user.id)
+        .in('status', ['traded', 'claimed'])
+        .order('created_at', { ascending: false });
 
-        if (error) throw error;
-        
-        const historyData = (data || []).map(item => ({
-          id: item.id,
-          item_id: item.id,
-          user_id: user.id,
-          action: 'created' as const,
-          created_at: item.created_at,
-          items: item
-        }));
-        
-        setHistory(historyData);
-      } else {
-        // Fetch other actions from activity_log or similar table
-        // For now, we'll create a simple history based on watched items
-        const { data, error } = await supabase
-          .from('watched_items')
-          .select(`
-            *,
-            items (*)
-          `)
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
+      if (archivedError) throw archivedError;
 
-        if (error) throw error;
-        
-        const historyData = (data || []).map(watch => ({
-          id: watch.id,
-          item_id: watch.item_id,
-          user_id: user.id,
-          action: 'watched' as const,
-          created_at: watch.created_at,
-          items: watch.items
-        }));
-        
-        setHistory(historyData);
-      }
+      // Fetch history entries
+      const { data: historyData, error: historyError } = await supabase
+        .from('user_history')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (historyError) throw historyError;
+
+      setArchivedItems(archivedData || []);
+      setHistoryEntries(historyData || []);
     } catch (error) {
-      console.error('Error fetching history:', error);
+      console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -109,42 +92,38 @@ export default function HistoryScreen() {
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchHistory();
+    fetchData();
   };
 
-  const getActionText = (action: string) => {
-    switch (action) {
+  const getActionText = (actionType: string) => {
+    switch (actionType) {
       case 'created': return 'Created listing';
-      case 'viewed': return 'Viewed item';
-      case 'contacted': return 'Contacted seller';
-      case 'watched': return 'Added to watchlist';
-      case 'unwatched': return 'Removed from watchlist';
+      case 'edited': return 'Edited listing';
+      case 'deleted': return 'Deleted listing';
       default: return 'Action';
     }
   };
 
-  const getActionEmoji = (action: string) => {
-    switch (action) {
+  const getActionEmoji = (actionType: string) => {
+    switch (actionType) {
       case 'created': return '✨';
-      case 'viewed': return '👁️';
-      case 'contacted': return '💬';
-      case 'watched': return '⭐';
-      case 'unwatched': return '❌';
+      case 'edited': return '✏️';
+      case 'deleted': return '🗑️';
       default: return '';
     }
   };
 
-  const renderHistoryItem = ({ item }: { item: HistoryItem }) => (
+  const renderHistoryItem = ({ item }: { item: HistoryEntry }) => (
     <TouchableOpacity 
       style={styles.historyItem}
-      onPress={() => navigation.navigate('ItemDetails', { itemId: item.item_id })}
+      onPress={() => item.item_id && navigation.navigate('ItemDetails', { itemId: item.item_id })}
       activeOpacity={0.8}
     >
       <View style={styles.historyContent}>
         <View style={styles.actionInfo}>
-          <Text style={styles.actionEmoji}>{getActionEmoji(item.action)}</Text>
+          <Text style={styles.actionEmoji}>{getActionEmoji(item.action_type)}</Text>
           <View style={styles.actionDetails}>
-            <Text style={styles.actionText}>{getActionText(item.action)}</Text>
+            <Text style={styles.actionText}>{getActionText(item.action_type)}</Text>
             <Text style={styles.actionTime}>
               {new Date(item.created_at).toLocaleDateString()}
             </Text>
@@ -152,9 +131,9 @@ export default function HistoryScreen() {
         </View>
         
         <View style={styles.itemInfo}>
-          {item.items.images && item.items.images.length > 0 ? (
+          {item.item_images && item.item_images.length > 0 ? (
             <Image 
-              source={{ uri: item.items.images[0] }} 
+              source={{ uri: item.item_images[0] }} 
               style={styles.itemThumbnail}
             />
           ) : (
@@ -164,10 +143,10 @@ export default function HistoryScreen() {
           )}
           <View style={styles.itemText}>
             <Text style={styles.itemTitle} numberOfLines={1}>
-              {item.items.title}
+              {item.item_title}
             </Text>
             <Text style={styles.itemType}>
-              {item.items.type === 'free' ? '🎁 Free' : '🔄 Barter'}
+              {item.item_type === 'free' ? '🎁 Free' : '🔄 Barter'}
             </Text>
           </View>
         </View>
@@ -175,65 +154,44 @@ export default function HistoryScreen() {
     </TouchableOpacity>
   );
 
-  const filteredHistory = history.filter(item => 
-    activeFilter === 'all' || item.action === activeFilter
-  );
-
-  const renderFilterTabs = () => (
-    <View style={styles.filterContainerWrapper}>
-      <View style={styles.filterContainer}>
-        {[
-          { key: 'all', label: 'All' },
-          { key: 'created', label: 'Created' },
-          { key: 'watched', label: 'Watched' },
-        ].map((filter) => (
-          <TouchableOpacity
-            key={filter.key}
-            style={[
-              styles.filterTab,
-              activeFilter === filter.key && styles.activeFilterTab,
-            ]}
-            onPress={() => {
-              setActiveFilter(filter.key as any);
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            }}
-            activeOpacity={0.7}
-          >
-            <Text style={[
-              styles.filterText,
-              activeFilter === filter.key && styles.activeFilterText,
-            ]}>
-              {filter.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-      <View style={styles.filterContainer}>
-        {[
-          { key: 'viewed', label: 'Viewed' },
-          { key: 'contacted', label: 'Contacted' },
-        ].map((filter) => (
-          <TouchableOpacity
-            key={filter.key}
-            style={[
-              styles.filterTab,
-              activeFilter === filter.key && styles.activeFilterTab,
-            ]}
-            onPress={() => {
-              setActiveFilter(filter.key as any);
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            }}
-            activeOpacity={0.7}
-          >
-            <Text style={[
-              styles.filterText,
-              activeFilter === filter.key && styles.activeFilterText,
-            ]}>
-              {filter.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+  const renderTabButtons = () => (
+    <View style={styles.tabContainer}>
+      <TouchableOpacity
+        style={[
+          styles.tabButton,
+          activeTab === 'archived' && styles.activeTabButton,
+        ]}
+        onPress={() => {
+          setActiveTab('archived');
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }}
+        activeOpacity={0.7}
+      >
+        <Text style={[
+          styles.tabText,
+          activeTab === 'archived' && styles.activeTabText,
+        ]}>
+          Completed Trades ({archivedItems.length})
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[
+          styles.tabButton,
+          activeTab === 'history' && styles.activeTabButton,
+        ]}
+        onPress={() => {
+          setActiveTab('history');
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }}
+        activeOpacity={0.7}
+      >
+        <Text style={[
+          styles.tabText,
+          activeTab === 'history' && styles.activeTabText,
+        ]}>
+          All Activity ({historyEntries.length})
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 
@@ -254,40 +212,77 @@ export default function HistoryScreen() {
         <View style={styles.headerContent}>
           <Text style={styles.title}>History</Text>
           <Text style={styles.subtitle}>
-            {filteredHistory.length} {filteredHistory.length === 1 ? 'item' : 'items'}
+            {activeTab === 'archived' 
+              ? `${archivedItems.length} completed trades`
+              : `${historyEntries.length} activities`
+            }
           </Text>
         </View>
         <View style={styles.headerSpacer} />
       </View>
 
-      {renderFilterTabs()}
+      {renderTabButtons()}
 
-      <FlatList
-        data={filteredHistory}
-        renderItem={renderHistoryItem}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContainer}
-        refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
-            onRefresh={onRefresh}
-            tintColor="#3B82F6"
-            colors={['#3B82F6']}
-          />
-        }
-        ListEmptyComponent={
-          !loading ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyEmoji}>📝</Text>
-              <Text style={styles.emptyText}>No history yet</Text>
-              <Text style={styles.emptySubtext}>
-                Your activity will appear here as you use the app
-              </Text>
-            </View>
-          ) : null
-        }
-        showsVerticalScrollIndicator={false}
-      />
+      {activeTab === 'archived' ? (
+        <FlatList
+          data={archivedItems}
+          renderItem={({ item }) => (
+            <ItemCard
+              item={item}
+              onPress={() => navigation.navigate('ItemDetails', { itemId: item.id })}
+            />
+          )}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContainer}
+          refreshControl={
+            <RefreshControl 
+              refreshing={refreshing} 
+              onRefresh={onRefresh}
+              tintColor="#3B82F6"
+              colors={['#3B82F6']}
+            />
+          }
+          ListEmptyComponent={
+            !loading ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyEmoji}>🏆</Text>
+                <Text style={styles.emptyText}>No completed trades</Text>
+                <Text style={styles.emptySubtext}>
+                  Items that have been traded or claimed will appear here
+                </Text>
+              </View>
+            ) : null
+          }
+          showsVerticalScrollIndicator={false}
+        />
+      ) : (
+        <FlatList
+          data={historyEntries}
+          renderItem={renderHistoryItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContainer}
+          refreshControl={
+            <RefreshControl 
+              refreshing={refreshing} 
+              onRefresh={onRefresh}
+              tintColor="#3B82F6"
+              colors={['#3B82F6']}
+            />
+          }
+          ListEmptyComponent={
+            !loading ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyEmoji}>📝</Text>
+                <Text style={styles.emptyText}>No activity yet</Text>
+                <Text style={styles.emptySubtext}>
+                  Your listing activity will appear here
+                </Text>
+              </View>
+            ) : null
+          }
+          showsVerticalScrollIndicator={false}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -381,6 +376,30 @@ const styles = StyleSheet.create({
   },
   activeFilterText: {
     color: '#FFFFFF',
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  activeTabButton: {
+    borderBottomColor: '#3B82F6',
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  activeTabText: {
+    color: '#3B82F6',
   },
   listContainer: {
     paddingVertical: 8,

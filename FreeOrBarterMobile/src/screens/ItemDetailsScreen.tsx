@@ -421,7 +421,16 @@ export default function ItemDetailsScreen() {
 
       {isOwnItem && (
         <View style={styles.actionBar}>
-          <Text style={styles.ownItemText}>This is your listing</Text>
+          <TouchableOpacity
+            style={styles.manageButton}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              navigation.navigate('ManageListing', { item });
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.manageButtonText}>⚙️ Manage Listing</Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -764,13 +773,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
-  ownItemText: {
+  manageButton: {
     flex: 1,
-    textAlign: 'center',
+    backgroundColor: '#3B82F6',
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  manageButtonText: {
+    color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '500',
-    color: '#64748B',
-    fontStyle: 'italic',
+    fontWeight: '700',
   },
   unavailableText: {
     flex: 1,
