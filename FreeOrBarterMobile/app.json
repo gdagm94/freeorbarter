@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "FreeOrBarterMobile",
-    "slug": "FreeOrBarterMobile",
+    "name": "FreeOrBarter",
+    "slug": "FreeOrBarter",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
