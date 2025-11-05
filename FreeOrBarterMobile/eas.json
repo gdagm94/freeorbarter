@@ -16,6 +16,12 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "appleId": "dona.ngock@yahoo.com",
+        "ascAppId": "6754944684",
+        "appleTeamId": "6TA5JVLWL5"
+      }
+    }
   }
 }
