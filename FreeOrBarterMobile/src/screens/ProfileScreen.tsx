@@ -16,6 +16,7 @@ import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabase';
 import { Item } from '../types';
 import ItemCard from '../components/ItemCard';
+import Footer from '../components/Footer';
 import { useNavigation } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 
@@ -307,6 +308,9 @@ export default function ProfileScreen() {
             <Text style={styles.signOutText}>Sign Out</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Footer */}
+        <Footer />
       </ScrollView>
     </SafeAreaView>
   );

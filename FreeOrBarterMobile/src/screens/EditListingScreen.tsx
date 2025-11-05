@@ -357,19 +357,8 @@ export default function EditListingScreen() {
 
   const handleViewListing = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    // Navigate to ItemDetails and then to Home tab to ensure proper navigation stack
-    navigation.navigate('ItemDetails', { itemId: item.id });
-    // Navigate to Home tab after a brief delay to ensure ItemDetails loads
-    setTimeout(() => {
-      navigation.navigate('Tabs', { screen: 'Home' });
-    }, 100);
-  };
-
-  const handleEditAnother = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setShowSuccessModal(false);
-    // Navigate back to Home tab so user can access all tabs
-    navigation.navigate('Tabs', { screen: 'Home' });
+    navigation.replace('ItemDetails', { itemId: item.id });
   };
 
   const handleTryAgain = () => {
@@ -808,13 +797,6 @@ export default function EditListingScreen() {
                   activeOpacity={0.8}
                 >
                   <Text style={styles.successPrimaryButtonText}>View Updated Listing</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.successSecondaryButton}
-                  onPress={handleEditAnother}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.successSecondaryButtonText}>Edit Another Field</Text>
                 </TouchableOpacity>
               </View>
             </TouchableOpacity>
