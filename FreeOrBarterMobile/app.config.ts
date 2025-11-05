@@ -21,7 +21,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     infoPlist: {
       NSPhotoLibraryUsageDescription: 'We need access to your photos to let you upload item images.',
       NSPhotoLibraryAddUsageDescription: 'We need permission to save images to your photo library.',
-      NSCameraUsageDescription: 'We need camera access to take photos of your items.'
+      NSCameraUsageDescription: 'We need camera access to take photos of your items.',
+      ITSAppUsesNonExemptEncryption: false
     }
   },
   android: {
