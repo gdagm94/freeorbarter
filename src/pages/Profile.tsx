@@ -92,15 +92,19 @@ function Profile() {
         .from('users')
         .select('*')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
 
-      if (profileError) throw profileError;
-      
-      if (profileData && !profileData.profile_completed) {
+      if (profileError && profileError.code !== 'PGRST116') throw profileError;
+
+      if (!profileData) {
+        setProfile(null);
         setShowProfileSetup(true);
+      } else {
+        if (!profileData.profile_completed) {
+          setShowProfileSetup(true);
+        }
+        setProfile(profileData);
       }
-      
-      setProfile(profileData);
 
       // Fetch user's items
       const { data: itemsData, error: itemsError } = await supabase

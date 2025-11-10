@@ -133,20 +133,27 @@ export default function SettingsScreen() {
         .from('users')
         .select('*')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
 
-      if (profileError) throw profileError;
-      
-      setProfile(profileData);
-      setFormData({
-        username: profileData?.username || '',
-        gender: profileData?.gender || '',
-      });
-      setAvatarUri(profileData?.avatar_url);
+      if (profileError && profileError.code !== 'PGRST116') throw profileError;
 
-      // Pre-populate location if zipcode exists
-      if (profileData?.zipcode) {
-        await prePopulateLocation(profileData.zipcode);
+      if (!profileData) {
+        setProfile(null);
+        setFormData({ username: '', gender: '' });
+        setAvatarUri(null);
+        setSelectedLocation(null);
+      } else {
+        setProfile(profileData);
+        setFormData({
+          username: profileData.username || '',
+          gender: profileData.gender || '',
+        });
+        setAvatarUri(profileData.avatar_url);
+
+        // Pre-populate location if zipcode exists
+        if (profileData.zipcode) {
+          await prePopulateLocation(profileData.zipcode);
+        }
       }
 
     } catch (error) {

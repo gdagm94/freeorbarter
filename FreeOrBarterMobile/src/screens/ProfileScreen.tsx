@@ -67,10 +67,10 @@ export default function ProfileScreen() {
         .from('users')
         .select('*')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
 
-      if (profileError) throw profileError;
-      setProfile(profileData);
+      if (profileError && profileError.code !== 'PGRST116') throw profileError;
+      setProfile(profileData ?? null);
 
       // Fetch user's items
       const { data: itemsData, error: itemsError } = await supabase
