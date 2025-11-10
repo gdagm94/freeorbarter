@@ -68,7 +68,33 @@ function Privacy() {
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-gray-900 mb-3">6. Cookies and Tracking</h2>
+            <h2 className="text-xl font-semibold text-gray-900 mb-3">6. Account Deletion</h2>
+            <p className="mb-3">
+              You can permanently delete your Free or Barter account at any time. Deleting an account removes
+              your profile, listings, messages, friends, notifications, and associated media from our systems.
+            </p>
+            <div className="space-y-2">
+              <p className="font-semibold text-gray-900">Web</p>
+              <p>Visit <strong>Profile &gt; Account deletion</strong> and follow the confirmation prompt.</p>
+              <p className="font-semibold text-gray-900">iOS / Android</p>
+              <p>Open the app, go to <strong>Settings &gt; Delete account</strong>, and confirm the request.</p>
+            </div>
+            <p className="mt-3 text-sm text-gray-500">
+              We record a minimal audit log (your account identifier, email, and deletion timestamp) solely to
+              document the request for legal, safety, and fraud-prevention purposes. This log is stored securely,
+              never shared with other users, and does not keep your listings or message history.
+            </p>
+            <p className="mt-3">
+              If you run into any issues or require a record of your activity before deletion, contact us at{' '}
+              <a href="mailto:support@freeorbarter.com" className="text-indigo-600 hover:text-indigo-800">
+                support@freeorbarter.com
+              </a>{' '}
+              before completing the process.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-semibold text-gray-900 mb-3">7. Cookies and Tracking</h2>
             <p>
               We use cookies and similar technologies to improve user experience and analyze platform usage. 
               You can control cookie settings through your browser preferences.
@@ -76,7 +102,7 @@ function Privacy() {
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-gray-900 mb-3">7. Contact Us</h2>
+            <h2 className="text-xl font-semibold text-gray-900 mb-3">8. Contact Us</h2>
             <p>
               If you have questions about this privacy policy or your data, please contact us at{' '}
               <a href="mailto:support@freeorbarter.com" className="text-indigo-600 hover:text-indigo-800">

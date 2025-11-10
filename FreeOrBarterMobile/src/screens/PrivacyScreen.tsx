@@ -27,7 +27,7 @@ export default function PrivacyScreen() {
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.section}>
-          <Text style={styles.updateDate}>Last Updated: October 8, 2025</Text>
+          <Text style={styles.updateDate}>Last Updated: November 10, 2025</Text>
         </View>
 
         <View style={styles.section}>
@@ -108,7 +108,26 @@ export default function PrivacyScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>7. Location Data</Text>
+          <Text style={styles.sectionTitle}>7. Account Deletion</Text>
+          <Text style={styles.paragraph}>
+            You can permanently delete your Free or Barter account at any time. Deleting your account removes your profile,
+            listings, messages, friends, notifications, and associated media from our systems.
+          </Text>
+          <View style={styles.bulletList}>
+            <Text style={styles.bullet}>• Web: Profile &gt; Account deletion</Text>
+            <Text style={styles.bullet}>• iOS / Android: Settings &gt; Delete account</Text>
+          </View>
+          <Text style={styles.smallPrint}>
+            We keep a minimal audit record (your account identifier, email, and deletion timestamp) solely to document the request
+            for legal, safety, and fraud-prevention purposes. The log is stored securely and does not retain your listings or messages.
+          </Text>
+          <Text style={styles.paragraph}>
+            Need a copy of your data or help with deletion? Email support@freeorbarter.com before you confirm the request.
+          </Text>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>8. Location Data</Text>
           <Text style={styles.paragraph}>
             We collect location data to help you find items near you and to show your items to nearby users. 
             You can control location permissions through your device settings.
@@ -116,7 +135,7 @@ export default function PrivacyScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>8. Children's Privacy</Text>
+          <Text style={styles.sectionTitle}>9. Children's Privacy</Text>
           <Text style={styles.paragraph}>
             Our service is not intended for children under 18. We do not knowingly collect personal 
             information from children. If you believe we have collected information from a child, please 
@@ -125,7 +144,7 @@ export default function PrivacyScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>9. Changes to This Policy</Text>
+          <Text style={styles.sectionTitle}>10. Changes to This Policy</Text>
           <Text style={styles.paragraph}>
             We may update this Privacy Policy from time to time. We will notify you of any changes by 
             posting the new policy on this page and updating the "Last Updated" date.
@@ -133,7 +152,7 @@ export default function PrivacyScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>10. Contact Us</Text>
+          <Text style={styles.sectionTitle}>11. Contact Us</Text>
           <Text style={styles.paragraph}>
             If you have questions about this Privacy Policy or our data practices, please contact us at:
           </Text>
@@ -203,6 +222,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 24,
     color: '#4B5563',
+    marginBottom: 8,
+  },
+  smallPrint: {
+    fontSize: 12,
+    lineHeight: 20,
+    color: '#6B7280',
     marginBottom: 8,
   },
   bulletList: {
