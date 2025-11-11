@@ -295,6 +295,90 @@ export interface Database {
           created_at?: string
         }
       }
+      reports: {
+        Row: {
+          id: string
+          reporter_id: string
+          target_type: 'user' | 'item' | 'message' | 'comment' | 'other'
+          target_id: string
+          category: string
+          description: string | null
+          status: 'pending' | 'in_review' | 'resolved' | 'dismissed'
+          metadata: Json | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          reporter_id: string
+          target_type: 'user' | 'item' | 'message' | 'comment' | 'other'
+          target_id: string
+          category: string
+          description?: string | null
+          status?: 'pending' | 'in_review' | 'resolved' | 'dismissed'
+          metadata?: Json | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          reporter_id?: string
+          target_type?: 'user' | 'item' | 'message' | 'comment' | 'other'
+          target_id?: string
+          category?: string
+          description?: string | null
+          status?: 'pending' | 'in_review' | 'resolved' | 'dismissed'
+          metadata?: Json | null
+          created_at?: string
+        }
+      }
+      moderation_policies: {
+        Row: {
+          id: string
+          version: number
+          title: string
+          content: string
+          published_at: string
+          require_reaccept_after: string | null
+        }
+        Insert: {
+          id?: string
+          version: number
+          title: string
+          content: string
+          published_at?: string
+          require_reaccept_after?: string | null
+        }
+        Update: {
+          id?: string
+          version?: number
+          title?: string
+          content?: string
+          published_at?: string
+          require_reaccept_after?: string | null
+        }
+      }
+      user_policy_acceptances: {
+        Row: {
+          id: string
+          user_id: string
+          policy_id: string
+          platform: string | null
+          accepted_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          policy_id: string
+          platform?: string | null
+          accepted_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          policy_id?: string
+          platform?: string | null
+          accepted_at?: string
+        }
+      }
     }
     Views: {
       [_ in never]: never

@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { MessageCircle, Star, ArrowLeft, ChevronLeft, ChevronRight, User, Edit, Trash2, Tag, CheckCircle, Share2 } from 'lucide-react';
+import { MessageCircle, Star, ArrowLeft, ChevronLeft, ChevronRight, User, Edit, Trash2, Tag, CheckCircle, Share2, Flag } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Item } from '../types';
 import { MessageList } from '../components/MessageList';
@@ -12,6 +12,7 @@ import { DeleteListingDialog } from '../components/DeleteListingDialog';
 import { StatusUpdateDialog } from '../components/StatusUpdateDialog';
 import { WatchButton } from '../components/WatchButton';
 import { ShareDialog } from '../components/ShareDialog';
+import { ReportContentDialog } from '../components/ReportContentDialog';
 
 interface ItemUser {
   id: string;
@@ -41,6 +42,7 @@ function ItemDetails() {
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [showStatusDialog, setShowStatusDialog] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
+  const [showReportDialog, setShowReportDialog] = useState(false);
 
   // Scroll to top when component mounts
   useEffect(() => {
@@ -392,6 +394,22 @@ function ItemDetails() {
                 >
                   <Share2 className="w-5 h-5 text-gray-600" />
                 </button>
+                {!isOwnItem && (
+                  <button
+                    onClick={() => {
+                      if (!user) {
+                        setShowAuth(true);
+                        return;
+                      }
+                      setShowReportDialog(true);
+                    }}
+                    className="bg-gray-100 p-2 rounded-full shadow-sm hover:bg-gray-200 transition-colors"
+                    title="Report Item"
+                    aria-label="Report Item"
+                  >
+                    <Flag className="w-5 h-5 text-red-600" />
+                  </button>
+                )}
                 {isOwnItem && (
                   <div className="relative group">
                     <button
@@ -511,10 +529,11 @@ function ItemDetails() {
         </div>
         {showMessages && user && otherUserId && (
           <div className="border-t">
-            <MessageList 
-              itemId={item.id} 
-              currentUserId={user.id} 
+            <MessageList
+              itemId={item.id}
+              currentUserId={user.id}
               otherUserId={otherUserId}
+              conversationType="item"
             />
           </div>
         )}
@@ -555,6 +574,14 @@ function ItemDetails() {
           itemId={item.id}
           itemTitle={item.title}
           onClose={() => setShowShareDialog(false)}
+        />
+      )}
+      {showReportDialog && (
+        <ReportContentDialog
+          open={showReportDialog}
+          onClose={() => setShowReportDialog(false)}
+          targetId={item.id}
+          targetType="item"
         />
       )}
     </div>

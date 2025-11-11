@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -8,9 +8,40 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { fetchLatestPolicy, PolicyStatus } from '../lib/policy';
 
 export default function TermsScreen() {
   const navigation = useNavigation();
+  const [policyStatus, setPolicyStatus] = useState<PolicyStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const load = async () => {
+      try {
+        setLoading(true);
+        const status = await fetchLatestPolicy();
+        if (isMounted) {
+          setPolicyStatus(status);
+        }
+      } catch (err) {
+        if (isMounted) {
+          setError(err instanceof Error ? err.message : 'Unable to load policy.');
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    load();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -21,113 +52,43 @@ export default function TermsScreen() {
         >
           <Text style={styles.backIcon}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Terms of Service</Text>
+        <Text style={styles.headerTitle}>Community Guidelines</Text>
         <View style={styles.placeholder} />
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.section}>
-          <Text style={styles.updateDate}>Last Updated: October 8, 2025</Text>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>1. Acceptance of Terms</Text>
-          <Text style={styles.paragraph}>
-            By accessing and using FreeorBarter, you accept and agree to be bound by the terms and 
-            provisions of this agreement. If you do not agree to these terms, please do not use our service.
-          </Text>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>2. Use of Service</Text>
-          <Text style={styles.paragraph}>
-            FreeorBarter provides a platform for users to list items they wish to give away for free or 
-            trade with others. Users must:
-          </Text>
-          <View style={styles.bulletList}>
-            <Text style={styles.bullet}>• Be at least 18 years old or have parental consent</Text>
-            <Text style={styles.bullet}>• Provide accurate and truthful information</Text>
-            <Text style={styles.bullet}>• Not use the service for illegal activities</Text>
-            <Text style={styles.bullet}>• Respect other users and community guidelines</Text>
+        {policyStatus?.policy && (
+          <View style={styles.section}>
+            <Text style={styles.updateDate}>
+              Effective {new Date(policyStatus.policy.publishedAt).toLocaleDateString()} • Version {policyStatus.policy.version}
+            </Text>
           </View>
-        </View>
+        )}
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>3. User Responsibilities</Text>
-          <Text style={styles.paragraph}>
-            Users are solely responsible for:
-          </Text>
-          <View style={styles.bulletList}>
-            <Text style={styles.bullet}>• The accuracy of their listings</Text>
-            <Text style={styles.bullet}>• The condition and safety of items they list</Text>
-            <Text style={styles.bullet}>• Communication and arrangements with other users</Text>
-            <Text style={styles.bullet}>• Compliance with local laws and regulations</Text>
+        {loading && (
+          <View style={styles.section}>
+            <Text style={styles.paragraph}>Loading latest policy…</Text>
           </View>
-        </View>
+        )}
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>4. Prohibited Items</Text>
-          <Text style={styles.paragraph}>
-            The following items are prohibited from being listed:
-          </Text>
-          <View style={styles.bulletList}>
-            <Text style={styles.bullet}>• Illegal or stolen goods</Text>
-            <Text style={styles.bullet}>• Weapons or explosives</Text>
-            <Text style={styles.bullet}>• Hazardous materials</Text>
-            <Text style={styles.bullet}>• Animals (unless through approved channels)</Text>
-            <Text style={styles.bullet}>• Counterfeit or pirated goods</Text>
+        {error && (
+          <View style={styles.section}>
+            <Text style={[styles.paragraph, { color: '#DC2626' }]}>{error}</Text>
           </View>
-        </View>
+        )}
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>5. Liability</Text>
-          <Text style={styles.paragraph}>
-            FreeorBarter acts as a platform connecting users. We are not responsible for:
-          </Text>
-          <View style={styles.bulletList}>
-            <Text style={styles.bullet}>• The quality, safety, or legality of items listed</Text>
-            <Text style={styles.bullet}>• The accuracy of listings or user communications</Text>
-            <Text style={styles.bullet}>• Any disputes between users</Text>
-            <Text style={styles.bullet}>• Loss, damage, or injury resulting from transactions</Text>
+        {policyStatus?.policy && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>{policyStatus.policy.title}</Text>
+            <Text style={styles.paragraph}>{policyStatus.policy.content}</Text>
           </View>
-        </View>
+        )}
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>6. Content Rights</Text>
-          <Text style={styles.paragraph}>
-            By posting content on FreeorBarter, you grant us a non-exclusive, worldwide license to use, 
-            display, and distribute your content on our platform. You retain ownership of your content.
-          </Text>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>7. Account Termination</Text>
-          <Text style={styles.paragraph}>
-            We reserve the right to suspend or terminate accounts that violate these terms or engage in 
-            harmful behavior. Users may also delete their accounts at any time.
-          </Text>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>8. Changes to Terms</Text>
-          <Text style={styles.paragraph}>
-            We may update these terms from time to time. Continued use of the service after changes 
-            constitutes acceptance of the new terms.
-          </Text>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>9. Contact</Text>
-          <Text style={styles.paragraph}>
-            For questions about these terms, please contact us at support@freeorbarter.com
-          </Text>
-        </View>
-
-        <View style={styles.footer}>
-          <Text style={styles.copyright}>
-            © {new Date().getFullYear()} FreeorBarter. All rights reserved.
-          </Text>
-        </View>
+        {!loading && !error && !policyStatus?.policy && (
+          <View style={styles.section}>
+            <Text style={styles.paragraph}>Policy content is currently unavailable.</Text>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );

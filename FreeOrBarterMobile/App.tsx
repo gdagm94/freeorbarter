@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Platform, Alert } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import * as Linking from 'expo-linking';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -30,6 +30,8 @@ import AboutScreen from './src/screens/AboutScreen';
 import TermsScreen from './src/screens/TermsScreen';
 import PrivacyScreen from './src/screens/PrivacyScreen';
 import { useAuth } from './src/hooks/useAuth';
+import { fetchLatestPolicy, acceptPolicy, PolicyStatus } from './src/lib/policy';
+import { PolicyAcceptanceModal } from './src/components/PolicyAcceptanceModal';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -46,11 +48,14 @@ function Tabs() {
   const { user } = useAuth();
   const [messageBadge, setMessageBadge] = useState<number | undefined>(undefined);
   const [notificationBadge, setNotificationBadge] = useState<number | undefined>(undefined);
+  const [policyStatus, setPolicyStatus] = useState<PolicyStatus | null>(null);
+  const [policyLoading, setPolicyLoading] = useState(false);
 
   useEffect(() => {
     if (!user) {
       setMessageBadge(undefined);
       setNotificationBadge(undefined);
+      setPolicyStatus(null);
       return;
     }
     let isMounted = true;
@@ -81,7 +86,48 @@ function Tabs() {
     };
   }, [user?.id]);
 
+  useEffect(() => {
+    let isMounted = true;
+    const loadPolicyStatus = async () => {
+      if (!user) return;
+      try {
+        setPolicyLoading(true);
+        const status = await fetchLatestPolicy();
+        if (isMounted) {
+          setPolicyStatus(status);
+        }
+      } catch (error) {
+        console.error('Failed to load policy status', error);
+      } finally {
+        if (isMounted) {
+          setPolicyLoading(false);
+        }
+      }
+    };
+
+    loadPolicyStatus();
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.id]);
+
+  const handlePolicyAccepted = async () => {
+    if (!policyStatus?.policy) return;
+    try {
+      setPolicyLoading(true);
+      await acceptPolicy(policyStatus.policy.id, Platform.OS === 'ios' ? 'ios' : 'android');
+      const refreshed = await fetchLatestPolicy();
+      setPolicyStatus(refreshed);
+    } catch (error) {
+      console.error('Failed to accept policy', error);
+      Alert.alert('Error', 'Unable to record your acceptance. Please try again.');
+    } finally {
+      setPolicyLoading(false);
+    }
+  };
+
   return (
+    <>
     <Tab.Navigator 
       screenOptions={{ 
         headerShown: false,
@@ -170,6 +216,18 @@ function Tabs() {
         }}
       />
     </Tab.Navigator>
+    {user && policyStatus?.policy && !policyStatus.accepted && (
+      <PolicyAcceptanceModal
+        visible
+        title={policyStatus.policy.title}
+        content={policyStatus.policy.content}
+        loading={policyLoading}
+        disabled={policyLoading}
+        onAccept={handlePolicyAccepted}
+        onReject={() => supabase.auth.signOut()}
+      />
+    )}
+    </>
   );
 }
 

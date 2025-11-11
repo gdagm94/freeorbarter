@@ -18,12 +18,15 @@ import ResetPassword from './pages/ResetPassword';
 import ConfirmEmail from './pages/ConfirmEmail';
 import { supabase } from './lib/supabase';
 import { useAuth } from './hooks/useAuth';
+import { fetchLatestPolicy, PolicyStatus } from './lib/policy';
+import { PolicyModal } from './components/PolicyModal';
 import pusherClient from './lib/pusher';
 
 function App() {
   const { user } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
   const [unreadOffers, setUnreadOffers] = useState(0);
+  const [policyStatus, setPolicyStatus] = useState<PolicyStatus | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -74,6 +77,39 @@ function App() {
     };
   }, [user]);
 
+  useEffect(() => {
+    if (!user) {
+      setPolicyStatus(null);
+      return;
+    }
+
+    let isMounted = true;
+    const loadPolicy = async () => {
+      try {
+        const status = await fetchLatestPolicy();
+        if (isMounted) {
+          setPolicyStatus(status);
+        }
+      } catch (error) {
+        console.error('Failed to load policy status', error);
+      }
+    };
+
+    loadPolicy();
+    return () => {
+      isMounted = false;
+    };
+  }, [user]);
+
+  const handlePolicyAccepted = async () => {
+    try {
+      const status = await fetchLatestPolicy();
+      setPolicyStatus(status);
+    } catch (error) {
+      console.error('Failed to refresh policy status', error);
+    }
+  };
+
   return (
     <BrowserRouter>
       <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -105,6 +141,14 @@ function App() {
           </Routes>
         </main>
         <Footer />
+        {user && policyStatus && !policyStatus.accepted && (
+          <PolicyModal
+            open
+            policy={policyStatus.policy}
+            onAccepted={handlePolicyAccepted}
+            onLogoutRequested={() => supabase.auth.signOut()}
+          />
+        )}
       </div>
     </BrowserRouter>
   );
