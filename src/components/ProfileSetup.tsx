@@ -38,6 +38,25 @@ const stateAbbreviations: { [key: string]: string } = {
   'WI': 'Wisconsin', 'WY': 'Wyoming'
 };
 
+type AccountDeletionReason =
+  | 'privacy_concerns'
+  | 'not_finding_value'
+  | 'too_many_notifications'
+  | 'duplicate_account'
+  | 'switching_platforms'
+  | 'other';
+
+const ACCOUNT_DELETION_REASONS: { value: AccountDeletionReason; label: string }[] = [
+  { value: 'privacy_concerns', label: 'I have privacy or data concerns' },
+  { value: 'not_finding_value', label: 'I am not finding items or matches I want' },
+  { value: 'too_many_notifications', label: 'I receive too many notifications' },
+  { value: 'duplicate_account', label: 'I created another account accidentally' },
+  { value: 'switching_platforms', label: 'I started using a different marketplace' },
+  { value: 'other', label: 'Other' },
+];
+
+const DEFAULT_ACCOUNT_DELETION_REASON: AccountDeletionReason = 'privacy_concerns';
+
 export function ProfileSetup({ onComplete, onClose, initialData }: ProfileSetupProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +70,14 @@ export function ProfileSetup({ onComplete, onClose, initialData }: ProfileSetupP
   const [useCurrentLocation, setUseCurrentLocation] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [showManualEntry, setShowManualEntry] = useState(false);
+  const [deleteReason, setDeleteReason] = useState<AccountDeletionReason>(DEFAULT_ACCOUNT_DELETION_REASON);
+  const [deleteReasonOther, setDeleteReasonOther] = useState('');
+  const [deleteFeedback, setDeleteFeedback] = useState('');
+  const [deleteAcknowledged, setDeleteAcknowledged] = useState(false);
+  const isDeleteDisabled =
+    !deleteAcknowledged || (deleteReason === 'other' && deleteReasonOther.trim().length === 0);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [manualFormData, setManualFormData] = useState({
     city: '',
     state: '',
@@ -288,6 +315,49 @@ export function ProfileSetup({ onComplete, onClose, initialData }: ProfileSetupP
     }
   };
 
+  const handleDeleteAccount = async () => {
+    if (isDeleteDisabled || deleteLoading) return;
+    setDeleteLoading(true);
+    setDeleteError(null);
+
+    const reasonPayload = deleteReason === 'other' ? deleteReasonOther.trim() : deleteReason;
+    const feedbackPayload = deleteFeedback.trim();
+    const appVersion = (import.meta.env.VITE_APP_VERSION as string | undefined) ?? undefined;
+
+    try {
+      const { data, error } = await supabase.functions.invoke<{ success?: boolean; error?: string }>('delete-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          reason: reasonPayload,
+          feedback: feedbackPayload.length > 0 ? feedbackPayload : undefined,
+          platform: 'web',
+          appVersion,
+          requestFollowUp: false,
+        },
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      if (data && typeof data === 'object' && 'error' in data && data.error) {
+        throw new Error(data.error);
+      }
+
+      await supabase.auth.signOut();
+      onClose();
+      onComplete();
+      window.location.assign('/');
+    } catch (err) {
+      setDeleteError(
+        err instanceof Error ? err.message : 'An unexpected error occurred while deleting your account.',
+      );
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-lg p-6 max-w-md w-full relative">
@@ -470,7 +540,116 @@ export function ProfileSetup({ onComplete, onClose, initialData }: ProfileSetupP
               <option value="">Prefer not to say</option>
               <option value="male">Male</option>
               <option value="female">Female</option>
+              <option value="non-binary">Non-binary</option>
+              <option value="other">Other</option>
             </select>
+          </div>
+
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+            <div className="flex items-start space-x-3">
+              <div className="rounded-full bg-white p-2 shadow-sm">
+                <span role="img" aria-label="warning" className="text-red-600">⚠️</span>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-red-700">Delete account</h3>
+                <p className="mt-1 text-xs text-red-600">
+                  Permanently remove your account, listings, messages, friends, and notifications. This cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-3 space-y-2">
+              <p className="text-xs font-medium text-red-700">Why are you leaving?</p>
+              <div className="space-y-2">
+                {ACCOUNT_DELETION_REASONS.map((option) => {
+                  const selected = deleteReason === option.value;
+                  return (
+                    <label
+                      key={option.value}
+                      className={`flex items-start space-x-2 rounded-md border px-3 py-2 text-xs ${
+                        selected ? 'border-red-500 bg-white text-red-700' : 'border-red-200 text-red-600'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="delete-reason"
+                        value={option.value}
+                        checked={selected}
+                        onChange={() => {
+                          setDeleteReason(option.value);
+                          if (option.value !== 'other') {
+                            setDeleteReasonOther('');
+                          }
+                        }}
+                        className="mt-1 h-3 w-3 border-red-300 text-red-600 focus:ring-red-500"
+                      />
+                      <span className="flex-1">{option.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            {deleteReason === 'other' && (
+              <div className="mt-3">
+                <label className="text-xs font-medium text-red-700">Tell us a bit more</label>
+                <input
+                  type="text"
+                  value={deleteReasonOther}
+                  onChange={(e) => setDeleteReasonOther(e.target.value)}
+                  maxLength={120}
+                  placeholder="Share a short reason"
+                  className="mt-1 block w-full rounded-md border border-red-300 px-3 py-2 text-xs focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+                />
+              </div>
+            )}
+
+            <div className="mt-3">
+              <label className="text-xs font-medium text-red-700">Additional feedback (optional)</label>
+              <textarea
+                value={deleteFeedback}
+                onChange={(e) => setDeleteFeedback(e.target.value)}
+                maxLength={500}
+                rows={3}
+                placeholder="Anything else we should know?"
+                className="mt-1 block w-full rounded-md border border-red-300 px-3 py-2 text-xs focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+              />
+              <div className="mt-1 text-right text-[10px] text-red-500">
+                {deleteFeedback.length}/500 characters
+              </div>
+            </div>
+
+            <label className="mt-3 flex items-start space-x-2 text-xs text-red-600">
+              <input
+                type="checkbox"
+                checked={deleteAcknowledged}
+                onChange={(e) => setDeleteAcknowledged(e.target.checked)}
+                className="mt-0.5 h-3 w-3 border-red-300 text-red-600 focus:ring-red-500"
+              />
+              <span>I understand that deleting my account is permanent and cannot be undone.</span>
+            </label>
+
+            {deleteError && (
+              <div className="mt-3 rounded-md bg-red-100 px-3 py-2 text-xs text-red-700">
+                {deleteError}
+              </div>
+            )}
+
+            <div className="mt-4 flex items-center justify-between">
+              <a href="/privacy" className="text-xs text-red-600 underline hover:text-red-700">
+                Privacy Policy
+              </a>
+              <button
+                type="button"
+                onClick={handleDeleteAccount}
+                disabled={isDeleteDisabled || deleteLoading}
+                className={`inline-flex items-center rounded-md px-3 py-1.5 text-xs font-semibold text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 ${
+                  isDeleteDisabled || deleteLoading ? 'bg-red-300 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'
+                }`}
+              >
+                {deleteLoading ? 'Deleting…' : 'Delete account'}
+              </button>
+            </div>
           </div>
 
           <button
