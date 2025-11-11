@@ -71,13 +71,14 @@ export function ProfileSetup({ onComplete, onClose, initialData }: ProfileSetupP
   const [isLocating, setIsLocating] = useState(false);
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [deleteReason, setDeleteReason] = useState<AccountDeletionReason>(DEFAULT_ACCOUNT_DELETION_REASON);
-  const [deleteReasonOther, setDeleteReasonOther] = useState('');
-  const [deleteFeedback, setDeleteFeedback] = useState('');
-  const [deleteAcknowledged, setDeleteAcknowledged] = useState(false);
-  const isDeleteDisabled =
-    !deleteAcknowledged || (deleteReason === 'other' && deleteReasonOther.trim().length === 0);
-  const [deleteLoading, setDeleteLoading] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
+const [deleteReasonOther, setDeleteReasonOther] = useState('');
+const [deleteFeedback, setDeleteFeedback] = useState('');
+const [deleteAcknowledged, setDeleteAcknowledged] = useState(false);
+const isDeleteDisabled =
+  !deleteAcknowledged || (deleteReason === 'other' && deleteReasonOther.trim().length === 0);
+const [deleteLoading, setDeleteLoading] = useState(false);
+const [deleteError, setDeleteError] = useState<string | null>(null);
+const [showDeleteForm, setShowDeleteForm] = useState(false);
   const [manualFormData, setManualFormData] = useState({
     city: '',
     state: '',
@@ -315,6 +316,14 @@ export function ProfileSetup({ onComplete, onClose, initialData }: ProfileSetupP
     }
   };
 
+  const resetDeleteState = () => {
+    setDeleteReason(DEFAULT_ACCOUNT_DELETION_REASON);
+    setDeleteReasonOther('');
+    setDeleteFeedback('');
+    setDeleteAcknowledged(false);
+    setDeleteError(null);
+  };
+
   const handleDeleteAccount = async () => {
     if (isDeleteDisabled || deleteLoading) return;
     setDeleteLoading(true);
@@ -346,6 +355,8 @@ export function ProfileSetup({ onComplete, onClose, initialData }: ProfileSetupP
       }
 
       await supabase.auth.signOut();
+      resetDeleteState();
+      setShowDeleteForm(false);
       onClose();
       onComplete();
       window.location.assign('/');
@@ -558,7 +569,23 @@ export function ProfileSetup({ onComplete, onClose, initialData }: ProfileSetupP
               </div>
             </div>
 
-            <div className="mt-3 space-y-2">
+            {!showDeleteForm && (
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDeleteForm(true);
+                    resetDeleteState();
+                  }}
+                  className="inline-flex items-center rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                >
+                  Delete account…
+                </button>
+              </div>
+            )}
+
+            {showDeleteForm && (
+              <div className="mt-3 space-y-2">
               <p className="text-xs font-medium text-red-700">Why are you leaving?</p>
               <div className="space-y-2">
                 {ACCOUNT_DELETION_REASONS.map((option) => {
@@ -589,6 +616,7 @@ export function ProfileSetup({ onComplete, onClose, initialData }: ProfileSetupP
                 })}
               </div>
             </div>
+            )}
 
             {deleteReason === 'other' && (
               <div className="mt-3">
@@ -635,21 +663,35 @@ export function ProfileSetup({ onComplete, onClose, initialData }: ProfileSetupP
               </div>
             )}
 
+            {showDeleteForm && (
             <div className="mt-4 flex items-center justify-between">
               <a href="/privacy" className="text-xs text-red-600 underline hover:text-red-700">
                 Privacy Policy
               </a>
-              <button
-                type="button"
-                onClick={handleDeleteAccount}
-                disabled={isDeleteDisabled || deleteLoading}
-                className={`inline-flex items-center rounded-md px-3 py-1.5 text-xs font-semibold text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 ${
-                  isDeleteDisabled || deleteLoading ? 'bg-red-300 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'
-                }`}
-              >
-                {deleteLoading ? 'Deleting…' : 'Delete account'}
-              </button>
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetDeleteState();
+                    setShowDeleteForm(false);
+                  }}
+                  className="rounded-md border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteAccount}
+                  disabled={isDeleteDisabled || deleteLoading}
+                  className={`inline-flex items-center rounded-md px-3 py-1.5 text-xs font-semibold text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 ${
+                    isDeleteDisabled || deleteLoading ? 'bg-red-300 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'
+                  }`}
+                >
+                  {deleteLoading ? 'Deleting…' : 'Delete account'}
+                </button>
+              </div>
             </div>
+            )}
           </div>
 
           <button
