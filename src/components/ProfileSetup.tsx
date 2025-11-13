@@ -369,339 +369,359 @@ const [showDeleteForm, setShowDeleteForm] = useState(false);
     }
   };
 
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg p-6 max-w-md w-full relative">
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
-        >
-          <X className="w-6 h-6" />
-        </button>
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-3 sm:p-4 z-50 overflow-y-auto"
+      onClick={handleBackdropClick}
+    >
+      <div
+        className="bg-white rounded-lg w-full max-w-2xl flex flex-col relative my-auto"
+        style={{ maxHeight: "90vh" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
+          <h2 className="text-2xl font-bold text-gray-900">Complete Your Profile</h2>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0 ml-4"
+            aria-label="Close modal"
+          >
+            <X className="w-6 h-6" />
+          </button>
+        </div>
 
-        <h2 className="text-2xl font-bold mb-4">Complete Your Profile</h2>
-        <p className="text-gray-600 mb-6">
-          Please provide some additional information to complete your profile setup.
-        </p>
+        <div className="flex-1 overflow-y-auto px-6 py-6">
+          <p className="text-gray-600 mb-6">
+            Please provide some additional information to complete your profile setup.
+          </p>
 
-        {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-            {error}
-          </div>
-        )}
+          {error && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+              {error}
+            </div>
+          )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label htmlFor="username" className="block text-sm font-medium text-gray-700">
-              Username <span className="text-red-500">*</span>
-            </label>
-            <input
-              id="username"
-              name="username"
-              type="text"
-              required
-              value={formData.username}
-              onChange={handleInputChange}
-              className="mt-1 block w-full rounded-md border border-gray-300 bg-gray-50 px-4 py-2 text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
-
-          {/* Location Section */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="block text-sm font-medium text-gray-700">
-                Location <span className="text-red-500">*</span>
+          <form onSubmit={handleSubmit} className="space-y-6" id="profile-form">
+            <div>
+              <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+                Username <span className="text-red-500">*</span>
               </label>
-              {selectedLocation && (
-                <span className="text-sm text-green-600 font-medium">
-                  ✓ {selectedLocation.label}
-                </span>
+              <input
+                id="username"
+                name="username"
+                type="text"
+                required
+                value={formData.username}
+                onChange={handleInputChange}
+                className="mt-1 block w-full rounded-md border border-gray-300 bg-gray-50 px-4 py-2 text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="block text-sm font-medium text-gray-700">
+                  Location <span className="text-red-500">*</span>
+                </label>
+                {selectedLocation && (
+                  <span className="text-sm text-green-600 font-medium">
+                    ✓ {selectedLocation.label}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => setUseCurrentLocation(true)}
+                  disabled={isLocating}
+                  className={`flex items-center justify-center px-3 py-2 rounded-lg border text-sm transition-colors ${
+                    isLocating
+                      ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200"
+                      : "bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border-indigo-200"
+                  }`}
+                >
+                  <MapPin className="w-4 h-4 mr-2" />
+                  {isLocating ? "Getting location..." : "Use my current location"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowManualEntry(true)}
+                  className="flex items-center justify-center px-3 py-2 rounded-lg border bg-gray-50 text-gray-600 hover:bg-gray-100 border-gray-200 transition-colors text-sm"
+                >
+                  <PenSquare className="w-4 h-4 mr-2" />
+                  Enter manually
+                </button>
+              </div>
+
+              {showManualEntry && (
+                <div className="space-y-3 bg-gray-50 p-4 rounded-lg">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">City</label>
+                    <input
+                      type="text"
+                      value={manualFormData.city}
+                      onChange={(e) => setManualFormData(prev => ({ ...prev, city: e.target.value }))}
+                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">State</label>
+                    <select
+                      value={manualFormData.state}
+                      onChange={(e) => setManualFormData(prev => ({ ...prev, state: e.target.value }))}
+                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    >
+                      <option value="">Select a state</option>
+                      {Object.entries(stateAbbreviations).map(([abbr, name]) => (
+                        <option key={abbr} value={name}>{name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">ZIP Code</label>
+                    <input
+                      type="text"
+                      value={manualFormData.zipcode}
+                      onChange={(e) => setManualFormData(prev => ({ ...prev, zipcode: e.target.value }))}
+                      placeholder="12345"
+                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div className="flex justify-end space-x-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowManualEntry(false)}
+                      className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleManualSubmit}
+                      className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+                    >
+                      Save Location
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {!selectedLocation && (
+                <p className="text-sm text-red-500">
+                  Please select your location using one of the options above
+                </p>
               )}
             </div>
-            
-            <div className="flex flex-col gap-2">
-              <button
-                type="button"
-                onClick={() => setUseCurrentLocation(true)}
-                disabled={isLocating}
-                className={`flex items-center justify-center px-3 py-2 rounded-lg border text-sm transition-colors ${
-                  isLocating 
-                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200' 
-                    : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border-indigo-200'
-                }`}
-              >
-                <MapPin className="w-4 h-4 mr-2" />
-                {isLocating ? 'Getting location...' : 'Use my current location'}
-              </button>
-              
-              <button
-                type="button"
-                onClick={() => setShowManualEntry(true)}
-                className="flex items-center justify-center px-3 py-2 rounded-lg border bg-gray-50 text-gray-600 hover:bg-gray-100 border-gray-200 transition-colors text-sm"
-              >
-                <PenSquare className="w-4 h-4 mr-2" />
-                Enter manually
-              </button>
+
+            <div>
+              <label htmlFor="avatar" className="block text-sm font-medium text-gray-700">
+                Profile Picture
+              </label>
+              <div className="mt-1 flex items-center space-x-4">
+                {avatarPreview ? (
+                  <img
+                    src={avatarPreview}
+                    alt="Profile preview"
+                    className="w-20 h-20 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center">
+                    <Upload className="w-8 h-8 text-gray-400" />
+                  </div>
+                )}
+                <input
+                  id="avatar"
+                  name="avatar"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageChange}
+                  className="hidden"
+                />
+                <label
+                  htmlFor="avatar"
+                  className="btn-secondary cursor-pointer"
+                >
+                  Choose Image
+                </label>
+              </div>
             </div>
 
-            {showManualEntry && (
-              <div className="space-y-3 bg-gray-50 p-4 rounded-lg">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">City</label>
-                  <input
-                    type="text"
-                    value={manualFormData.city}
-                    onChange={(e) => setManualFormData(prev => ({ ...prev, city: e.target.value }))}
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  />
+            <div>
+              <label htmlFor="gender" className="block text-sm font-medium text-gray-700">
+                Gender
+              </label>
+              <select
+                id="gender"
+                name="gender"
+                value={formData.gender}
+                onChange={handleInputChange}
+                className="mt-1 block w-full rounded-md border border-gray-300 bg-gray-50 px-4 py-2 text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="">Prefer not to say</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+                <option value="non-binary">Non-binary</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+
+            <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+              <div className="flex items-start space-x-3">
+                <div className="rounded-full bg-white p-2 shadow-sm">
+                  <span role="img" aria-label="warning" className="text-red-600">⚠️</span>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">State</label>
-                  <select
-                    value={manualFormData.state}
-                    onChange={(e) => setManualFormData(prev => ({ ...prev, state: e.target.value }))}
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  >
-                    <option value="">Select a state</option>
-                    {Object.entries(stateAbbreviations).map(([abbr, name]) => (
-                      <option key={abbr} value={name}>{name}</option>
-                    ))}
-                  </select>
+                  <h3 className="text-sm font-semibold text-red-700">Delete account</h3>
+                  <p className="mt-1 text-xs text-red-600">
+                    Permanently remove your account, listings, messages, friends, and notifications. This cannot be undone.
+                  </p>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">ZIP Code</label>
-                  <input
-                    type="text"
-                    value={manualFormData.zipcode}
-                    onChange={(e) => setManualFormData(prev => ({ ...prev, zipcode: e.target.value }))}
-                    placeholder="12345"
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  />
-                </div>
-                <div className="flex justify-end space-x-2">
+              </div>
+
+              {!showDeleteForm && (
+                <div className="mt-4 flex justify-end">
                   <button
                     type="button"
-                    onClick={() => setShowManualEntry(false)}
-                    className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+                    onClick={() => {
+                      setShowDeleteForm(true);
+                      resetDeleteState();
+                    }}
+                    className="inline-flex items-center rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                  >
+                    Delete account...
+                  </button>
+                </div>
+              )}
+
+              {showDeleteForm && (
+                <div className="mt-3 space-y-2">
+                <p className="text-xs font-medium text-red-700">Why are you leaving?</p>
+                <div className="space-y-2">
+                  {ACCOUNT_DELETION_REASONS.map((option) => {
+                    const selected = deleteReason === option.value;
+                    return (
+                      <label
+                        key={option.value}
+                        className={`flex items-start space-x-2 rounded-md border px-3 py-2 text-xs ${
+                          selected ? "border-red-500 bg-white text-red-700" : "border-red-200 text-red-600"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="delete-reason"
+                          value={option.value}
+                          checked={selected}
+                          onChange={() => {
+                            setDeleteReason(option.value);
+                            if (option.value !== "other") {
+                              setDeleteReasonOther("");
+                            }
+                          }}
+                          className="mt-1 h-3 w-3 border-red-300 text-red-600 focus:ring-red-500"
+                        />
+                        <span className="flex-1">{option.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+              )}
+
+              {deleteReason === "other" && (
+                <div className="mt-3">
+                  <label className="text-xs font-medium text-red-700">Tell us a bit more</label>
+                  <input
+                    type="text"
+                    value={deleteReasonOther}
+                    onChange={(e) => setDeleteReasonOther(e.target.value)}
+                    maxLength={120}
+                    placeholder="Share a short reason"
+                    className="mt-1 block w-full rounded-md border border-red-300 px-3 py-2 text-xs focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+                  />
+                </div>
+              )}
+
+              <div className="mt-3">
+                <label className="text-xs font-medium text-red-700">Additional feedback (optional)</label>
+                <textarea
+                  value={deleteFeedback}
+                  onChange={(e) => setDeleteFeedback(e.target.value)}
+                  maxLength={500}
+                  rows={3}
+                  placeholder="Anything else we should know?"
+                  className="mt-1 block w-full rounded-md border border-red-300 px-3 py-2 text-xs focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+                />
+                <div className="mt-1 text-right text-[10px] text-red-500">
+                  {deleteFeedback.length}/500 characters
+                </div>
+              </div>
+
+              <label className="mt-3 flex items-start space-x-2 text-xs text-red-600">
+                <input
+                  type="checkbox"
+                  checked={deleteAcknowledged}
+                  onChange={(e) => setDeleteAcknowledged(e.target.checked)}
+                  className="mt-0.5 h-3 w-3 border-red-300 text-red-600 focus:ring-red-500"
+                />
+                <span>I understand that deleting my account is permanent and cannot be undone.</span>
+              </label>
+
+              {deleteError && (
+                <div className="mt-3 rounded-md bg-red-100 px-3 py-2 text-xs text-red-700">
+                  {deleteError}
+                </div>
+              )}
+
+              {showDeleteForm && (
+              <div className="mt-4 flex items-center justify-between">
+                <a href="/privacy" className="text-xs text-red-600 underline hover:text-red-700">
+                  Privacy Policy
+                </a>
+                <div className="flex items-center space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetDeleteState();
+                      setShowDeleteForm(false);
+                    }}
+                    className="rounded-md border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
                   >
                     Cancel
                   </button>
                   <button
                     type="button"
-                    onClick={handleManualSubmit}
-                    className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+                    onClick={handleDeleteAccount}
+                    disabled={isDeleteDisabled || deleteLoading}
+                    className={`inline-flex items-center rounded-md px-3 py-1.5 text-xs font-semibold text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 ${
+                      isDeleteDisabled || deleteLoading ? "bg-red-300 cursor-not-allowed" : "bg-red-600 hover:bg-red-700"
+                    }`}
                   >
-                    Save Location
+                    {deleteLoading ? "Deleting..." : "Delete account"}
                   </button>
                 </div>
               </div>
-            )}
-
-            {!selectedLocation && (
-              <p className="text-sm text-red-500">
-                Please select your location using one of the options above
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label htmlFor="avatar" className="block text-sm font-medium text-gray-700">
-              Profile Picture
-            </label>
-            <div className="mt-1 flex items-center space-x-4">
-              {avatarPreview ? (
-                <img
-                  src={avatarPreview}
-                  alt="Profile preview"
-                  className="w-20 h-20 rounded-full object-cover"
-                />
-              ) : (
-                <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center">
-                  <Upload className="w-8 h-8 text-gray-400" />
-                </div>
               )}
-              <input
-                id="avatar"
-                name="avatar"
-                type="file"
-                accept="image/*"
-                onChange={handleImageChange}
-                className="hidden"
-              />
-              <label
-                htmlFor="avatar"
-                className="btn-secondary cursor-pointer"
-              >
-                Choose Image
-              </label>
             </div>
-          </div>
+          </form>
+        </div>
 
-          <div>
-            <label htmlFor="gender" className="block text-sm font-medium text-gray-700">
-              Gender
-            </label>
-            <select
-              id="gender"
-              name="gender"
-              value={formData.gender}
-              onChange={handleInputChange}
-              className="mt-1 block w-full rounded-md border border-gray-300 bg-gray-50 px-4 py-2 text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
-            >
-              <option value="">Prefer not to say</option>
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-              <option value="non-binary">Non-binary</option>
-              <option value="other">Other</option>
-            </select>
-          </div>
-
-          <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-            <div className="flex items-start space-x-3">
-              <div className="rounded-full bg-white p-2 shadow-sm">
-                <span role="img" aria-label="warning" className="text-red-600">⚠️</span>
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-red-700">Delete account</h3>
-                <p className="mt-1 text-xs text-red-600">
-                  Permanently remove your account, listings, messages, friends, and notifications. This cannot be undone.
-                </p>
-              </div>
-            </div>
-
-            {!showDeleteForm && (
-              <div className="mt-4 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowDeleteForm(true);
-                    resetDeleteState();
-                  }}
-                  className="inline-flex items-center rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-                >
-                  Delete account…
-                </button>
-              </div>
-            )}
-
-            {showDeleteForm && (
-              <div className="mt-3 space-y-2">
-              <p className="text-xs font-medium text-red-700">Why are you leaving?</p>
-              <div className="space-y-2">
-                {ACCOUNT_DELETION_REASONS.map((option) => {
-                  const selected = deleteReason === option.value;
-                  return (
-                    <label
-                      key={option.value}
-                      className={`flex items-start space-x-2 rounded-md border px-3 py-2 text-xs ${
-                        selected ? 'border-red-500 bg-white text-red-700' : 'border-red-200 text-red-600'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="delete-reason"
-                        value={option.value}
-                        checked={selected}
-                        onChange={() => {
-                          setDeleteReason(option.value);
-                          if (option.value !== 'other') {
-                            setDeleteReasonOther('');
-                          }
-                        }}
-                        className="mt-1 h-3 w-3 border-red-300 text-red-600 focus:ring-red-500"
-                      />
-                      <span className="flex-1">{option.label}</span>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-            )}
-
-            {deleteReason === 'other' && (
-              <div className="mt-3">
-                <label className="text-xs font-medium text-red-700">Tell us a bit more</label>
-                <input
-                  type="text"
-                  value={deleteReasonOther}
-                  onChange={(e) => setDeleteReasonOther(e.target.value)}
-                  maxLength={120}
-                  placeholder="Share a short reason"
-                  className="mt-1 block w-full rounded-md border border-red-300 px-3 py-2 text-xs focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
-                />
-              </div>
-            )}
-
-            <div className="mt-3">
-              <label className="text-xs font-medium text-red-700">Additional feedback (optional)</label>
-              <textarea
-                value={deleteFeedback}
-                onChange={(e) => setDeleteFeedback(e.target.value)}
-                maxLength={500}
-                rows={3}
-                placeholder="Anything else we should know?"
-                className="mt-1 block w-full rounded-md border border-red-300 px-3 py-2 text-xs focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
-              />
-              <div className="mt-1 text-right text-[10px] text-red-500">
-                {deleteFeedback.length}/500 characters
-              </div>
-            </div>
-
-            <label className="mt-3 flex items-start space-x-2 text-xs text-red-600">
-              <input
-                type="checkbox"
-                checked={deleteAcknowledged}
-                onChange={(e) => setDeleteAcknowledged(e.target.checked)}
-                className="mt-0.5 h-3 w-3 border-red-300 text-red-600 focus:ring-red-500"
-              />
-              <span>I understand that deleting my account is permanent and cannot be undone.</span>
-            </label>
-
-            {deleteError && (
-              <div className="mt-3 rounded-md bg-red-100 px-3 py-2 text-xs text-red-700">
-                {deleteError}
-              </div>
-            )}
-
-            {showDeleteForm && (
-            <div className="mt-4 flex items-center justify-between">
-              <a href="/privacy" className="text-xs text-red-600 underline hover:text-red-700">
-                Privacy Policy
-              </a>
-              <div className="flex items-center space-x-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    resetDeleteState();
-                    setShowDeleteForm(false);
-                  }}
-                  className="rounded-md border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDeleteAccount}
-                  disabled={isDeleteDisabled || deleteLoading}
-                  className={`inline-flex items-center rounded-md px-3 py-1.5 text-xs font-semibold text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 ${
-                    isDeleteDisabled || deleteLoading ? 'bg-red-300 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'
-                  }`}
-                >
-                  {deleteLoading ? 'Deleting…' : 'Delete account'}
-                </button>
-              </div>
-            </div>
-            )}
-          </div>
-
+        <div className="flex-shrink-0 border-t border-gray-200 px-6 py-4 bg-gray-50 rounded-b-lg">
           <button
             type="submit"
+            form="profile-form"
             className="w-full btn-primary"
             disabled={loading || !selectedLocation}
           >
-            {loading ? 'Saving...' : 'Complete Profile'}
+            {loading ? "Saving..." : "Complete Profile"}
           </button>
-        </form>
+        </div>
       </div>
     </div>
   );
