@@ -434,14 +434,19 @@ const styles = StyleSheet.create({
   },
   quickActions: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'center',
+    alignItems: 'center',
     paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: '#F1F5F9',
+    flexWrap: 'wrap',
+    width: '100%',
   },
   quickAction: {
     alignItems: 'center',
-    padding: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    marginHorizontal: 2,
   },
   quickActionEmoji: {
     fontSize: 24,

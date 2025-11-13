@@ -102,9 +102,13 @@ export default function ModeratorDashboardScreen() {
       return;
     }
 
+    // Narrow the type for TypeScript
+    const targetType = report.target_type as 'item' | 'message';
+    const targetId = report.target_id;
+
     Alert.alert(
       'Remove Content',
-      `Are you sure you want to remove this ${report.target_type}? This action cannot be undone.`,
+      `Are you sure you want to remove this ${targetType}? This action cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -113,8 +117,8 @@ export default function ModeratorDashboardScreen() {
           onPress: async () => {
             setActionLoading(report.id);
             try {
-              await removeContent(report.target_type, report.target_id, report.id);
-              await resolveReport(report.id, 'remove_content', report.target_type, report.target_id, 'Content removed by moderator');
+              await removeContent(targetType, targetId, report.id);
+              await resolveReport(report.id, 'remove_content', targetType, targetId, 'Content removed by moderator');
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
               await loadReports();
               setShowContentModal(false);
@@ -344,28 +348,38 @@ export default function ModeratorDashboardScreen() {
         style={styles.filterContainer}
         contentContainerStyle={styles.filterContent}
       >
-        {(['all', 'pending', 'in_review', 'resolved', 'dismissed'] as ReportStatus[]).map((status) => (
-          <TouchableOpacity
-            key={status}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setStatusFilter(status);
-            }}
-            style={[
-              styles.filterButton,
-              statusFilter === status && styles.filterButtonActive,
-            ]}
-          >
-            <Text
+        {(['all', 'pending', 'in_review', 'resolved', 'dismissed'] as ReportStatus[]).map((status) => {
+          // Format status text: replace underscores with spaces and capitalize
+          const formatStatusText = (s: string) => {
+            return s
+              .split('_')
+              .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+              .join(' ');
+          };
+
+          return (
+            <TouchableOpacity
+              key={status}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setStatusFilter(status);
+              }}
               style={[
-                styles.filterButtonText,
-                statusFilter === status && styles.filterButtonTextActive,
+                styles.filterButton,
+                statusFilter === status && styles.filterButtonActive,
               ]}
             >
-              {status.charAt(0).toUpperCase() + status.slice(1)}
-            </Text>
-          </TouchableOpacity>
-        ))}
+              <Text
+                style={[
+                  styles.filterButtonText,
+                  statusFilter === status && styles.filterButtonTextActive,
+                ]}
+              >
+                {formatStatusText(status)}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </ScrollView>
 
       {error && (
@@ -541,14 +555,17 @@ const styles = StyleSheet.create({
   },
   filterContent: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 8,
+    alignItems: 'center',
   },
   filterButton: {
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 6,
     borderRadius: 20,
     backgroundColor: '#F3F4F6',
     marginRight: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   filterButtonActive: {
     backgroundColor: '#3B82F6',
