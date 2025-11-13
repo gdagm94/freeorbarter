@@ -643,9 +643,12 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     position: 'relative',
-    width: width,
-    height: width * 0.8,
+    width: '100%',
+    maxWidth: 800,
+    aspectRatio: 1.25,
+    marginHorizontal: 'auto',
     backgroundColor: '#000000',
+    alignSelf: 'center',
   },
   imageWrapper: {
     width: '100%',
