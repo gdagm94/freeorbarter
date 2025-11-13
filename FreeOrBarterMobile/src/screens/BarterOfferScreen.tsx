@@ -18,6 +18,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { Item } from '../types';
 import * as Haptics from 'expo-haptics';
+import { checkContent } from '../lib/contentFilter';
 
 export default function BarterOfferScreen() {
   const [targetItem, setTargetItem] = useState<Item | null>(null);
@@ -148,8 +149,47 @@ export default function BarterOfferScreen() {
 
       console.log('Barter offer created successfully:', result.data);
 
+      // Check content filtering for the message
+      const messageToCheck = message.trim();
+      try {
+        const filterResult = await checkContent({
+          content: messageToCheck,
+          contentType: 'message',
+        });
+
+        if (filterResult.blocked) {
+          Alert.alert(
+            'Content Not Allowed',
+            filterResult.message || 'Your message contains inappropriate content and cannot be sent.'
+          );
+          setSubmitting(false);
+          return;
+        }
+
+        if (filterResult.warned) {
+          const proceed = await new Promise<boolean>((resolve) => {
+            Alert.alert(
+              'Content Warning',
+              filterResult.message || 'Your message may contain inappropriate content. Do you want to proceed?',
+              [
+                { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+                { text: 'Proceed', onPress: () => resolve(true) },
+              ]
+            );
+          });
+
+          if (!proceed) {
+            setSubmitting(false);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('Error checking content:', err);
+        // Continue with sending if filter check fails
+      }
+
       // Create a message in the thread about this offer
-      const offerMessage = `🔄 Barter Offer: I'd like to trade my "${selectedItemData?.title}" for your "${targetItem.title}".\n\nMessage: ${message.trim()}`;
+      const offerMessage = `🔄 Barter Offer: I'd like to trade my "${selectedItemData?.title}" for your "${targetItem.title}".\n\nMessage: ${messageToCheck}`;
       
       const { error: messageError } = await supabase
         .from('messages')

@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { MessageCircle, PlusCircle, User, BarChart2, LogOut } from 'lucide-react';
+import { MessageCircle, PlusCircle, User, BarChart2, LogOut, Shield } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Auth } from './Auth';
 import { NotificationBell } from './NotificationBell';
 import { useAuth } from '../hooks/useAuth';
+import { isModerator } from '../lib/moderator';
 
 interface NavbarProps {
   unreadCount: number;
@@ -14,8 +15,22 @@ interface NavbarProps {
 function Navbar({ unreadCount, unreadOffers }: NavbarProps) {
   const { user, signOut } = useAuth();
   const [showAuth, setShowAuth] = useState(false);
+  const [userIsModerator, setUserIsModerator] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+
+  useEffect(() => {
+    const checkModeratorStatus = async () => {
+      if (user) {
+        const moderator = await isModerator();
+        setUserIsModerator(moderator);
+      } else {
+        setUserIsModerator(false);
+      }
+    };
+
+    checkModeratorStatus();
+  }, [user]);
 
   const handleUploadClick = () => {
     if (user) {
@@ -68,6 +83,12 @@ function Navbar({ unreadCount, unreadOffers }: NavbarProps) {
                     <span className="hidden md:block">New Listing</span>
                   </Link>
                   <NotificationBell />
+                  {userIsModerator && (
+                    <Link to="/moderator" className="nav-link">
+                      <Shield className="w-6 h-6" />
+                      <span className="hidden md:block">Moderator</span>
+                    </Link>
+                  )}
                   <Link to="/profile" className="nav-link">
                     <User className="w-6 h-6" />
                     <span className="hidden md:block">Profile</span>

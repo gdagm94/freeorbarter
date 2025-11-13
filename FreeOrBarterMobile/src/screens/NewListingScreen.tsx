@@ -23,6 +23,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as Haptics from 'expo-haptics';
+import { checkContent } from '../lib/contentFilter';
 
 const CONDITIONS = ['new', 'like-new', 'good', 'fair', 'poor'] as const;
 const TYPES = ['free', 'barter'] as const;
@@ -277,6 +278,72 @@ export default function NewListingScreen() {
 
     setSubmitting(true);
     try {
+      // Check content filtering for title
+      const titleFilterResult = await checkContent({
+        content: title.trim(),
+        contentType: 'item_title',
+      });
+
+      if (titleFilterResult.blocked) {
+        Alert.alert(
+          'Content Not Allowed',
+          titleFilterResult.message || 'Your title contains inappropriate content and cannot be posted.'
+        );
+        setSubmitting(false);
+        return;
+      }
+
+      if (titleFilterResult.warned) {
+        const proceed = await new Promise<boolean>((resolve) => {
+          Alert.alert(
+            'Content Warning',
+            titleFilterResult.message || 'Your title may contain inappropriate content. Do you want to proceed?',
+            [
+              { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+              { text: 'Proceed', onPress: () => resolve(true) },
+            ]
+          );
+        });
+
+        if (!proceed) {
+          setSubmitting(false);
+          return;
+        }
+      }
+
+      // Check content filtering for description
+      const descriptionFilterResult = await checkContent({
+        content: description.trim(),
+        contentType: 'item_description',
+      });
+
+      if (descriptionFilterResult.blocked) {
+        Alert.alert(
+          'Content Not Allowed',
+          descriptionFilterResult.message || 'Your description contains inappropriate content and cannot be posted.'
+        );
+        setSubmitting(false);
+        return;
+      }
+
+      if (descriptionFilterResult.warned) {
+        const proceed = await new Promise<boolean>((resolve) => {
+          Alert.alert(
+            'Content Warning',
+            descriptionFilterResult.message || 'Your description may contain inappropriate content. Do you want to proceed?',
+            [
+              { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+              { text: 'Proceed', onPress: () => resolve(true) },
+            ]
+          );
+        });
+
+        if (!proceed) {
+          setSubmitting(false);
+          return;
+        }
+      }
+
       const uploadedUrls: string[] = [];
       for (const uri of imageUris) {
         const url = await uploadImage(uri);

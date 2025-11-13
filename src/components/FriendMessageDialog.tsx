@@ -14,6 +14,7 @@ import { VoiceMessagePlayer } from './VoiceMessagePlayer';
 import { ImageViewer } from './ImageViewer';
 import { FileViewer } from './FileViewer';
 import { hapticFeedback } from '../utils/hapticFeedback';
+import { checkContent } from '../lib/contentFilter';
 
 interface Message {
   id: string;
@@ -269,8 +270,34 @@ export function FriendMessageDialog({ friendId, friendName, friendAvatar, onClos
     e.preventDefault();
     if (!newMessage.trim() || !user || sending) return;
 
-    setSending(true);
     const messageContent = newMessage.trim();
+    
+    // Check content filtering
+    try {
+      const filterResult = await checkContent({
+        content: messageContent,
+        contentType: 'message',
+      });
+
+      if (filterResult.blocked) {
+        alert(filterResult.message || 'Your message contains inappropriate content and cannot be sent.');
+        return;
+      }
+
+      if (filterResult.warned) {
+        const proceed = window.confirm(
+          filterResult.message || 'Your message may contain inappropriate content. Do you want to proceed?'
+        );
+        if (!proceed) {
+          return;
+        }
+      }
+    } catch (err) {
+      console.error('Error checking content:', err);
+      // Continue with sending if filter check fails
+    }
+
+    setSending(true);
     setNewMessage('');
     clearDrafts();
 

@@ -29,6 +29,7 @@ import SearchUsersScreen from './src/screens/SearchUsersScreen';
 import AboutScreen from './src/screens/AboutScreen';
 import TermsScreen from './src/screens/TermsScreen';
 import PrivacyScreen from './src/screens/PrivacyScreen';
+import ModeratorDashboardScreen from './src/screens/ModeratorDashboardScreen';
 import { useAuth } from './src/hooks/useAuth';
 import { fetchLatestPolicy, acceptPolicy, PolicyStatus } from './src/lib/policy';
 import { PolicyAcceptanceModal } from './src/components/PolicyAcceptanceModal';
@@ -329,6 +330,7 @@ export default function App() {
         <Stack.Screen name="About" component={AboutScreen} />
         <Stack.Screen name="Terms" component={TermsScreen} />
         <Stack.Screen name="Privacy" component={PrivacyScreen} />
+        <Stack.Screen name="ModeratorDashboard" component={ModeratorDashboardScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

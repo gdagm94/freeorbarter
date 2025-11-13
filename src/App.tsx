@@ -16,6 +16,7 @@ import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
 import ResetPassword from './pages/ResetPassword';
 import ConfirmEmail from './pages/ConfirmEmail';
+import ModeratorDashboard from './pages/ModeratorDashboard';
 import { supabase } from './lib/supabase';
 import { useAuth } from './hooks/useAuth';
 import { fetchLatestPolicy, PolicyStatus } from './lib/policy';
@@ -138,6 +139,7 @@ function App() {
             <Route path="/privacy" element={<Privacy />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/confirm-email" element={<ConfirmEmail />} />
+            <Route path="/moderator" element={<ModeratorDashboard />} />
           </Routes>
         </main>
         <Footer />

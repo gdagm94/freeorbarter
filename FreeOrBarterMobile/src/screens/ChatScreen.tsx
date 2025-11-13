@@ -30,6 +30,7 @@ import { VoiceMessagePlayer } from '../components/VoiceMessagePlayer';
 import { AttachmentMenu } from '../components/AttachmentMenu';
 import { FileDisplay } from '../components/FileDisplay';
 import { ImageViewer } from '../components/ImageViewer';
+import { checkContent } from '../lib/contentFilter';
 import { FileViewer } from '../components/FileViewer';
 import { OfferTemplates } from '../components/OfferTemplates';
 import { BulkOffers } from '../components/BulkOffers';
@@ -290,6 +291,44 @@ export default function ChatScreen() {
     const messageContent = content || newMessage.trim();
     if (!messageContent && !imageUrl) return;
     if (!user || !otherUserId) return;
+
+    // Check content filtering for text messages
+    if (messageContent) {
+      try {
+        const filterResult = await checkContent({
+          content: messageContent,
+          contentType: 'message',
+        });
+
+        if (filterResult.blocked) {
+          Alert.alert(
+            'Content Not Allowed',
+            filterResult.message || 'Your message contains inappropriate content and cannot be sent.'
+          );
+          return;
+        }
+
+        if (filterResult.warned) {
+          const proceed = await new Promise<boolean>((resolve) => {
+            Alert.alert(
+              'Content Warning',
+              filterResult.message || 'Your message may contain inappropriate content. Do you want to proceed?',
+              [
+                { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+                { text: 'Proceed', onPress: () => resolve(true) },
+              ]
+            );
+          });
+
+          if (!proceed) {
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('Error checking content:', err);
+        // Continue with sending if filter check fails
+      }
+    }
 
     try {
       const messageData: Partial<Message> = {

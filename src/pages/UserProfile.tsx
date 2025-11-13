@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Star, User, Share2, UserPlus, UserMinus, XCircle, CheckCircle, Clock, MessageCircle } from 'lucide-react';
+import { Star, User, Share2, UserPlus, UserMinus, XCircle, CheckCircle, Clock, MessageCircle, Ban, Unlock } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import ItemCard from '../components/ItemCard';
@@ -39,6 +39,7 @@ function UserProfile() {
   const [friendActionLoading, setFriendActionLoading] = useState(false);
   const [friendActionError, setFriendActionError] = useState<string | null>(null);
   const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
+  const [isBlocked, setIsBlocked] = useState(false);
 
   // Direct messaging state
   const [showMessageDialog, setShowMessageDialog] = useState(false);
@@ -116,17 +117,28 @@ function UserProfile() {
     };
   }, [id]);
 
-  // Fetch friendship status when user or profile changes
+  // Fetch friendship status and blocked status when user or profile changes
   useEffect(() => {
     const fetchFriendshipStatus = async () => {
       if (!user || !id || user.id === id) {
         setFriendshipStatus('none');
+        setIsBlocked(false);
         return;
       }
 
       try {
-        const status = await getFriendshipStatus(user.id, id);
+        const [status, blockResult] = await Promise.all([
+          getFriendshipStatus(user.id, id),
+          supabase
+            .from('blocked_users')
+            .select('id')
+            .eq('blocker_id', user.id)
+            .eq('blocked_id', id)
+            .limit(1)
+        ]);
+
         setFriendshipStatus(status);
+        setIsBlocked(!!(blockResult.data && blockResult.data.length > 0));
 
         // If status is pending_received, get the request ID
         if (status === 'pending_received') {
@@ -218,6 +230,83 @@ function UserProfile() {
   const handleMessageUser = () => {
     if (!profile) return;
     setShowMessageDialog(true);
+  };
+
+  const handleBlockUser = async () => {
+    if (!user || !id || !profile) return;
+
+    const confirmed = window.confirm(
+      `Are you sure you want to block ${profile.username}? You will unfriend them and won't see their content.`
+    );
+
+    if (!confirmed) return;
+
+    setFriendActionLoading(true);
+    setFriendActionError(null);
+
+    try {
+      // Unfriend first if they are friends
+      if (friendshipStatus === 'friends') {
+        const unfriendResult = await unfriend(user.id, id);
+        if (unfriendResult.error) throw unfriendResult.error;
+      }
+
+      // Add to blocked users
+      const { error: blockError } = await supabase
+        .from('blocked_users')
+        .insert([{
+          blocker_id: user.id,
+          blocked_id: id
+        }]);
+
+      if (blockError && blockError.code !== '23505') { // Ignore duplicate key error
+        throw blockError;
+      }
+
+      // Refresh status
+      const newStatus = await getFriendshipStatus(user.id, id);
+      setFriendshipStatus(newStatus);
+      setIsBlocked(true);
+    } catch (err) {
+      console.error('Error blocking user:', err);
+      setFriendActionError(err instanceof Error ? err.message : 'Failed to block user');
+    } finally {
+      setFriendActionLoading(false);
+    }
+  };
+
+  const handleUnblockUser = async () => {
+    if (!user || !id || !profile) return;
+
+    const confirmed = window.confirm(
+      `Are you sure you want to unblock ${profile.username}?`
+    );
+
+    if (!confirmed) return;
+
+    setFriendActionLoading(true);
+    setFriendActionError(null);
+
+    try {
+      // Remove from blocked users
+      const { error: unblockError } = await supabase
+        .from('blocked_users')
+        .delete()
+        .eq('blocker_id', user.id)
+        .eq('blocked_id', id);
+
+      if (unblockError) throw unblockError;
+
+      // Refresh status
+      const newStatus = await getFriendshipStatus(user.id, id);
+      setFriendshipStatus(newStatus);
+      setIsBlocked(false);
+    } catch (err) {
+      console.error('Error unblocking user:', err);
+      setFriendActionError(err instanceof Error ? err.message : 'Failed to unblock user');
+    } finally {
+      setFriendActionLoading(false);
+    }
   };
 
   const renderFriendButton = () => {
@@ -372,8 +461,29 @@ function UserProfile() {
 
           {/* Action Buttons */}
           <div className="flex flex-wrap justify-end gap-2 sm:flex-nowrap sm:justify-between sm:space-x-2">
-            <div className="w-full sm:flex-1">
+            <div className="w-full sm:flex-1 flex flex-wrap gap-2">
               {renderFriendButton()}
+              {user && id && user.id !== id && (
+                isBlocked ? (
+                  <button
+                    onClick={handleUnblockUser}
+                    disabled={friendActionLoading}
+                    className="flex items-center justify-center px-3 py-2 bg-green-100 text-green-800 rounded-lg text-sm font-medium transition-colors hover:bg-green-200 disabled:opacity-50"
+                  >
+                    <Unlock className="w-4 h-4 mr-1.5" />
+                    <span>{friendActionLoading ? 'Unblocking...' : 'Unblock'}</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleBlockUser}
+                    disabled={friendActionLoading}
+                    className="flex items-center justify-center px-3 py-2 bg-red-100 text-red-800 rounded-lg text-sm font-medium transition-colors hover:bg-red-200 disabled:opacity-50"
+                  >
+                    <Ban className="w-4 h-4 mr-1.5" />
+                    <span>{friendActionLoading ? 'Blocking...' : 'Block'}</span>
+                  </button>
+                )
+              )}
             </div>
             <button
               onClick={() => setShowShareDialog(true)}

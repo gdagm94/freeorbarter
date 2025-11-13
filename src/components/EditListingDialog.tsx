@@ -3,6 +3,7 @@ import { X, MapPin, PenSquare } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { ImageUpload } from './ImageUpload';
 import { Item } from '../types';
+import { checkContent } from '../lib/contentFilter';
 
 interface EditListingDialogProps {
   item: Item;
@@ -236,6 +237,52 @@ export function EditListingDialog({ item, onClose, onUpdate }: EditListingDialog
     setError(null);
 
     try {
+      // Check content filtering for title
+      const titleFilterResult = await checkContent({
+        content: formData.title,
+        contentType: 'item_title',
+        contentId: item.id,
+      });
+
+      if (titleFilterResult.blocked) {
+        setError(titleFilterResult.message || 'Your title contains inappropriate content and cannot be posted.');
+        setLoading(false);
+        return;
+      }
+
+      if (titleFilterResult.warned) {
+        const proceed = window.confirm(
+          titleFilterResult.message || 'Your title may contain inappropriate content. Do you want to proceed?'
+        );
+        if (!proceed) {
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Check content filtering for description
+      const descriptionFilterResult = await checkContent({
+        content: formData.description,
+        contentType: 'item_description',
+        contentId: item.id,
+      });
+
+      if (descriptionFilterResult.blocked) {
+        setError(descriptionFilterResult.message || 'Your description contains inappropriate content and cannot be posted.');
+        setLoading(false);
+        return;
+      }
+
+      if (descriptionFilterResult.warned) {
+        const proceed = window.confirm(
+          descriptionFilterResult.message || 'Your description may contain inappropriate content. Do you want to proceed?'
+        );
+        if (!proceed) {
+          setLoading(false);
+          return;
+        }
+      }
+
       const { error: updateError } = await supabase
         .from('items')
         .update({

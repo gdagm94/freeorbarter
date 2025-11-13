@@ -19,6 +19,7 @@ import ItemCard from '../components/ItemCard';
 import Footer from '../components/Footer';
 import { useNavigation } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
+import { isModerator } from '../lib/moderator';
 
 interface UserProfile {
   id: string;
@@ -38,12 +39,21 @@ export default function ProfileScreen() {
   const [activeTab, setActiveTab] = useState<'free' | 'barter'>('free');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [userIsModerator, setUserIsModerator] = useState(false);
 
   useEffect(() => {
     if (user) {
       fetchProfileData();
+      checkModeratorStatus();
     }
   }, [user]);
+
+  const checkModeratorStatus = async () => {
+    if (user) {
+      const moderator = await isModerator();
+      setUserIsModerator(moderator);
+    }
+  };
 
   // Refresh profile data when screen comes into focus
   useEffect(() => {
@@ -237,6 +247,19 @@ export default function ProfileScreen() {
               <Text style={styles.quickActionEmoji}>✏️</Text>
               <Text style={styles.quickActionText}>Edit</Text>
             </TouchableOpacity>
+            
+            {userIsModerator && (
+              <TouchableOpacity 
+                style={styles.quickAction}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  navigation.navigate('ModeratorDashboard');
+                }}
+              >
+                <Text style={styles.quickActionEmoji}>🛡️</Text>
+                <Text style={styles.quickActionText}>Moderator</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 

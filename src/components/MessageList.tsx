@@ -22,6 +22,7 @@ import { SwipeToReply } from './SwipeToReply';
 import { AttachmentMenu } from './AttachmentMenu';
 import { MessageContextMenu } from './MessageContextMenu';
 import { hapticFeedback } from '../utils/hapticFeedback';
+import { checkContent } from '../lib/contentFilter';
 
 interface MessageListProps {
   itemId: string | null; // Made nullable for unified conversations
@@ -515,6 +516,27 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
 
     try {
       const messageContent = newMessage.trim();
+      
+      // Check content filtering
+      const filterResult = await checkContent({
+        content: messageContent,
+        contentType: 'message',
+      });
+
+      if (filterResult.blocked) {
+        alert(filterResult.message || 'Your message contains inappropriate content and cannot be sent.');
+        return;
+      }
+
+      if (filterResult.warned) {
+        const proceed = window.confirm(
+          filterResult.message || 'Your message may contain inappropriate content. Do you want to proceed?'
+        );
+        if (!proceed) {
+          return;
+        }
+      }
+
       setNewMessage('');
       setSending(true);
       setIsTyping(false);

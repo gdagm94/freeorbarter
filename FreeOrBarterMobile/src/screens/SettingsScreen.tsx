@@ -23,6 +23,7 @@ import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import * as Application from 'expo-application';
+import { isModerator } from '../lib/moderator';
 
 interface UserProfile {
   id: string;
@@ -89,6 +90,7 @@ export default function SettingsScreen() {
   const [selectedLocation, setSelectedLocation] = useState<LocationData | null>(null);
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [avatarFile, setAvatarFile] = useState<any>(null);
+  const [userIsModerator, setUserIsModerator] = useState(false);
   
   // Location states
   const [useCurrentLocation, setUseCurrentLocation] = useState(false);
@@ -114,8 +116,16 @@ export default function SettingsScreen() {
   useEffect(() => {
     if (user) {
       fetchProfileData();
+      checkModeratorStatus();
     }
   }, [user]);
+
+  const checkModeratorStatus = async () => {
+    if (user) {
+      const moderator = await isModerator();
+      setUserIsModerator(moderator);
+    }
+  };
 
   // Refresh data when screen comes into focus
   useEffect(() => {
@@ -642,6 +652,23 @@ export default function SettingsScreen() {
             </View>
 
           </View>
+
+          {/* Moderator Section */}
+          {userIsModerator && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Moderation</Text>
+              <TouchableOpacity
+                style={styles.linkButton}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  navigation.navigate('ModeratorDashboard');
+                }}
+              >
+                <Text style={styles.linkButtonText}>🛡️ Moderator Dashboard</Text>
+                <Text style={styles.linkButtonArrow}>→</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {/* Account Deletion Section */}
           <View style={styles.dangerSection}>
@@ -1282,6 +1309,41 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     color: '#374151',
+  },
+  section: {
+    marginTop: 32,
+    marginBottom: 24,
+    paddingHorizontal: 20,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 16,
+  },
+  linkButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  linkButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  linkButtonArrow: {
+    fontSize: 18,
+    color: '#6B7280',
   },
   dangerSection: {
     marginHorizontal: 20,

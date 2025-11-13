@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { CheckCircle2, MapPin, PenSquare } from 'lucide-react';
 import { validateLocationData } from '../utils/validation';
+import { checkContent } from '../lib/contentFilter';
 
 interface LocationData {
   label: string;
@@ -190,6 +191,50 @@ function NewListing() {
     setError(null);
 
     try {
+      // Check content filtering for title
+      const titleFilterResult = await checkContent({
+        content: formData.title,
+        contentType: 'item_title',
+      });
+
+      if (titleFilterResult.blocked) {
+        setError(titleFilterResult.message || 'Your title contains inappropriate content and cannot be posted.');
+        setLoading(false);
+        return;
+      }
+
+      if (titleFilterResult.warned) {
+        const proceed = window.confirm(
+          titleFilterResult.message || 'Your title may contain inappropriate content. Do you want to proceed?'
+        );
+        if (!proceed) {
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Check content filtering for description
+      const descriptionFilterResult = await checkContent({
+        content: formData.description,
+        contentType: 'item_description',
+      });
+
+      if (descriptionFilterResult.blocked) {
+        setError(descriptionFilterResult.message || 'Your description contains inappropriate content and cannot be posted.');
+        setLoading(false);
+        return;
+      }
+
+      if (descriptionFilterResult.warned) {
+        const proceed = window.confirm(
+          descriptionFilterResult.message || 'Your description may contain inappropriate content. Do you want to proceed?'
+        );
+        if (!proceed) {
+          setLoading(false);
+          return;
+        }
+      }
+
       const { data, error: insertError } = await supabase
         .from('items')
         .insert([
