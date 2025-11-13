@@ -2,10 +2,10 @@ import { ExpoConfig, ConfigContext } from 'expo/config';
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
-  name: 'Free or Barter',
+  name: 'FreeorBarter',
   slug: 'freeorbarter-mobile',
-  scheme: 'freeorbarter',
-  version: '1.0.0',
+  scheme: 'FreeOrBarter',
+  version: '1.0.1',
   orientation: 'default',
   userInterfaceStyle: 'light',
   splash: {
