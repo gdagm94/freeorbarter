@@ -9,15 +9,15 @@ import {
   TouchableOpacity,
   SafeAreaView,
   StatusBar,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { Item } from '../types';
 import ItemCard from '../components/ItemCard';
 import Footer from '../components/Footer';
-
-const { width } = Dimensions.get('window');
+import { useDeviceInfo } from '../hooks/useDeviceInfo';
+import { useResponsiveStyles, getGridColumns, getResponsivePadding } from '../utils/responsive';
 
 export default function HomeScreen() {
   const [items, setItems] = useState<Item[]>([]);
@@ -26,6 +26,11 @@ export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'free' | 'barter'>('all');
   const navigation = useNavigation<any>();
+  const { width } = useWindowDimensions();
+  const { isTablet, isLandscape } = useDeviceInfo();
+  const responsiveStyles = useResponsiveStyles();
+  const padding = getResponsivePadding(isTablet);
+  const numColumns = getGridColumns(isTablet, isLandscape);
 
   const fetchItems = async () => {
     try {
@@ -286,12 +291,10 @@ const styles = StyleSheet.create({
     paddingTop: 16,
   },
   itemWrapper: {
-    flex: 1,
-    paddingRight: 8,
+    padding: 4,
   },
   itemWrapperRight: {
-    paddingRight: 0,
-    paddingLeft: 8,
+    // Handled dynamically based on numColumns
   },
   emptyContainer: {
     alignItems: 'center',

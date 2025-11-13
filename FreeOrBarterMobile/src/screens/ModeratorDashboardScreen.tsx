@@ -19,6 +19,8 @@ import { useAuth } from '../hooks/useAuth';
 import { fetchReports, getReportTarget, isModerator, Report, ReportTarget } from '../lib/moderator';
 import { removeContent, banUser, dismissReport, resolveReport } from '../lib/moderatorActions';
 import * as Haptics from 'expo-haptics';
+import { useDeviceInfo } from '../hooks/useDeviceInfo';
+import { useResponsiveStyles, getResponsivePadding } from '../utils/responsive';
 
 type ReportStatus = 'pending' | 'in_review' | 'resolved' | 'dismissed' | 'all';
 
@@ -36,6 +38,9 @@ export default function ModeratorDashboardScreen() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [userIsModerator, setUserIsModerator] = useState(false);
   const [showContentModal, setShowContentModal] = useState(false);
+  const { isTablet } = useDeviceInfo();
+  const responsiveStyles = useResponsiveStyles();
+  const padding = getResponsivePadding(isTablet);
 
   useEffect(() => {
     const checkAccess = async () => {
@@ -346,7 +351,7 @@ export default function ModeratorDashboardScreen() {
         horizontal
         showsHorizontalScrollIndicator={false}
         style={styles.filterContainer}
-        contentContainerStyle={styles.filterContent}
+        contentContainerStyle={[styles.filterContent, { paddingHorizontal: padding }]}
       >
         {(['all', 'pending', 'in_review', 'resolved', 'dismissed'] as ReportStatus[]).map((status) => {
           // Format status text: replace underscores with spaces and capitalize
@@ -398,15 +403,17 @@ export default function ModeratorDashboardScreen() {
           <Text style={styles.emptyText}>No reports found</Text>
         </View>
       ) : (
-        <FlatList
-          data={reports}
-          renderItem={renderReportItem}
-          keyExtractor={(item) => item.id}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-          contentContainerStyle={styles.listContent}
-        />
+        <View style={[responsiveStyles.contentContainer, { paddingHorizontal: padding }]}>
+          <FlatList
+            data={reports}
+            renderItem={renderReportItem}
+            keyExtractor={(item) => item.id}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
+            contentContainerStyle={styles.listContent}
+          />
+        </View>
       )}
 
       {/* Content Preview Modal */}

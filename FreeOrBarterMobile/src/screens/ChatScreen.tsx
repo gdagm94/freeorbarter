@@ -19,6 +19,8 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { Message } from '../types';
 import * as Haptics from 'expo-haptics';
+import { useDeviceInfo } from '../hooks/useDeviceInfo';
+import { useResponsiveStyles, getResponsivePadding } from '../utils/responsive';
 import { SwipeToReply } from '../components/SwipeToReply';
 import { MessageReactions } from '../components/MessageReactions';
 import { ReadReceipt } from '../components/ReadReceipt';

@@ -9,7 +9,7 @@ import {
   Image,
   SafeAreaView,
   StatusBar,
-  Dimensions,
+  useWindowDimensions,
   Share,
   Modal,
   TextInput,
@@ -20,8 +20,8 @@ import { useAuth } from '../hooks/useAuth';
 import { Item } from '../types';
 import * as Haptics from 'expo-haptics';
 import { REPORT_CATEGORIES, submitReport } from '../lib/reports';
-
-const { width } = Dimensions.get('window');
+import { useDeviceInfo } from '../hooks/useDeviceInfo';
+import { useResponsiveStyles, getResponsivePadding } from '../utils/responsive';
 
 interface ItemWithUser extends Item {
   users?: {
@@ -45,6 +45,10 @@ export default function ItemDetailsScreen() {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
   const { itemId } = route.params || {};
+  const { width } = useWindowDimensions();
+  const { isTablet } = useDeviceInfo();
+  const responsiveStyles = useResponsiveStyles();
+  const padding = getResponsivePadding(isTablet);
 
   useEffect(() => {
     if (itemId) {
@@ -255,7 +259,11 @@ export default function ItemDetailsScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#000000" />
       
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.scrollView} 
+        contentContainerStyle={[responsiveStyles.contentContainer, { paddingHorizontal: padding }]}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Image Gallery */}
         <View style={styles.imageContainer}>
           <TouchableOpacity 

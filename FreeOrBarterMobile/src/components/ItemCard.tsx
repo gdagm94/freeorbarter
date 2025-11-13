@@ -5,19 +5,32 @@ import {
   TouchableOpacity,
   StyleSheet,
   Image,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import { Item } from '../types';
+import { useDeviceInfo } from '../hooks/useDeviceInfo';
 
 interface ItemCardProps {
   item: Item;
   onPress: () => void;
 }
 
-const { width } = Dimensions.get('window');
-const cardWidth = (width - 48) / 2; // Account for padding and gap
-
 export default function ItemCard({ item, onPress }: ItemCardProps) {
+  const { width } = useWindowDimensions();
+  const { isTablet, isLandscape } = useDeviceInfo();
+  
+  // Calculate card width based on device type and orientation
+  const getCardWidth = () => {
+    if (isTablet) {
+      const numColumns = isLandscape ? 4 : 3;
+      const padding = 24;
+      const gap = 8;
+      return (width - (padding * 2) - (gap * (numColumns - 1))) / numColumns;
+    }
+    return (width - 48) / 2; // Account for padding and gap
+  };
+  
+  const cardWidth = getCardWidth();
   const getConditionColor = (condition: string) => {
     switch (condition) {
       case 'new':
@@ -125,7 +138,7 @@ const styles = StyleSheet.create({
   imageContainer: {
     position: 'relative',
     width: '100%',
-    height: cardWidth * 0.75,
+    aspectRatio: 1.33, // 4:3 aspect ratio
   },
   image: {
     width: '100%',

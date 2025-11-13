@@ -20,6 +20,8 @@ import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabase';
 import { useNavigation } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
+import { useDeviceInfo } from '../hooks/useDeviceInfo';
+import { useResponsiveStyles, getResponsivePadding } from '../utils/responsive';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import * as Application from 'expo-application';
@@ -910,7 +912,7 @@ export default function SettingsScreen() {
   );
 }
 
-const { width } = Dimensions.get('window');
+// Width now obtained from useWindowDimensions hook
 
 const styles = StyleSheet.create({
   container: {

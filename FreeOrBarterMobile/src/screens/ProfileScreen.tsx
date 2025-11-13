@@ -11,6 +11,7 @@ import {
   Image,
   FlatList,
   RefreshControl,
+  useWindowDimensions,
 } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabase';
@@ -20,6 +21,8 @@ import Footer from '../components/Footer';
 import { useNavigation } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 import { isModerator } from '../lib/moderator';
+import { useDeviceInfo } from '../hooks/useDeviceInfo';
+import { useResponsiveStyles, getResponsivePadding, getGridColumns } from '../utils/responsive';
 
 interface UserProfile {
   id: string;
@@ -40,6 +43,11 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [userIsModerator, setUserIsModerator] = useState(false);
+  const { width } = useWindowDimensions();
+  const { isTablet, isLandscape } = useDeviceInfo();
+  const responsiveStyles = useResponsiveStyles();
+  const padding = getResponsivePadding(isTablet);
+  const numColumns = getGridColumns(isTablet, isLandscape);
 
   useEffect(() => {
     if (user) {
@@ -131,14 +139,21 @@ export default function ProfileScreen() {
   const barterItems = items.filter(item => item.type === 'barter');
   const activeItems = activeTab === 'free' ? freeItems : barterItems;
 
-  const renderItem = ({ item, index }: { item: Item; index: number }) => (
-    <View style={[styles.itemWrapper, index % 2 === 1 && styles.itemWrapperRight]}>
-      <ItemCard 
-        item={item} 
-        onPress={() => navigation.navigate('ItemDetails', { itemId: item.id })} 
-      />
-    </View>
-  );
+  const renderItem = ({ item, index }: { item: Item; index: number }) => {
+    const isRightColumn = numColumns === 2 ? index % 2 === 1 : (index % numColumns === numColumns - 1);
+    return (
+      <View style={[
+        styles.itemWrapper, 
+        isRightColumn && styles.itemWrapperRight,
+        { width: `${100 / numColumns}%` }
+      ]}>
+        <ItemCard 
+          item={item} 
+          onPress={() => navigation.navigate('ItemDetails', { itemId: item.id })} 
+        />
+      </View>
+    );
+  };
 
   if (loading) {
     return (
@@ -157,6 +172,7 @@ export default function ProfileScreen() {
       <ScrollView 
         style={styles.scrollView} 
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={[responsiveStyles.contentContainer, { paddingHorizontal: padding }]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -172,7 +188,7 @@ export default function ProfileScreen() {
         </View>
 
         {/* Profile Card */}
-        <View style={styles.profileCard}>
+        <View style={[styles.profileCard, responsiveStyles.cardContainer]}>
           <View style={styles.profileHeader}>
             {profile?.avatar_url ? (
               <Image 
@@ -302,7 +318,7 @@ export default function ProfileScreen() {
               data={activeItems}
               renderItem={renderItem}
               keyExtractor={(item) => item.id}
-              numColumns={2}
+              numColumns={numColumns}
               contentContainerStyle={styles.itemsGrid}
               scrollEnabled={false}
             />
@@ -372,7 +388,8 @@ const styles = StyleSheet.create({
   },
   profileCard: {
     backgroundColor: '#FFFFFF',
-    margin: 16,
+    marginVertical: 16,
+    marginHorizontal: 'auto',
     borderRadius: 20,
     padding: 20,
     shadowColor: '#000',
@@ -505,12 +522,10 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   itemWrapper: {
-    flex: 1,
-    paddingRight: 8,
+    padding: 4,
   },
   itemWrapperRight: {
-    paddingRight: 0,
-    paddingLeft: 8,
+    // Handled dynamically based on numColumns
   },
   emptyListings: {
     alignItems: 'center',

@@ -13,6 +13,8 @@ import {
   Platform,
 } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
+import { useDeviceInfo } from '../hooks/useDeviceInfo';
+import { useResponsiveStyles, getResponsivePadding } from '../utils/responsive';
 
 export default function AuthScreen() {
   const [isLogin, setIsLogin] = useState(true);
@@ -25,6 +27,9 @@ export default function AuthScreen() {
   const [resetEmail, setResetEmail] = useState('');
 
   const { signIn, signUp, resetPassword } = useAuth();
+  const { isTablet } = useDeviceInfo();
+  const responsiveStyles = useResponsiveStyles();
+  const padding = getResponsivePadding(isTablet);
 
 
   const handleSubmit = async () => {
@@ -120,7 +125,7 @@ export default function AuthScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView 
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingHorizontal: padding }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
@@ -134,7 +139,7 @@ export default function AuthScreen() {
           </View>
 
           {/* Form */}
-          <View style={styles.formContainer}>
+          <View style={[styles.formContainer, responsiveStyles.formContainer]}>
             {isForgotPassword ? (
               <>
                 {/* Forgot Password Form */}
@@ -304,7 +309,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    paddingHorizontal: 24,
     paddingVertical: 32,
   },
   headerSection: {
