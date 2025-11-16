@@ -784,148 +784,151 @@ export default function SettingsScreen() {
         transparent
         onRequestClose={closeDeleteAccountModal}
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.confirmOverlay}
-        >
-          <View style={[
-            styles.confirmContainer,
-            {
-              maxWidth: Math.min(screenWidth * 0.9, 400),
-              maxHeight: screenHeight * 0.85,
-              padding: screenWidth < 375 ? 16 : 20,
-            }
-          ]}>
-            <ScrollView
-              style={{ flex: 1 }}
-              showsVerticalScrollIndicator={true}
-              contentContainerStyle={styles.confirmScrollContent}
-              keyboardShouldPersistTaps="handled"
-            >
-              <Text style={styles.confirmTitle}>Delete your account?</Text>
-              <Text style={styles.confirmText}>
-                Deleting your account permanently removes your listings, messages, friends, and notification history from Free or Barter. This action cannot be undone.
-              </Text>
-              <Text style={styles.confirmText}>
-                You will be signed out immediately after confirming deletion.
-              </Text>
-              <View style={styles.confirmReasonSection}>
-                <Text style={styles.confirmSectionTitle}>Why are you leaving?</Text>
-                {ACCOUNT_DELETION_REASONS.map((option) => {
-                  const selected = deleteReason === option.value;
-                  return (
-                    <TouchableOpacity
-                      key={option.value}
-                      style={[
-                        styles.confirmReasonOption,
-                        selected && styles.confirmReasonOptionSelected
-                      ]}
-                      activeOpacity={0.8}
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        setDeleteReason(option.value);
-                        if (option.value !== 'other') {
-                          setDeleteReasonOther('');
-                        }
-                      }}
-                    >
-                      <View
-                        style={[
-                          styles.confirmRadioOuter,
-                          selected && styles.confirmRadioOuterSelected
-                        ]}
-                      >
-                        {selected && <View style={styles.confirmRadioInner} />}
-                      </View>
-                      <Text
-                        style={[
-                          styles.confirmReasonOptionText,
-                          selected && styles.confirmReasonOptionTextSelected
-                        ]}
-                      >
-                        {option.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-              {deleteReason === 'other' && (
-                <View style={styles.confirmInputGroup}>
-                  <Text style={styles.confirmInputLabel}>Tell us a bit more</Text>
-                  <TextInput
-                    value={deleteReasonOther}
-                    onChangeText={setDeleteReasonOther}
-                    placeholder="Share a short reason"
-                    placeholderTextColor="#9CA3AF"
-                    maxLength={120}
-                    style={styles.confirmInput}
-                  />
-                </View>
-              )}
-              <View style={styles.confirmInputGroup}>
-                <Text style={styles.confirmInputLabel}>Additional feedback (optional)</Text>
-                <TextInput
-                  value={deleteFeedback}
-                  onChangeText={setDeleteFeedback}
-                  placeholder="Anything else we should know?"
-                  placeholderTextColor="#9CA3AF"
-                  multiline
-                  numberOfLines={4}
-                  maxLength={500}
-                  style={styles.confirmTextarea}
-                  textAlignVertical="top"
-                />
-                <Text style={styles.confirmHelperText}>{deleteFeedback.length}/500 characters</Text>
-              </View>
-              <TouchableOpacity
-                style={styles.confirmAcknowledgeRow}
-                activeOpacity={0.8}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setDeleteAccountAcknowledged((prev) => !prev);
-                }}
+        <View style={styles.confirmOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}
+          >
+            <View style={[
+              styles.confirmContainer,
+              {
+                width: Math.min(screenWidth * 0.9, 400),
+                height: Math.min(screenHeight * 0.85, 600),
+                padding: screenWidth < 375 ? 16 : 20,
+              }
+            ]}>
+              <ScrollView
+                style={styles.confirmScrollView}
+                showsVerticalScrollIndicator={true}
+                contentContainerStyle={styles.confirmScrollContent}
+                keyboardShouldPersistTaps="handled"
+                bounces={false}
               >
-                <View
-                  style={[
-                    styles.confirmCheckbox,
-                    deleteAccountAcknowledged && styles.confirmCheckboxChecked
-                  ]}
-                >
-                  {deleteAccountAcknowledged && <View style={styles.confirmCheckboxIndicator} />}
-                </View>
-                <Text style={styles.confirmAcknowledgeText}>
-                  I understand that permanently deleting my account cannot be undone.
+                <Text style={styles.confirmTitle}>Delete your account?</Text>
+                <Text style={styles.confirmText}>
+                  Deleting your account permanently removes your listings, messages, friends, and notification history from Free or Barter. This action cannot be undone.
                 </Text>
-              </TouchableOpacity>
-              {deleteAccountError && (
-                <Text style={styles.confirmError}>{deleteAccountError}</Text>
-              )}
-            </ScrollView>
-            <View style={styles.confirmActions}>
-              <TouchableOpacity
-                style={styles.confirmCancelButton}
-                onPress={closeDeleteAccountModal}
-                disabled={deleteAccountLoading}
-              >
-                <Text style={styles.confirmCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.confirmDeleteButton,
-                  (deleteAccountLoading || isDeleteActionDisabled) && styles.confirmDeleteButtonDisabled
-                ]}
-                onPress={confirmDeleteAccount}
-                disabled={isDeleteActionDisabled}
-              >
-                {deleteAccountLoading ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.confirmDeleteText}>Delete</Text>
+                <Text style={styles.confirmText}>
+                  You will be signed out immediately after confirming deletion.
+                </Text>
+                <View style={styles.confirmReasonSection}>
+                  <Text style={styles.confirmSectionTitle}>Why are you leaving?</Text>
+                  {ACCOUNT_DELETION_REASONS.map((option) => {
+                    const selected = deleteReason === option.value;
+                    return (
+                      <TouchableOpacity
+                        key={option.value}
+                        style={[
+                          styles.confirmReasonOption,
+                          selected && styles.confirmReasonOptionSelected
+                        ]}
+                        activeOpacity={0.8}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setDeleteReason(option.value);
+                          if (option.value !== 'other') {
+                            setDeleteReasonOther('');
+                          }
+                        }}
+                      >
+                        <View
+                          style={[
+                            styles.confirmRadioOuter,
+                            selected && styles.confirmRadioOuterSelected
+                          ]}
+                        >
+                          {selected && <View style={styles.confirmRadioInner} />}
+                        </View>
+                        <Text
+                          style={[
+                            styles.confirmReasonOptionText,
+                            selected && styles.confirmReasonOptionTextSelected
+                          ]}
+                        >
+                          {option.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                {deleteReason === 'other' && (
+                  <View style={styles.confirmInputGroup}>
+                    <Text style={styles.confirmInputLabel}>Tell us a bit more</Text>
+                    <TextInput
+                      value={deleteReasonOther}
+                      onChangeText={setDeleteReasonOther}
+                      placeholder="Share a short reason"
+                      placeholderTextColor="#9CA3AF"
+                      maxLength={120}
+                      style={styles.confirmInput}
+                    />
+                  </View>
                 )}
-              </TouchableOpacity>
+                <View style={styles.confirmInputGroup}>
+                  <Text style={styles.confirmInputLabel}>Additional feedback (optional)</Text>
+                  <TextInput
+                    value={deleteFeedback}
+                    onChangeText={setDeleteFeedback}
+                    placeholder="Anything else we should know?"
+                    placeholderTextColor="#9CA3AF"
+                    multiline
+                    numberOfLines={4}
+                    maxLength={500}
+                    style={styles.confirmTextarea}
+                    textAlignVertical="top"
+                  />
+                  <Text style={styles.confirmHelperText}>{deleteFeedback.length}/500 characters</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.confirmAcknowledgeRow}
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setDeleteAccountAcknowledged((prev) => !prev);
+                  }}
+                >
+                  <View
+                    style={[
+                      styles.confirmCheckbox,
+                      deleteAccountAcknowledged && styles.confirmCheckboxChecked
+                    ]}
+                  >
+                    {deleteAccountAcknowledged && <View style={styles.confirmCheckboxIndicator} />}
+                  </View>
+                  <Text style={styles.confirmAcknowledgeText}>
+                    I understand that permanently deleting my account cannot be undone.
+                  </Text>
+                </TouchableOpacity>
+                {deleteAccountError && (
+                  <Text style={styles.confirmError}>{deleteAccountError}</Text>
+                )}
+              </ScrollView>
+              <View style={styles.confirmActions}>
+                <TouchableOpacity
+                  style={styles.confirmCancelButton}
+                  onPress={closeDeleteAccountModal}
+                  disabled={deleteAccountLoading}
+                >
+                  <Text style={styles.confirmCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.confirmDeleteButton,
+                    (deleteAccountLoading || isDeleteActionDisabled) && styles.confirmDeleteButtonDisabled
+                  ]}
+                  onPress={confirmDeleteAccount}
+                  disabled={isDeleteActionDisabled}
+                >
+                  {deleteAccountLoading ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.confirmDeleteText}>Delete</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        </KeyboardAvoidingView>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -1522,10 +1525,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15, 23, 42, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 16,
   },
   confirmContainer: {
-    width: '100%',
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
     shadowColor: '#000',
@@ -1536,7 +1537,11 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     overflow: 'hidden',
   },
+  confirmScrollView: {
+    flex: 1,
+  },
   confirmScrollContent: {
+    flexGrow: 1,
     paddingBottom: 8,
   },
   confirmTitle: {
