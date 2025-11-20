@@ -1,6 +1,6 @@
 # Free or Barter Mobile App
 
-A React Native mobile application for the Free or Barter marketplace, converted from the original web application.
+A React Native mobile application for the FreeorBarter marketplace, converted from the original web application.
 
 ## Features
 
@@ -11,6 +11,14 @@ A React Native mobile application for the Free or Barter marketplace, converted 
 - Real-time notifications (coming soon)
 - Image uploads (coming soon)
 - Location-based search (coming soon)
+- In-app safety tooling (report, block, moderator dashboard)
+
+## Safety & Moderation
+
+- Users can flag any listing, profile, or chat message. Reports are automatically assigned a 24 hour SLA.
+- Blocking is enforced in both the UI and the database—blocked users cannot message or send offers.
+- An Edge Function (`report-escalation`) can be scheduled through Supabase Cron to auto-escalate overdue reports. Set a `CRON_SECRET` env value and call the function with the header `x-cron-secret: <your-secret>`.
+- Moderators can see countdown badges, overdue indicators, and auto-escalation history inside the in-app dashboard.
 
 ## Setup Instructions
 

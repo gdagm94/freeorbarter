@@ -12,6 +12,7 @@ import {
   StatusBar,
   Image,
   Alert,
+  Modal,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -37,6 +38,13 @@ import { FileViewer } from '../components/FileViewer';
 import { OfferTemplates } from '../components/OfferTemplates';
 import { BulkOffers } from '../components/BulkOffers';
 import { CounterOffers } from '../components/CounterOffers';
+import { MessageContextMenu } from '../components/MessageContextMenu';
+import {
+  ReportContentSheet,
+  ReportTargetPayload,
+} from '../components/ReportContentSheet';
+import { useBlockStatus } from '../hooks/useBlockStatus';
+import { blockUserWithCleanup, unblockUserPair } from '../lib/blocks';
 
 export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -59,10 +67,27 @@ export default function ChatScreen() {
   const [showOfferTemplates, setShowOfferTemplates] = useState(false);
   const [showBulkOffers, setShowBulkOffers] = useState(false);
   const [showCounterOffers, setShowCounterOffers] = useState<string | null>(null);
+  const [showSafetyMenu, setShowSafetyMenu] = useState(false);
+  const [reportTarget, setReportTarget] = useState<ReportTargetPayload | null>(null);
+  const [contextMenuMessage, setContextMenuMessage] = useState<Message | null>(null);
+  const [showContextMenu, setShowContextMenu] = useState(false);
+  const [blockActionLoading, setBlockActionLoading] = useState(false);
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { user } = useAuth();
   const { otherUserId, itemId } = route.params || {};
+  const {
+    blockedByMe,
+    blockedByOther,
+    isEitherBlocked,
+    refresh: refreshBlockStatus,
+  } = useBlockStatus(user?.id, otherUserId);
+  const chatDisabledMessage = blockedByMe
+    ? 'You blocked this user. Unblock to chat again.'
+    : blockedByOther
+      ? 'This user has blocked you.'
+      : null;
+  const canSendMessages = Boolean(user && otherUserId && !isEitherBlocked);
   const flatListRef = useRef<FlatList>(null);
   
   // Message drafts hook
@@ -159,6 +184,111 @@ export default function ChatScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleMessageLongPress = (message: Message) => {
+    setContextMenuMessage(message);
+    setShowContextMenu(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const handleReportMessage = (message: Message) => {
+    if (!user) {
+      Alert.alert('Sign In Required', 'Please sign in to report messages.');
+      return;
+    }
+
+    setReportTarget({
+      type: 'message',
+      id: message.id,
+      displayName: `Message from ${
+        message.sender_id === user.id ? 'you' : otherUser?.username || 'this user'
+      }`,
+      metadata: {
+        item_id: message.item_id,
+        snippet: message.content?.slice(0, 280),
+        sender_id: message.sender_id,
+        receiver_id: message.receiver_id,
+      },
+    });
+  };
+
+  const handleReportUserFromChat = () => {
+    if (!user) {
+      Alert.alert('Sign In Required', 'Please sign in to report users.');
+      return;
+    }
+
+    if (!otherUserId) {
+      Alert.alert('Unable to report user', 'We could not find this user.');
+      return;
+    }
+
+    setReportTarget({
+      type: 'user',
+      id: otherUserId,
+      displayName: otherUser?.username,
+      metadata: {
+        fromScreen: 'Chat',
+        item_id: itemId,
+      },
+    });
+  };
+
+  const handleBlockConversation = () => {
+    if (!user || !otherUserId) {
+      Alert.alert('Unavailable', 'Unable to block this user right now.');
+      return;
+    }
+
+    Alert.alert(
+      'Block user',
+      `Block ${otherUser?.username || 'this user'}? You will stop seeing their content and any open offers will be closed.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Block',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setBlockActionLoading(true);
+              await blockUserWithCleanup({ blockerId: user.id, blockedId: otherUserId });
+              await refreshBlockStatus();
+              Alert.alert('User blocked', 'Messaging has been disabled.');
+            } catch (error) {
+              console.error('Error blocking user from chat:', error);
+              Alert.alert('Error', 'Failed to block user.');
+            } finally {
+              setBlockActionLoading(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleUnblockConversation = () => {
+    if (!user || !otherUserId) return;
+
+    Alert.alert('Unblock user', `Allow ${otherUser?.username || 'this user'} to contact you again?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Unblock',
+        onPress: async () => {
+          try {
+            setBlockActionLoading(true);
+            await unblockUserPair({ blockerId: user.id, blockedId: otherUserId });
+            await refreshBlockStatus();
+            Alert.alert('User unblocked', 'You can chat again.');
+          } catch (error) {
+            console.error('Error unblocking user from chat:', error);
+            Alert.alert('Error', 'Failed to unblock user.');
+          } finally {
+            setBlockActionLoading(false);
+          }
+        },
+      },
+    ]);
   };
 
   const uploadImage = async (uri: string): Promise<string | null> => {
@@ -293,6 +423,10 @@ export default function ChatScreen() {
     const messageContent = content || newMessage.trim();
     if (!messageContent && !imageUrl) return;
     if (!user || !otherUserId) return;
+     if (isEitherBlocked) {
+       Alert.alert('Messaging disabled', 'You cannot send messages when a block is in place.');
+       return;
+     }
 
     // Check content filtering for text messages
     if (messageContent) {
@@ -412,6 +546,10 @@ export default function ChatScreen() {
 
   const sendReply = async () => {
     if (!replyingTo || !newMessage.trim()) return;
+    if (isEitherBlocked) {
+      Alert.alert('Messaging disabled', 'You cannot reply while a block is active.');
+      return;
+    }
 
     try {
       const replyContent = `Replying to "${replyingTo.content}": ${newMessage.trim()}`;
@@ -460,6 +598,10 @@ export default function ChatScreen() {
   };
 
   const handleFileUpload = async (fileUrl: string, fileName: string, fileType: string) => {
+    if (!user || !otherUserId || isEitherBlocked) {
+      Alert.alert('Messaging disabled', 'You cannot share files while a block is active.');
+      return;
+    }
     try {
       const { error } = await supabase
         .from('messages')
@@ -488,6 +630,10 @@ export default function ChatScreen() {
   };
 
   const handleVoiceMessageUpload = async (audioUri: string, duration: number) => {
+    if (!user || !otherUserId || isEitherBlocked) {
+      Alert.alert('Messaging disabled', 'You cannot send voice messages while a block is active.');
+      return;
+    }
     try {
       setUploading(true);
 
@@ -580,6 +726,8 @@ export default function ChatScreen() {
             isOffer && styles.offerMessage
           ]}
           onPress={() => handleDoubleTap(item.id)}
+          onLongPress={() => handleMessageLongPress(item)}
+          delayLongPress={200}
           activeOpacity={0.7}
         >
         {item.image_url && (
@@ -786,6 +934,13 @@ export default function ChatScreen() {
               itemId={itemId}
               onDraftSelect={handleDraftSelect}
             />
+            <TouchableOpacity
+              style={styles.safetyButton}
+              onPress={() => setShowSafetyMenu(true)}
+              accessibilityLabel="Open safety menu"
+            >
+              <Text style={styles.safetyButtonText}>⋯</Text>
+            </TouchableOpacity>
           </View>
         </View>
         <View style={styles.loadingContainer}>
@@ -871,6 +1026,20 @@ export default function ChatScreen() {
         }
       />
 
+      {chatDisabledMessage && (
+        <View style={styles.blockNotice}>
+          <Text style={styles.blockNoticeText}>{chatDisabledMessage}</Text>
+          {blockedByMe && (
+            <TouchableOpacity
+              style={styles.blockNoticeAction}
+              onPress={handleUnblockConversation}
+            >
+              <Text style={styles.blockNoticeActionText}>Unblock</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
       {/* Reply Context */}
       {replyingTo && (
         <View style={styles.replyContext}>
@@ -888,9 +1057,12 @@ export default function ChatScreen() {
 
       <View style={styles.inputContainer}>
           <TouchableOpacity 
-            style={styles.attachButton}
+            style={[
+              styles.attachButton,
+              (!canSendMessages || uploading) && styles.attachButtonDisabled,
+            ]}
             onPress={() => setShowAttachmentMenu(true)}
-            disabled={uploading}
+            disabled={uploading || !canSendMessages}
           >
             <Text style={styles.attachButtonText}>+</Text>
           </TouchableOpacity>
@@ -899,15 +1071,25 @@ export default function ChatScreen() {
           style={styles.textInput}
           value={newMessage}
           onChangeText={setNewMessage}
-          placeholder={replyingTo ? "Type your reply..." : "Type a message..."}
+          placeholder={
+            replyingTo
+              ? 'Type your reply...'
+              : chatDisabledMessage ?? 'Type a message...'
+          }
           multiline
             maxLength={1000}
+          editable={canSendMessages}
         />
           
         <TouchableOpacity 
-            style={[styles.sendButton, (!newMessage.trim() && !uploading) && styles.sendButtonDisabled]}
+            style={[
+              styles.sendButton,
+              (!newMessage.trim() && !uploading) || !canSendMessages
+                ? styles.sendButtonDisabled
+                : null,
+            ]}
             onPress={replyingTo ? sendReply : () => sendMessage()}
-            disabled={!newMessage.trim() || uploading}
+            disabled={!newMessage.trim() || uploading || !canSendMessages}
         >
             <Text style={styles.sendButtonText}>
               {uploading ? '⏳' : 'Send'}
@@ -1009,6 +1191,130 @@ export default function ChatScreen() {
           // Refresh messages or show success message
         }}
       />
+      <Modal
+        visible={showSafetyMenu}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSafetyMenu(false)}
+      >
+        <TouchableOpacity
+          style={styles.safetyMenuOverlay}
+          activeOpacity={1}
+          onPress={() => setShowSafetyMenu(false)}
+        >
+          <View style={styles.safetyMenuContainer}>
+            <Text style={styles.safetyMenuTitle}>Safety & support</Text>
+            <TouchableOpacity
+              style={[
+                styles.safetyMenuOption,
+                styles.safetyMenuOptionAccent,
+              ]}
+              onPress={() => {
+                setShowSafetyMenu(false);
+                handleReportUserFromChat();
+              }}
+            >
+              <Text style={styles.safetyMenuOptionIcon}>⚑</Text>
+              <View style={styles.safetyMenuOptionTextWrap}>
+                <Text
+                  style={[
+                    styles.safetyMenuOptionText,
+                    styles.safetyMenuOptionTextAccent,
+                  ]}
+                >
+                  Report user
+                </Text>
+                <Text
+                  style={[
+                    styles.safetyMenuOptionHelper,
+                    styles.safetyMenuOptionHelperAccent,
+                  ]}
+                >
+                  Flag {otherUser?.username || 'this user'} for moderator review
+                </Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.safetyMenuOption,
+                blockedByMe ? styles.safetyMenuOptionSuccess : styles.safetyMenuOptionDanger,
+              ]}
+              disabled={blockActionLoading}
+              onPress={() => {
+                setShowSafetyMenu(false);
+                blockedByMe ? handleUnblockConversation() : handleBlockConversation();
+              }}
+            >
+              <Text style={styles.safetyMenuOptionIcon}>
+                {blockedByMe ? '✅' : '🚫'}
+              </Text>
+              <View style={styles.safetyMenuOptionTextWrap}>
+                <Text
+                  style={[
+                    styles.safetyMenuOptionText,
+                    blockedByMe ? styles.safetyMenuOptionTextSuccess : styles.safetyMenuOptionTextDanger,
+                  ]}
+                >
+                  {blockedByMe ? 'Unblock user' : 'Block user'}
+                </Text>
+                <Text
+                  style={[
+                    styles.safetyMenuOptionHelper,
+                    blockedByMe
+                      ? styles.safetyMenuOptionHelperSuccess
+                      : styles.safetyMenuOptionHelperDanger,
+                  ]}
+                >
+                  {blockedByMe
+                    ? 'Allow messages from this user again'
+                    : 'Stop all messages and remove pending offers'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+            {blockedByOther && !blockedByMe && (
+              <View style={styles.safetyMenuInfo}>
+                <Text style={styles.safetyMenuInfoText}>
+                  You cannot unblock users who have blocked you.
+                </Text>
+              </View>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+      <MessageContextMenu
+        visible={showContextMenu}
+        onClose={() => {
+          setShowContextMenu(false);
+          setContextMenuMessage(null);
+        }}
+        onReact={() => {
+          if (contextMenuMessage) {
+            setShowReactionPicker(contextMenuMessage.id);
+          }
+        }}
+        onReply={() => {
+          if (contextMenuMessage) {
+            const senderName =
+              contextMenuMessage.sender_id === user?.id
+                ? 'You'
+                : otherUser?.username || 'Unknown';
+            handleReply(
+              contextMenuMessage.id,
+              contextMenuMessage.content || '',
+              senderName,
+            );
+          }
+        }}
+        onReport={
+          contextMenuMessage ? () => handleReportMessage(contextMenuMessage) : undefined
+        }
+        messageId={contextMenuMessage?.id || ''}
+      />
+      <ReportContentSheet
+        visible={!!reportTarget}
+        target={reportTarget}
+        onClose={() => setReportTarget(null)}
+      />
     </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -1084,6 +1390,17 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  safetyButton: {
+    marginLeft: 8,
+    padding: 8,
+    borderRadius: 16,
+    backgroundColor: '#EEF2FF',
+  },
+  safetyButtonText: {
+    fontSize: 18,
+    color: '#312E81',
+    fontWeight: '700',
   },
   loadingContainer: {
     flex: 1,
@@ -1226,6 +1543,34 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     textAlign: 'center',
   },
+  blockNotice: {
+    marginHorizontal: 20,
+    marginBottom: 12,
+    borderRadius: 16,
+    padding: 14,
+    backgroundColor: '#FFF1F2',
+    borderWidth: 1,
+    borderColor: '#FECDD3',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  blockNoticeText: {
+    flex: 1,
+    color: '#9F1239',
+    fontWeight: '600',
+  },
+  blockNoticeAction: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#9F1239',
+  },
+  blockNoticeActionText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -1241,6 +1586,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#F1F5F9',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  attachButtonDisabled: {
+    opacity: 0.4,
   },
   attachButtonText: {
     fontSize: 18,
@@ -1305,5 +1653,92 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#64748B',
     fontWeight: '600',
+  },
+  safetyMenuOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  safetyMenuContainer: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  safetyMenuTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 12,
+  },
+  safetyMenuOption: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    backgroundColor: '#FEF2F2',
+  },
+  safetyMenuOptionAccent: {
+    backgroundColor: '#F5F3FF',
+  },
+  safetyMenuOptionDanger: {
+    backgroundColor: '#FEF2F2',
+  },
+  safetyMenuOptionSuccess: {
+    backgroundColor: '#ECFDF5',
+  },
+  safetyMenuOptionIcon: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  safetyMenuOptionTextWrap: {
+    flex: 1,
+  },
+  safetyMenuOptionText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  safetyMenuOptionTextAccent: {
+    color: '#312E81',
+  },
+  safetyMenuOptionHelper: {
+    fontSize: 12,
+    color: '#475569',
+    marginTop: 2,
+  },
+  safetyMenuOptionHelperAccent: {
+    color: '#4C1D95',
+  },
+  safetyMenuOptionTextDanger: {
+    color: '#B91C1C',
+  },
+  safetyMenuOptionTextSuccess: {
+    color: '#047857',
+  },
+  safetyMenuOptionHelperDanger: {
+    color: '#9F1239',
+  },
+  safetyMenuOptionHelperSuccess: {
+    color: '#047857',
+  },
+  safetyMenuInfo: {
+    marginTop: 8,
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+  },
+  safetyMenuInfoText: {
+    fontSize: 12,
+    color: '#475569',
   },
 });

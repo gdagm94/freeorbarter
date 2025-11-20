@@ -9,11 +9,14 @@ export const REPORT_CATEGORIES = [
   { value: 'other', label: 'Other' },
 ];
 
-interface SubmitReportOptions {
-  targetType: 'user' | 'item' | 'message' | 'comment' | 'other';
+export type ReportTargetType = 'user' | 'item' | 'message' | 'comment' | 'other';
+
+export interface SubmitReportOptions {
+  targetType: ReportTargetType;
   targetId: string;
   category: string;
   description?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export async function submitReport({
@@ -21,6 +24,7 @@ export async function submitReport({
   targetId,
   category,
   description,
+  metadata,
 }: SubmitReportOptions) {
   const { data, error } = await supabase.functions.invoke<{ report?: { id: string } }>('report-create', {
     body: {
@@ -28,7 +32,10 @@ export async function submitReport({
       targetId,
       category,
       description,
-      metadata: { source: 'mobile' },
+      metadata: {
+        source: 'mobile',
+        ...metadata,
+      },
     },
   });
 

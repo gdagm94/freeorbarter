@@ -30,6 +30,12 @@ import {
 } from '../lib/friends';
 import { Item } from '../types';
 import ItemCard from '../components/ItemCard';
+import {
+  ReportContentSheet,
+  ReportTargetPayload,
+} from '../components/ReportContentSheet';
+import { useBlockStatus } from '../hooks/useBlockStatus';
+import { blockUserWithCleanup, unblockUserPair } from '../lib/blocks';
 
 interface UserProfile {
   id: string;
@@ -59,7 +65,13 @@ export default function UserProfileScreen() {
   const [friendActionLoading, setFriendActionLoading] = useState(false);
   const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
   const [showManageMenu, setShowManageMenu] = useState(false);
-  const [isBlocked, setIsBlocked] = useState(false);
+  const [reportTarget, setReportTarget] = useState<ReportTargetPayload | null>(null);
+  const {
+    blockedByMe,
+    blockedByOther,
+    isEitherBlocked,
+    refresh: refreshBlockStatus,
+  } = useBlockStatus(user?.id, userId);
 
   useEffect(() => {
     if (userId) {
@@ -80,7 +92,7 @@ export default function UserProfileScreen() {
       if (!refreshing) setLoading(true);
 
       // Fetch all data in parallel for better performance
-      const [profileResult, itemsResult, friendshipResult, blockResult] = await Promise.all([
+      const [profileResult, itemsResult, friendshipResult] = await Promise.all([
         // Fetch user profile
         supabase
           .from('users')
@@ -101,15 +113,6 @@ export default function UserProfileScreen() {
           ? getFriendshipStatus(user.id, userId)
           : Promise.resolve('none' as FriendshipStatus),
         
-        // Check if user is blocked
-        user && user.id !== userId
-          ? supabase
-              .from('blocked_users')
-              .select('id')
-              .eq('blocker_id', user.id)
-              .eq('blocked_id', userId)
-              .limit(1)
-          : Promise.resolve({ data: null })
       ]);
 
       // Handle profile
@@ -135,9 +138,6 @@ export default function UserProfileScreen() {
         
         setPendingRequestId(requestData?.id || null);
       }
-
-      // Handle blocked status
-      setIsBlocked(!!((blockResult as any).data && (blockResult as any).data.length > 0));
 
     } catch (error) {
       console.error('Error fetching user data:', error);
@@ -196,6 +196,10 @@ export default function UserProfileScreen() {
 
   const handleMessageUser = async () => {
     if (!user || !userId) return;
+    if (isEitherBlocked) {
+      Alert.alert('Messaging unavailable', 'Messaging is disabled because someone in this conversation is blocked.');
+      return;
+    }
     
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
@@ -218,10 +222,10 @@ export default function UserProfileScreen() {
 
   const handleBlockUser = async () => {
     if (!user || !userId) return;
-    
+
     Alert.alert(
       'Block User',
-      `Are you sure you want to block ${profile?.username}? You will unfriend them and won't see their content.`,
+      `Are you sure you want to block ${profile?.username}? You will unfriend them and any open offers will be removed.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -230,85 +234,48 @@ export default function UserProfileScreen() {
           onPress: async () => {
             try {
               setFriendActionLoading(true);
-              
-              // Unfriend first if they are friends
-              if (friendshipStatus === 'friends') {
-                const unfriendResult = await unfriend(user.id, userId);
-                if (unfriendResult.error) throw unfriendResult.error;
-              }
-              
-              // Add to blocked users
-              const { error: blockError } = await supabase
-                .from('blocked_users')
-                .insert([{
-                  blocker_id: user.id,
-                  blocked_id: userId
-                }]);
-              
-              if (blockError && blockError.code !== '23505') { // Ignore duplicate key error
-                throw blockError;
-              }
-              
-              Alert.alert('Success', 'User has been blocked');
+              await blockUserWithCleanup({ blockerId: user.id, blockedId: userId });
+              setFriendshipStatus('none');
+              await refreshBlockStatus();
+              Alert.alert('User blocked', 'You will no longer see their content.');
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              
-              // Refresh status
-              const newStatus = await getFriendshipStatus(user.id, userId);
-              setFriendshipStatus(newStatus);
-              setIsBlocked(true);
               setShowManageMenu(false);
-              
             } catch (error) {
               console.error('Error blocking user:', error);
               Alert.alert('Error', 'Failed to block user');
             } finally {
               setFriendActionLoading(false);
             }
-          }
-        }
-      ]
+          },
+        },
+      ],
     );
   };
 
   const handleUnblockUser = async () => {
     if (!user || !userId) return;
-    
-    Alert.alert(
-      'Unblock User',
-      `Are you sure you want to unblock ${profile?.username}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Unblock',
-          onPress: async () => {
-            try {
-              setFriendActionLoading(true);
-              
-              // Remove from blocked users
-              const { error: unblockError } = await supabase
-                .from('blocked_users')
-                .delete()
-                .eq('blocker_id', user.id)
-                .eq('blocked_id', userId);
-              
-              if (unblockError) throw unblockError;
-              
-              Alert.alert('Success', 'User has been unblocked');
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              
-              setIsBlocked(false);
-              setShowManageMenu(false);
-              
-            } catch (error) {
-              console.error('Error unblocking user:', error);
-              Alert.alert('Error', 'Failed to unblock user');
-            } finally {
-              setFriendActionLoading(false);
-            }
+
+    Alert.alert('Unblock User', `Are you sure you want to unblock ${profile?.username}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Unblock',
+        onPress: async () => {
+          try {
+            setFriendActionLoading(true);
+            await unblockUserPair({ blockerId: user.id, blockedId: userId });
+            await refreshBlockStatus();
+            Alert.alert('User unblocked', 'You can interact with them again.');
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            setShowManageMenu(false);
+          } catch (error) {
+            console.error('Error unblocking user:', error);
+            Alert.alert('Error', 'Failed to unblock user');
+          } finally {
+            setFriendActionLoading(false);
           }
-        }
-      ]
-    );
+        },
+      },
+    ]);
   };
 
   const handleFriendAction = async (action: 'send' | 'accept' | 'decline' | 'cancel' | 'unfriend') => {
@@ -379,8 +346,56 @@ export default function UserProfileScreen() {
     }
   };
 
+  const openReportUserSheet = () => {
+    if (!user) {
+      Alert.alert('Sign In Required', 'Please sign in to report users.');
+      return;
+    }
+    if (!profile) return;
+
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setReportTarget({
+      type: 'user',
+      id: profile.id,
+      displayName: profile.username,
+      metadata: {
+        fromScreen: 'UserProfile',
+        friendshipStatus,
+        blocked: blockedByMe,
+      },
+    });
+  };
+
   const renderFriendButton = () => {
     if (!user || user.id === userId) return null;
+    if (blockedByOther) {
+      return (
+        <View style={[styles.friendButton, styles.blockedBanner]}>
+          <Text style={styles.blockedBannerText}>
+            {profile?.username} has blocked you
+          </Text>
+        </View>
+      );
+    }
+
+    if (blockedByMe) {
+      return (
+        <TouchableOpacity
+          style={[styles.friendButton, styles.pendingButton]}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            handleUnblockUser();
+          }}
+          disabled={friendActionLoading}
+        >
+          {friendActionLoading ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Text style={styles.friendButtonText}>Unblock User</Text>
+          )}
+        </TouchableOpacity>
+      );
+    }
 
     // Show loading state while fetching friendship status
     if (loading) {
@@ -543,9 +558,17 @@ export default function UserProfileScreen() {
           </View>
 
           {/* Friend Button */}
-          <View key={`friend-button-${friendshipStatus}-${isBlocked}`}>
+          <View key={`friend-button-${friendshipStatus}-${blockedByMe}`}>
             {renderFriendButton()}
           </View>
+          {user && user.id !== userId && (
+            <TouchableOpacity
+              style={styles.reportUserChip}
+              onPress={openReportUserSheet}
+            >
+              <Text style={styles.reportUserChipText}>⚑ Report {profile.username}</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Listings Section */}
@@ -589,7 +612,7 @@ export default function UserProfileScreen() {
           <View style={styles.manageMenuContainer}>
             <Text style={styles.manageMenuTitle}>Manage Friendship</Text>
             
-            {!isBlocked && friendshipStatus === 'friends' && (
+            {!blockedByMe && friendshipStatus === 'friends' && (
               <TouchableOpacity
                 style={styles.manageMenuItem}
                 onPress={() => {
@@ -613,7 +636,7 @@ export default function UserProfileScreen() {
               </TouchableOpacity>
             )}
             
-            {isBlocked ? (
+            {blockedByMe ? (
               <TouchableOpacity
                 style={[styles.manageMenuItem, styles.successMenuItem]}
                 onPress={() => {
@@ -636,6 +659,18 @@ export default function UserProfileScreen() {
                 <Text style={[styles.manageMenuItemText, styles.dangerText]}>Block User</Text>
               </TouchableOpacity>
             )}
+            {user && user.id !== userId && (
+              <TouchableOpacity
+                style={styles.manageMenuItem}
+                onPress={() => {
+                  setShowManageMenu(false);
+                  openReportUserSheet();
+                }}
+              >
+                <Text style={styles.manageMenuItemIcon}>⚑</Text>
+                <Text style={styles.manageMenuItemText}>Report User</Text>
+              </TouchableOpacity>
+            )}
             
             <TouchableOpacity
               style={styles.manageMenuCancelButton}
@@ -646,6 +681,11 @@ export default function UserProfileScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
+      <ReportContentSheet
+        visible={!!reportTarget}
+        target={reportTarget}
+        onClose={() => setReportTarget(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -807,6 +847,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
+  blockedBanner: {
+    backgroundColor: '#FFE4E6',
+  },
+  blockedBannerText: {
+    color: '#BE123C',
+    fontWeight: '600',
+  },
   friendActionsContainer: {
     flexDirection: 'row',
     gap: 12,
@@ -924,6 +971,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#374151',
+  },
+  reportUserChip: {
+    marginTop: 12,
+    alignSelf: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#F87171',
+    backgroundColor: '#FEF2F2',
+  },
+  reportUserChipText: {
+    color: '#B91C1C',
+    fontWeight: '600',
   },
   dangerText: {
     color: '#EF4444',

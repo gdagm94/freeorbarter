@@ -13,6 +13,7 @@ import {
   Image,
   Modal,
   FlatList,
+  ViewStyle,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../hooks/useAuth';
@@ -217,19 +218,34 @@ export default function ModeratorDashboardScreen() {
     );
   };
 
-  const getTimeRemaining = (createdAt: string) => {
-    const created = new Date(createdAt);
-    const now = new Date();
-    const hoursElapsed = (now.getTime() - created.getTime()) / (1000 * 60 * 60);
-    const hoursRemaining = 24 - hoursElapsed;
+  const getSlaStatus = (report: Report) => {
+    if (report.status !== 'pending') return null;
+    const deadline = report.needs_action_by
+      ? new Date(report.needs_action_by)
+      : new Date(new Date(report.created_at).getTime() + 24 * 60 * 60 * 1000);
+    const diffMs = deadline.getTime() - Date.now();
+    const hoursDifference = Math.ceil(Math.abs(diffMs) / (1000 * 60 * 60));
 
-    if (hoursRemaining <= 0) {
-      return { text: 'Overdue', color: '#DC2626' };
-    } else if (hoursRemaining <= 4) {
-      return { text: `${Math.ceil(hoursRemaining)}h remaining`, color: '#EA580C' };
-    } else {
-      return { text: `${Math.ceil(hoursRemaining)}h remaining`, color: '#6B7280' };
+    if (diffMs <= 0) {
+      return { text: `Overdue by ${hoursDifference}h`, color: '#DC2626', overdue: true };
     }
+    if (diffMs <= 4 * 60 * 60 * 1000) {
+      return { text: `${Math.ceil(diffMs / (1000 * 60 * 60))}h to SLA`, color: '#EA580C', overdue: false };
+    }
+    return { text: `${Math.ceil(diffMs / (1000 * 60 * 60))}h to SLA`, color: '#6B7280', overdue: false };
+  };
+
+  const formatResponseDuration = (start: string, end: string) => {
+    const startTime = new Date(start).getTime();
+    const endTime = new Date(end).getTime();
+    const diffMs = Math.max(0, endTime - startTime);
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    }
+    return `${minutes}m`;
   };
 
   const formatTimeAgo = (dateString: string) => {
@@ -247,7 +263,7 @@ export default function ModeratorDashboardScreen() {
   };
 
   const renderReportItem = ({ item: report }: { item: Report }) => {
-    const timeRemaining = report.status === 'pending' ? getTimeRemaining(report.created_at) : null;
+    const slaStatus = getSlaStatus(report);
     const borderColor = 
       report.status === 'pending' ? '#EAB308' :
       report.status === 'in_review' ? '#3B82F6' :
@@ -264,11 +280,25 @@ export default function ModeratorDashboardScreen() {
           <Text style={styles.reportType}>
             {report.target_type.charAt(0).toUpperCase() + report.target_type.slice(1)} Report
           </Text>
-          {timeRemaining && (
-            <Text style={[styles.timeRemaining, { color: timeRemaining.color }]}>
-              {timeRemaining.text}
-            </Text>
-          )}
+          <View style={styles.headerChips}>
+            {report.auto_escalated && (
+              <View style={styles.autoEscalatedChip}>
+                <Text style={styles.autoEscalatedChipText}>Auto escalated</Text>
+              </View>
+            )}
+            {slaStatus && (
+              <View
+                style={[
+                  styles.slaChip,
+                  slaStatus.overdue && styles.slaChipOverdue,
+                ]}
+              >
+                <Text style={[styles.slaChipText, { color: slaStatus.color }]}>
+                  {slaStatus.text}
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
 
         <Text style={styles.reportCategory}>
@@ -286,6 +316,11 @@ export default function ModeratorDashboardScreen() {
           Reported {formatTimeAgo(report.created_at)}
           {report.reporter && ` by ${report.reporter.username}`}
         </Text>
+        {report.first_response_at && (
+          <Text style={styles.slaMeta}>
+            First response in {formatResponseDuration(report.created_at, report.first_response_at)}
+          </Text>
+        )}
 
         {(report.status === 'pending' || report.status === 'in_review') && (
           <View style={styles.actionButtons}>
@@ -403,7 +438,12 @@ export default function ModeratorDashboardScreen() {
           <Text style={styles.emptyText}>No reports found</Text>
         </View>
       ) : (
-        <View style={[responsiveStyles.contentContainer, { paddingHorizontal: padding }]}>
+        <View
+          style={[
+            responsiveStyles.contentContainer as ViewStyle,
+            { paddingHorizontal: padding },
+          ]}
+        >
           <FlatList
             data={reports}
             renderItem={renderReportItem}
@@ -632,12 +672,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
+  headerChips: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   reportType: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#111827',
   },
-  timeRemaining: {
+  autoEscalatedChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: '#F0F9FF',
+  },
+  autoEscalatedChipText: {
+    color: '#0369A1',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  slaChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: '#F3F4F6',
+  },
+  slaChipOverdue: {
+    backgroundColor: '#FEF2F2',
+  },
+  slaChipText: {
     fontSize: 12,
     fontWeight: '600',
   },
@@ -658,6 +723,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#9CA3AF',
     marginBottom: 12,
+  },
+  slaMeta: {
+    fontSize: 12,
+    color: '#64748B',
+    marginBottom: 8,
   },
   actionButtons: {
     flexDirection: 'row',

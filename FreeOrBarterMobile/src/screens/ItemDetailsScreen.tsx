@@ -11,17 +11,19 @@ import {
   StatusBar,
   useWindowDimensions,
   Share,
-  Modal,
-  TextInput,
+  ViewStyle,
 } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { Item } from '../types';
 import * as Haptics from 'expo-haptics';
-import { REPORT_CATEGORIES, submitReport } from '../lib/reports';
 import { useDeviceInfo } from '../hooks/useDeviceInfo';
 import { useResponsiveStyles, getResponsivePadding } from '../utils/responsive';
+import {
+  ReportContentSheet,
+  ReportTargetPayload,
+} from '../components/ReportContentSheet';
 
 interface ItemWithUser extends Item {
   users?: {
@@ -37,10 +39,7 @@ export default function ItemDetailsScreen() {
   const [loading, setLoading] = useState(true);
   const [isWatched, setIsWatched] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [reportVisible, setReportVisible] = useState(false);
-  const [reportCategory, setReportCategory] = useState(REPORT_CATEGORIES[0].value);
-  const [reportDescription, setReportDescription] = useState('');
-  const [reportLoading, setReportLoading] = useState(false);
+  const [reportTarget, setReportTarget] = useState<ReportTargetPayload | null>(null);
   const route = useRoute<any>();
   const navigation = useNavigation<any>();
   const { user } = useAuth();
@@ -225,6 +224,28 @@ export default function ItemDetailsScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
+  const openReportSheet = () => {
+    if (!user) {
+      Alert.alert('Sign In Required', 'Please sign in to report content.');
+      return;
+    }
+
+    if (!item) {
+      Alert.alert('Error', 'Item not found');
+      return;
+    }
+
+    setReportTarget({
+      type: 'item',
+      id: item.id,
+      displayName: item.title,
+      metadata: {
+        owner_id: item.user_id,
+        owner_username: item.users?.username,
+      },
+    });
+  };
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -261,7 +282,10 @@ export default function ItemDetailsScreen() {
       
       <ScrollView 
         style={styles.scrollView} 
-        contentContainerStyle={[responsiveStyles.contentContainer, { paddingHorizontal: padding }]}
+        contentContainerStyle={[
+          responsiveStyles.contentContainer as ViewStyle,
+          { paddingHorizontal: padding },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {/* Image Gallery */}
@@ -319,15 +343,7 @@ export default function ItemDetailsScreen() {
             {!isOwnItem && (
               <TouchableOpacity
                 style={styles.headerButton}
-                onPress={() => {
-                  if (!user) {
-                    Alert.alert('Sign In Required', 'Please sign in to report content.');
-                    return;
-                  }
-                  setReportVisible(true);
-                  setReportCategory(REPORT_CATEGORIES[0].value);
-                  setReportDescription('');
-                }}
+                onPress={openReportSheet}
               >
                 <Text style={styles.headerButtonText}>⚑</Text>
               </TouchableOpacity>
@@ -473,111 +489,11 @@ export default function ItemDetailsScreen() {
         </View>
       )}
 
-      <Modal
-        animationType="slide"
-        transparent
-        visible={reportVisible}
-        onRequestClose={() => {
-          if (reportLoading) return;
-          setReportVisible(false);
-        }}
-      >
-        <View style={styles.reportOverlay}>
-          <View style={styles.reportModal}>
-            <Text style={styles.reportTitle}>Report this item</Text>
-            <Text style={styles.reportSubtitle}>
-              Tell us what&apos;s wrong. Reports help keep the community safe.
-            </Text>
-
-            <View style={styles.reportCategoryList}>
-              {REPORT_CATEGORIES.map((option) => (
-                <TouchableOpacity
-                  key={option.value}
-                  style={[
-                    styles.reportCategoryItem,
-                    reportCategory === option.value && styles.reportCategoryItemActive,
-                  ]}
-                  onPress={() => setReportCategory(option.value)}
-                  disabled={reportLoading}
-                >
-                  <View style={[
-                    styles.reportRadio,
-                    reportCategory === option.value && styles.reportRadioActive,
-                  ]}
-                  />
-                  <Text style={[
-                    styles.reportCategoryText,
-                    reportCategory === option.value && styles.reportCategoryTextActive,
-                  ]}>
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={styles.reportInputLabel}>Additional details (optional)</Text>
-            <TextInput
-              value={reportDescription}
-              onChangeText={setReportDescription}
-              multiline
-              numberOfLines={4}
-              maxLength={500}
-              style={styles.reportInput}
-              placeholder="Provide more context for our moderation team."
-              editable={!reportLoading}
-            />
-            <Text style={styles.reportCounter}>{reportDescription.length}/500</Text>
-
-            <View style={styles.reportActions}>
-              <TouchableOpacity
-                style={styles.reportCancelButton}
-                onPress={() => {
-                  if (reportLoading) return;
-                  setReportVisible(false);
-                }}
-              >
-                <Text style={styles.reportCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.reportSubmitButton,
-                  reportLoading && styles.reportSubmitButtonDisabled,
-                ]}
-                onPress={async () => {
-                  if (!user || !item) {
-                    Alert.alert('Sign In Required', 'Please sign in to report content.');
-                    return;
-                  }
-                  try {
-                    setReportLoading(true);
-                    await submitReport({
-                      targetType: 'item',
-                      targetId: item.id,
-                      category: reportCategory,
-                      description: reportDescription.trim() || undefined,
-                    });
-                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                    Alert.alert('Report submitted', 'Thank you for helping keep the community safe.');
-                    setReportVisible(false);
-                    setReportDescription('');
-                    setReportCategory(REPORT_CATEGORIES[0].value);
-                  } catch (error) {
-                    console.error('Error submitting report', error);
-                    Alert.alert('Error', 'Could not submit the report. Please try again.');
-                  } finally {
-                    setReportLoading(false);
-                  }
-                }}
-                disabled={reportLoading}
-              >
-                <Text style={styles.reportSubmitText}>
-                  {reportLoading ? 'Submitting…' : 'Submit report'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <ReportContentSheet
+        visible={!!reportTarget}
+        target={reportTarget}
+        onClose={() => setReportTarget(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -928,120 +844,6 @@ const styles = StyleSheet.create({
   manageButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '700',
-  },
-  reportOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  reportModal: {
-    width: '100%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 20,
-  },
-  reportTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1F2937',
-  },
-  reportSubtitle: {
-    marginTop: 4,
-    fontSize: 13,
-    color: '#4B5563',
-  },
-  reportCategoryList: {
-    marginTop: 16,
-    gap: 8,
-  },
-  reportCategoryItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
-  },
-  reportCategoryItemActive: {
-    borderColor: '#DC2626',
-    backgroundColor: '#FEF2F2',
-  },
-  reportRadio: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 2,
-    borderColor: '#CBD5F5',
-    marginRight: 12,
-  },
-  reportRadioActive: {
-    borderColor: '#DC2626',
-    backgroundColor: '#DC2626',
-  },
-  reportCategoryText: {
-    flex: 1,
-    fontSize: 13,
-    color: '#4B5563',
-  },
-  reportCategoryTextActive: {
-    color: '#991B1B',
-    fontWeight: '600',
-  },
-  reportInputLabel: {
-    marginTop: 20,
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  reportInput: {
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    padding: 12,
-    fontSize: 14,
-    textAlignVertical: 'top',
-    backgroundColor: '#FFFFFF',
-  },
-  reportCounter: {
-    fontSize: 12,
-    color: '#94A3B8',
-    textAlign: 'right',
-    marginTop: 4,
-  },
-  reportActions: {
-    marginTop: 16,
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    gap: 12,
-  },
-  reportCancelButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-  },
-  reportCancelText: {
-    color: '#4B5563',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  reportSubmitButton: {
-    backgroundColor: '#DC2626',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-  },
-  reportSubmitButtonDisabled: {
-    backgroundColor: '#F87171',
-  },
-  reportSubmitText: {
-    color: '#FFFFFF',
-    fontSize: 14,
     fontWeight: '700',
   },
   unavailableText: {

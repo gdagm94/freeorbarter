@@ -10,6 +10,9 @@ export interface Report {
   status: 'pending' | 'in_review' | 'resolved' | 'dismissed';
   metadata: Record<string, unknown> | null;
   created_at: string;
+  needs_action_by?: string | null;
+  first_response_at?: string | null;
+  auto_escalated?: boolean;
   resolved_at?: string | null;
   resolved_by?: string | null;
   resolution_notes?: string | null;

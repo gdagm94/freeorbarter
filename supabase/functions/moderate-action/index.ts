@@ -37,7 +37,7 @@ serve(async (req) => {
   }
 
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+    return new Response(JSON.stringify({ error: { message: 'Method not allowed' } }), {
       status: 405,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
@@ -45,7 +45,7 @@ serve(async (req) => {
 
   const authHeader = req.headers.get('Authorization');
   if (!authHeader) {
-    return new Response(JSON.stringify({ error: 'Missing Authorization header' }), {
+    return new Response(JSON.stringify({ error: { message: 'Missing Authorization header' } }), {
       status: 401,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
@@ -68,7 +68,7 @@ serve(async (req) => {
     } = await userClient.auth.getUser();
 
     if (userError || !user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      return new Response(JSON.stringify({ error: { message: 'Unauthorized' } }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -98,8 +98,11 @@ serve(async (req) => {
     
     if (role !== 'moderator' && role !== 'admin') {
       return new Response(JSON.stringify({ 
-        error: 'Forbidden: Moderator access required',
-        details: `User role: ${role || 'none'}, User ID: ${user.id}`
+        error: {
+          message: 'Forbidden: Moderator access required',
+          details: `User role: ${role || 'none'}, User ID: ${user.id}`,
+          code: 'forbidden',
+        }
       }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -110,7 +113,7 @@ serve(async (req) => {
     const { action, reportId, targetType, targetId, notes } = body;
 
     if (!action) {
-      return new Response(JSON.stringify({ error: 'Missing required field: action' }), {
+      return new Response(JSON.stringify({ error: { message: 'Missing required field: action' } }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -118,14 +121,14 @@ serve(async (req) => {
 
     // For dismiss_report, reportId is required
     if (action === 'dismiss_report' && !reportId) {
-      return new Response(JSON.stringify({ error: 'Missing required field: reportId (required for dismiss_report)' }), {
+      return new Response(JSON.stringify({ error: { message: 'Missing required field: reportId (required for dismiss_report)' } }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     if (!targetType || !targetId) {
-      return new Response(JSON.stringify({ error: 'Missing required fields: targetType, targetId' }), {
+      return new Response(JSON.stringify({ error: { message: 'Missing required fields: targetType, targetId' } }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -143,7 +146,7 @@ serve(async (req) => {
 
           if (deleteError) {
             console.error('Error deleting item:', deleteError);
-            return new Response(JSON.stringify({ error: 'Failed to remove content' }), {
+            return new Response(JSON.stringify({ error: { message: 'Failed to remove content' } }), {
               status: 500,
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
@@ -157,7 +160,7 @@ serve(async (req) => {
 
           if (deleteError) {
             console.error('Error deleting message:', deleteError);
-            return new Response(JSON.stringify({ error: 'Failed to remove content' }), {
+            return new Response(JSON.stringify({ error: { message: 'Failed to remove content' } }), {
               status: 500,
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
@@ -168,7 +171,7 @@ serve(async (req) => {
 
       case 'ban_user': {
         if (targetType !== 'user') {
-          return new Response(JSON.stringify({ error: 'Invalid target type for ban_user action' }), {
+          return new Response(JSON.stringify({ error: { message: 'Invalid target type for ban_user action' } }), {
             status: 400,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
@@ -182,7 +185,7 @@ serve(async (req) => {
 
         if (banError) {
           console.error('Error banning user:', banError);
-          return new Response(JSON.stringify({ error: 'Failed to ban user' }), {
+          return new Response(JSON.stringify({ error: { message: 'Failed to ban user' } }), {
             status: 500,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
@@ -195,7 +198,7 @@ serve(async (req) => {
         break;
 
       default:
-        return new Response(JSON.stringify({ error: 'Invalid action' }), {
+        return new Response(JSON.stringify({ error: { message: 'Invalid action' } }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -229,7 +232,7 @@ serve(async (req) => {
 
       if (fetchError || !existingReport) {
         console.error('Report not found:', { reportId, error: fetchError });
-        return new Response(JSON.stringify({ error: 'Report not found' }), {
+        return new Response(JSON.stringify({ error: { message: 'Report not found' } }), {
           status: 404,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -269,10 +272,12 @@ serve(async (req) => {
           hint: updateError.hint,
         });
         return new Response(JSON.stringify({ 
-          error: `Failed to update report: ${updateError.message}`,
-          details: updateError.details,
-          hint: updateError.hint,
-          code: updateError.code
+          error: {
+            message: `Failed to update report: ${updateError.message}`,
+            details: updateError.details,
+            hint: updateError.hint,
+            code: updateError.code,
+          }
         }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -281,7 +286,7 @@ serve(async (req) => {
 
       if (!updatedReport) {
         console.error('Report not found after update attempt:', reportId);
-        return new Response(JSON.stringify({ error: 'Report not found after update' }), {
+        return new Response(JSON.stringify({ error: { message: 'Report not found after update' } }), {
           status: 404,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -292,7 +297,8 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({ 
       success: true,
-      message: `Action ${action} completed successfully`
+      action,
+      reportId: reportId ?? null,
     }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -300,7 +306,7 @@ serve(async (req) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unexpected error';
     console.error('Moderation action failed', err);
-    return new Response(JSON.stringify({ error: message }), {
+    return new Response(JSON.stringify({ error: { message } }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

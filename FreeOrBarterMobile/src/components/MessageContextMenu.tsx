@@ -14,6 +14,7 @@ interface MessageContextMenuProps {
   onReact: () => void;
   onReply: () => void;
   messageId: string;
+  onReport?: () => void;
 }
 
 export function MessageContextMenu({
@@ -21,6 +22,7 @@ export function MessageContextMenu({
   onClose,
   onReact,
   onReply,
+  onReport,
   messageId,
 }: MessageContextMenuProps) {
   const handleOptionPress = (callback: () => void) => {
@@ -65,6 +67,21 @@ export function MessageContextMenu({
               </View>
               <Text style={styles.optionLabel}>Reply</Text>
             </TouchableOpacity>
+
+            {onReport && (
+              <TouchableOpacity
+                style={[styles.option, styles.dangerOption]}
+                onPress={() => handleOptionPress(onReport)}
+              >
+                <View style={styles.optionIcon}>
+                  <Text style={styles.optionIconText}>⚑</Text>
+                </View>
+                <View style={styles.optionTextGroup}>
+                  <Text style={[styles.optionLabel, styles.dangerText]}>Report</Text>
+                  <Text style={styles.optionHelper}>Flag messages that break the rules</Text>
+                </View>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </View>
@@ -147,5 +164,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     color: '#1E293B',
+  },
+  optionTextGroup: {
+    flex: 1,
+  },
+  optionHelper: {
+    fontSize: 12,
+    color: '#94A3B8',
+    marginTop: 2,
+  },
+  dangerOption: {
+    backgroundColor: '#FEF2F2',
+  },
+  dangerText: {
+    color: '#B91C1C',
   },
 });

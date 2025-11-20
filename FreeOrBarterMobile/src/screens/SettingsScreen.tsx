@@ -16,6 +16,7 @@ import {
   Platform,
   Dimensions,
   useWindowDimensions,
+  Linking,
 } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabase';
@@ -657,6 +658,25 @@ export default function SettingsScreen() {
 
           </View>
 
+          {/* Safety & Support */}
+          <View style={styles.safetyCard}>
+            <Text style={styles.safetyCardTitle}>Safety & Support</Text>
+            <Text style={styles.safetyCardBody}>
+              Keep your trading circles respectful by using the tools built into FreeOrBarter.
+            </Text>
+            <View style={styles.safetyList}>
+              <Text style={styles.safetyListItem}>⚑ Tap the flag icon on listings, profiles, or messages to report issues.</Text>
+              <Text style={styles.safetyListItem}>🚫 Block abusive users directly from their profile or any chat header.</Text>
+              <Text style={styles.safetyListItem}>⏱️ Moderators review every report within 24 hours and auto-escalate overdue cases.</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.safetyCardButton}
+              onPress={() => Linking.openURL('mailto:support@freeorbarter.com')}
+            >
+              <Text style={styles.safetyCardButtonText}>Email support@freeorbarter.com</Text>
+            </TouchableOpacity>
+          </View>
+
           {/* Moderator Section */}
           {userIsModerator && (
             <View style={styles.section}>
@@ -1087,6 +1107,46 @@ const styles = StyleSheet.create({
   },
   formSection: {
     paddingHorizontal: 20,
+  },
+  safetyCard: {
+    marginTop: 24,
+    marginHorizontal: 20,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    backgroundColor: '#ECFDF5',
+  },
+  safetyCardTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#166534',
+    marginBottom: 8,
+  },
+  safetyCardBody: {
+    fontSize: 14,
+    color: '#15803D',
+    marginBottom: 12,
+  },
+  safetyList: {
+    gap: 6,
+    marginBottom: 16,
+  },
+  safetyListItem: {
+    fontSize: 14,
+    color: '#166534',
+    lineHeight: 20,
+  },
+  safetyCardButton: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: '#16A34A',
+  },
+  safetyCardButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
   fieldContainer: {
     marginBottom: 24,
