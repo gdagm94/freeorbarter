@@ -13,6 +13,14 @@ import { StatusUpdateDialog } from '../components/StatusUpdateDialog';
 import { WatchButton } from '../components/WatchButton';
 import { ShareDialog } from '../components/ShareDialog';
 import { ReportContentDialog } from '../components/ReportContentDialog';
+import { ReportTargetType } from '../lib/reports';
+
+type ReportDialogPayload = {
+  targetType: ReportTargetType;
+  targetId: string;
+  subject?: string;
+  metadata?: Record<string, unknown>;
+};
 
 interface ItemUser {
   id: string;
@@ -42,7 +50,7 @@ function ItemDetails() {
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [showStatusDialog, setShowStatusDialog] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
-  const [showReportDialog, setShowReportDialog] = useState(false);
+  const [reportDialog, setReportDialog] = useState<ReportDialogPayload | null>(null);
 
   // Scroll to top when component mounts
   useEffect(() => {
@@ -401,7 +409,16 @@ function ItemDetails() {
                         setShowAuth(true);
                         return;
                       }
-                      setShowReportDialog(true);
+                    setReportDialog({
+                      targetType: 'item',
+                      targetId: item.id,
+                      subject: `"${item.title}"`,
+                      metadata: {
+                        source: 'web_item_details',
+                        itemOwnerId: item.user_id,
+                        itemOwnerUsername: item.users?.username,
+                      },
+                    });
                     }}
                     className="bg-gray-100 p-2 rounded-full shadow-sm hover:bg-gray-200 transition-colors"
                     title="Report Item"
@@ -534,6 +551,29 @@ function ItemDetails() {
               currentUserId={user.id}
               otherUserId={otherUserId}
               conversationType="item"
+              onReportMessage={(messageId, snippet) =>
+                setReportDialog({
+                  targetType: 'message',
+                  targetId: messageId,
+                  subject: 'this message',
+                  metadata: {
+                    source: 'web_item_chat',
+                    itemId: item.id,
+                    snippet,
+                  },
+                })
+              }
+              onReportUser={() =>
+                setReportDialog({
+                  targetType: 'user',
+                  targetId: otherUserId,
+                  subject: item.users.username,
+                  metadata: {
+                    source: 'web_item_chat',
+                    itemId: item.id,
+                  },
+                })
+              }
             />
           </div>
         )}
@@ -576,12 +616,14 @@ function ItemDetails() {
           onClose={() => setShowShareDialog(false)}
         />
       )}
-      {showReportDialog && (
+      {reportDialog && (
         <ReportContentDialog
-          open={showReportDialog}
-          onClose={() => setShowReportDialog(false)}
-          targetId={item.id}
-          targetType="item"
+          open={!!reportDialog}
+          onClose={() => setReportDialog(null)}
+          targetId={reportDialog.targetId}
+          targetType={reportDialog.targetType}
+          subject={reportDialog.subject}
+          metadata={reportDialog.metadata}
         />
       )}
     </div>

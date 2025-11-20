@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Star, User, Share2, UserPlus, UserMinus, XCircle, CheckCircle, Clock, MessageCircle, Ban, Unlock } from 'lucide-react';
+import { Star, User, Share2, UserPlus, UserMinus, XCircle, CheckCircle, Clock, MessageCircle, Ban, Unlock, Flag } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import ItemCard from '../components/ItemCard';
@@ -15,6 +15,9 @@ import {
   unfriend, 
   getFriendshipStatus 
 } from '../lib/friends';
+import { ReportContentDialog } from '../components/ReportContentDialog';
+import { useBlockStatus } from '../hooks/useBlockStatus';
+import { blockUserWithCleanup, unblockUserPair } from '../lib/blocks';
 
 interface UserProfileData {
   id: string;
@@ -39,7 +42,13 @@ function UserProfile() {
   const [friendActionLoading, setFriendActionLoading] = useState(false);
   const [friendActionError, setFriendActionError] = useState<string | null>(null);
   const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
-  const [isBlocked, setIsBlocked] = useState(false);
+  const [showReportDialog, setShowReportDialog] = useState(false);
+  const {
+    blockedByMe,
+    blockedByOther,
+    isEitherBlocked,
+    refresh: refreshBlockStatus,
+  } = useBlockStatus(user?.id, id);
 
   // Direct messaging state
   const [showMessageDialog, setShowMessageDialog] = useState(false);
@@ -117,28 +126,17 @@ function UserProfile() {
     };
   }, [id]);
 
-  // Fetch friendship status and blocked status when user or profile changes
+  // Fetch friendship status when user or profile changes
   useEffect(() => {
     const fetchFriendshipStatus = async () => {
       if (!user || !id || user.id === id) {
         setFriendshipStatus('none');
-        setIsBlocked(false);
         return;
       }
 
       try {
-        const [status, blockResult] = await Promise.all([
-          getFriendshipStatus(user.id, id),
-          supabase
-            .from('blocked_users')
-            .select('id')
-            .eq('blocker_id', user.id)
-            .eq('blocked_id', id)
-            .limit(1)
-        ]);
-
+        const status = await getFriendshipStatus(user.id, id);
         setFriendshipStatus(status);
-        setIsBlocked(!!(blockResult.data && blockResult.data.length > 0));
 
         // If status is pending_received, get the request ID
         if (status === 'pending_received') {
@@ -229,6 +227,14 @@ function UserProfile() {
 
   const handleMessageUser = () => {
     if (!profile) return;
+    if (blockedByOther) {
+      alert('This user has blocked you, so messaging is disabled.');
+      return;
+    }
+    if (blockedByMe) {
+      alert('Unblock this user before starting a conversation.');
+      return;
+    }
     setShowMessageDialog(true);
   };
 
@@ -245,28 +251,10 @@ function UserProfile() {
     setFriendActionError(null);
 
     try {
-      // Unfriend first if they are friends
-      if (friendshipStatus === 'friends') {
-        const unfriendResult = await unfriend(user.id, id);
-        if (unfriendResult.error) throw unfriendResult.error;
-      }
-
-      // Add to blocked users
-      const { error: blockError } = await supabase
-        .from('blocked_users')
-        .insert([{
-          blocker_id: user.id,
-          blocked_id: id
-        }]);
-
-      if (blockError && blockError.code !== '23505') { // Ignore duplicate key error
-        throw blockError;
-      }
-
-      // Refresh status
+      await blockUserWithCleanup({ blockerId: user.id, blockedId: id });
       const newStatus = await getFriendshipStatus(user.id, id);
       setFriendshipStatus(newStatus);
-      setIsBlocked(true);
+      await refreshBlockStatus();
     } catch (err) {
       console.error('Error blocking user:', err);
       setFriendActionError(err instanceof Error ? err.message : 'Failed to block user');
@@ -288,19 +276,10 @@ function UserProfile() {
     setFriendActionError(null);
 
     try {
-      // Remove from blocked users
-      const { error: unblockError } = await supabase
-        .from('blocked_users')
-        .delete()
-        .eq('blocker_id', user.id)
-        .eq('blocked_id', id);
-
-      if (unblockError) throw unblockError;
-
-      // Refresh status
+      await unblockUserPair({ blockerId: user.id, blockedId: id });
       const newStatus = await getFriendshipStatus(user.id, id);
       setFriendshipStatus(newStatus);
-      setIsBlocked(false);
+      await refreshBlockStatus();
     } catch (err) {
       console.error('Error unblocking user:', err);
       setFriendActionError(err instanceof Error ? err.message : 'Failed to unblock user');
@@ -315,6 +294,22 @@ function UserProfile() {
     }
 
     const isLoading = friendActionLoading;
+
+    if (blockedByOther) {
+      return (
+        <div className="w-full sm:w-auto px-3 py-2 bg-yellow-100 text-yellow-900 rounded-lg text-sm font-medium">
+          This user has blocked you.
+        </div>
+      );
+    }
+
+    if (blockedByMe) {
+      return (
+        <div className="w-full sm:w-auto px-3 py-2 bg-red-50 text-red-700 rounded-lg text-sm font-medium">
+          You blocked this user.
+        </div>
+      );
+    }
 
     switch (friendshipStatus) {
       case 'none':
@@ -464,14 +459,14 @@ function UserProfile() {
             <div className="w-full sm:flex-1 flex flex-wrap gap-2">
               {renderFriendButton()}
               {user && id && user.id !== id && (
-                isBlocked ? (
+                blockedByMe ? (
                   <button
                     onClick={handleUnblockUser}
                     disabled={friendActionLoading}
                     className="flex items-center justify-center px-3 py-2 bg-green-100 text-green-800 rounded-lg text-sm font-medium transition-colors hover:bg-green-200 disabled:opacity-50"
                   >
                     <Unlock className="w-4 h-4 mr-1.5" />
-                    <span>{friendActionLoading ? 'Unblocking...' : 'Unblock'}</span>
+                    <span>{friendActionLoading ? 'Unblocking…' : 'Unblock'}</span>
                   </button>
                 ) : (
                   <button
@@ -480,19 +475,32 @@ function UserProfile() {
                     className="flex items-center justify-center px-3 py-2 bg-red-100 text-red-800 rounded-lg text-sm font-medium transition-colors hover:bg-red-200 disabled:opacity-50"
                   >
                     <Ban className="w-4 h-4 mr-1.5" />
-                    <span>{friendActionLoading ? 'Blocking...' : 'Block'}</span>
+                    <span>{friendActionLoading ? 'Blocking…' : 'Block'}</span>
                   </button>
                 )
               )}
             </div>
-            <button
-              onClick={() => setShowShareDialog(true)}
-              className="w-full sm:w-auto flex items-center justify-center px-3 py-2 bg-gray-100 rounded-lg shadow-sm hover:bg-gray-200 transition-colors"
-              title="Share Profile"
-              aria-label="Share Profile"
-            >
-              <Share2 className="w-5 h-5 text-gray-600" />
-            </button>
+            <div className="flex gap-2 w-full sm:w-auto">
+              {user && id && user.id !== id && (
+                <button
+                  onClick={() => setShowReportDialog(true)}
+                  className="flex items-center justify-center px-3 py-2 bg-red-50 text-red-700 rounded-lg text-sm font-medium transition-colors hover:bg-red-100"
+                  title="Report user"
+                  aria-label="Report user"
+                >
+                  <Flag className="w-4 h-4 mr-1" />
+                  Report
+                </button>
+              )}
+              <button
+                onClick={() => setShowShareDialog(true)}
+                className="flex items-center justify-center px-3 py-2 bg-gray-100 rounded-lg shadow-sm hover:bg-gray-200 transition-colors"
+                title="Share Profile"
+                aria-label="Share Profile"
+              >
+                <Share2 className="w-5 h-5 text-gray-600" />
+              </button>
+            </div>
           </div>
 
           {/* Friend action error */}
@@ -503,6 +511,14 @@ function UserProfile() {
           )}
         </div>
       </div>
+
+      {isEitherBlocked && user && id && user.id !== id && (
+        <div className="bg-yellow-50 border border-yellow-200 text-yellow-900 px-4 py-3 rounded-lg mb-6 text-sm font-medium">
+          {blockedByMe
+            ? 'You blocked this user. Unblock them above if you want to interact again.'
+            : 'This user has blocked you. You can still review their profile, but messaging and offers are disabled.'}
+        </div>
+      )}
 
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
         <div className="border-b">
@@ -593,6 +609,19 @@ function UserProfile() {
           friendName={profile.username}
           friendAvatar={profile.avatar_url}
           onClose={() => setShowMessageDialog(false)}
+        />
+      )}
+      {showReportDialog && profile && (
+        <ReportContentDialog
+          open={showReportDialog}
+          onClose={() => setShowReportDialog(false)}
+          targetId={profile.id}
+          targetType="user"
+          subject={profile.username}
+          metadata={{
+            source: 'web_user_profile',
+            profileId: profile.id,
+          }}
         />
       )}
     </div>

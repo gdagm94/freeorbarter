@@ -6,9 +6,18 @@ interface ReportContentDialogProps {
   onClose: () => void;
   targetId: string;
   targetType: ReportTargetType;
+  subject?: string;
+  metadata?: Record<string, unknown>;
 }
 
-export function ReportContentDialog({ open, onClose, targetId, targetType }: ReportContentDialogProps) {
+export function ReportContentDialog({
+  open,
+  onClose,
+  targetId,
+  targetType,
+  subject,
+  metadata,
+}: ReportContentDialogProps) {
   const [category, setCategory] = useState<string>(REPORT_CATEGORIES[0].value);
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -18,6 +27,14 @@ export function ReportContentDialog({ open, onClose, targetId, targetType }: Rep
   if (!open) {
     return null;
   }
+
+  const friendlySubject = subject || {
+    user: 'this user',
+    item: 'this item',
+    message: 'this message',
+    comment: 'this comment',
+    other: 'this content',
+  }[targetType];
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -30,7 +47,11 @@ export function ReportContentDialog({ open, onClose, targetId, targetType }: Rep
         targetId,
         category,
         description: description.trim() || undefined,
-        metadata: { source: 'web', path: window.location.pathname },
+        metadata: {
+          source: 'web',
+          path: window.location.pathname,
+          ...metadata,
+        },
       });
 
       setSuccess(true);
@@ -51,7 +72,7 @@ export function ReportContentDialog({ open, onClose, targetId, targetType }: Rep
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
       <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Report content</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Report {friendlySubject}</h2>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -61,7 +82,8 @@ export function ReportContentDialog({ open, onClose, targetId, targetType }: Rep
           </button>
         </div>
         <p className="mt-2 text-sm text-gray-600">
-          Let us know what&apos;s wrong. Reports are reviewed by our team and help keep the community safe.
+          Tell us what&apos;s wrong. Our moderators review every report within 24 hours and remove any content that
+          violates community guidelines.
         </p>
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">

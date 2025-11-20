@@ -640,6 +640,25 @@ function Profile() {
         </div>
       </div>
     
+      <div className="bg-emerald-50 border border-emerald-100 rounded-lg shadow-md p-4 sm:p-6 mb-6">
+        <h2 className="text-lg font-semibold text-emerald-900 mb-2">Safety &amp; Support</h2>
+        <p className="text-sm text-emerald-800 mb-4">
+          Keep the community respectful by using the safety tools built into FreeOrBarter.
+        </p>
+        <ul className="list-disc list-inside space-y-2 text-sm text-emerald-900">
+          <li>Tap the flag icon on any listing, profile, or message to report issues. Moderators review every report within 24 hours.</li>
+          <li>Block abusive users from their profile or chat header to immediately stop new messages and offers.</li>
+          <li>Serious or overdue reports are auto-escalated, so harmful content is removed quickly.</li>
+        </ul>
+        <p className="text-sm text-emerald-900 mt-4">
+          Need help? Email{' '}
+          <a href="mailto:support@freeorbarter.com" className="font-semibold underline">
+            support@freeorbarter.com
+          </a>
+          .
+        </p>
+      </div>
+
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
         <div className="border-b">
           <div className="flex">

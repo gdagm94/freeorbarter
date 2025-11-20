@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   AlertCircle, 
@@ -11,15 +11,13 @@ import {
   Filter,
   RefreshCw
 } from 'lucide-react';
-import { useAuth } from '../hooks/useAuth';
-import { fetchReports, getReportTarget, updateReportStatus, isModerator, Report, ReportTarget } from '../lib/moderator';
+import { fetchReports, getReportTarget, isModerator, Report, ReportTarget } from '../lib/moderator';
 import { removeContent, banUser, dismissReport, resolveReport } from '../lib/moderatorActions';
 import { formatDistanceToNow } from 'date-fns';
 
 type ReportStatus = 'pending' | 'in_review' | 'resolved' | 'dismissed' | 'all';
 
 function ModeratorDashboard() {
-  const { user } = useAuth();
   const navigate = useNavigate();
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
@@ -190,19 +188,32 @@ function ModeratorDashboard() {
     }
   };
 
-  const getTimeRemaining = (createdAt: string) => {
-    const created = new Date(createdAt);
-    const now = new Date();
-    const hoursElapsed = (now.getTime() - created.getTime()) / (1000 * 60 * 60);
-    const hoursRemaining = 24 - hoursElapsed;
-
-    if (hoursRemaining <= 0) {
-      return { text: 'Overdue', color: 'text-red-600' };
-    } else if (hoursRemaining <= 4) {
-      return { text: `${Math.ceil(hoursRemaining)}h remaining`, color: 'text-orange-600' };
-    } else {
-      return { text: `${Math.ceil(hoursRemaining)}h remaining`, color: 'text-gray-600' };
+  const getSlaStatus = (report: Report) => {
+    if (report.status !== 'pending') return null;
+    const deadline = report.needs_action_by
+      ? new Date(report.needs_action_by)
+      : new Date(new Date(report.created_at).getTime() + 24 * 60 * 60 * 1000);
+    const diffMs = deadline.getTime() - Date.now();
+    const hours = Math.ceil(Math.abs(diffMs) / (1000 * 60 * 60));
+    if (diffMs <= 0) {
+      return { text: `Overdue by ${hours}h`, color: 'text-red-600', overdue: true };
     }
+    if (diffMs <= 4 * 60 * 60 * 1000) {
+      return { text: `${Math.ceil(diffMs / (1000 * 60 * 60))}h to SLA`, color: 'text-orange-600', overdue: false };
+    }
+    return { text: `${Math.ceil(diffMs / (1000 * 60 * 60))}h to SLA`, color: 'text-gray-600', overdue: false };
+  };
+
+  const formatResponseDuration = (start: string, end: string) => {
+    const startMs = new Date(start).getTime();
+    const endMs = new Date(end).getTime();
+    const diffMs = Math.max(0, endMs - startMs);
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    }
+    return `${minutes}m`;
   };
 
   if (!userIsModerator) {
@@ -266,7 +277,7 @@ function ModeratorDashboard() {
           {/* Reports List */}
           <div className="space-y-4">
             {reports.map((report) => {
-              const timeRemaining = report.status === 'pending' ? getTimeRemaining(report.created_at) : null;
+    const slaStatus = getSlaStatus(report);
               
               return (
                 <div
@@ -278,18 +289,29 @@ function ModeratorDashboard() {
                     'border-gray-500'
                   }`}
                 >
-                  <div className="flex items-start justify-between mb-2">
+                  <div className="flex items-start justify-between mb-2 gap-2">
                     <div className="flex items-center space-x-2">
                       {getStatusIcon(report.status)}
                       <span className="font-semibold text-gray-900">
                         {report.target_type.charAt(0).toUpperCase() + report.target_type.slice(1)} Report
                       </span>
                     </div>
-                    {timeRemaining && (
-                      <span className={`text-xs font-medium ${timeRemaining.color}`}>
-                        {timeRemaining.text}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2 flex-wrap justify-end">
+                      {report.auto_escalated && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                          Auto escalated
+                        </span>
+                      )}
+                      {slaStatus && (
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${
+                            slaStatus.overdue ? 'bg-red-50 border-red-200' : 'bg-gray-100 border-gray-200'
+                          }`}
+                        >
+                          <span className={slaStatus.color}>{slaStatus.text}</span>
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <div className="text-sm text-gray-600 mb-2">
@@ -302,9 +324,16 @@ function ModeratorDashboard() {
                     </div>
                   )}
 
-                  <div className="text-xs text-gray-500 mb-3">
-                    Reported {formatDistanceToNow(new Date(report.created_at), { addSuffix: true })}
-                    {report.reporter && ` by ${report.reporter.username}`}
+                  <div className="text-xs text-gray-500 mb-3 space-y-1">
+                    <div>
+                      Reported {formatDistanceToNow(new Date(report.created_at), { addSuffix: true })}
+                      {report.reporter && ` by ${report.reporter.username}`}
+                    </div>
+                    {report.first_response_at && (
+                      <div>
+                        First response in {formatResponseDuration(report.created_at, report.first_response_at)}
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center space-x-2">

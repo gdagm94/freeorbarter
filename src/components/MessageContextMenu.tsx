@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Smile, Reply, Copy, Trash2 } from 'lucide-react';
+import { Smile, Reply, Copy, Trash2, Flag } from 'lucide-react';
 
 interface MessageContextMenuProps {
   visible: boolean;
@@ -11,6 +11,7 @@ interface MessageContextMenuProps {
   onCopy?: () => void;
   onDelete?: () => void;
   isOwnMessage?: boolean;
+  onReport?: () => void;
 }
 
 export function MessageContextMenu({
@@ -23,6 +24,7 @@ export function MessageContextMenu({
   onCopy,
   onDelete,
   isOwnMessage = false,
+  onReport,
 }: MessageContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -97,6 +99,19 @@ export function MessageContextMenu({
         >
           <Copy className="w-4 h-4" />
           <span>Copy</span>
+        </button>
+      )}
+
+      {onReport && (
+        <button
+          onClick={() => {
+            onReport();
+            onClose();
+          }}
+          className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center space-x-2"
+        >
+          <Flag className="w-4 h-4" />
+          <span>Report</span>
         </button>
       )}
       

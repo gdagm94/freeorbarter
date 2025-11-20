@@ -1,12 +1,21 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { MessageList } from '../components/MessageList';
-import { User, MessageCircle, Bell, CheckCircle, ArrowRight, Archive, Flag, ChevronLeft, Undo } from 'lucide-react';
+import { User, MessageCircle, Bell, CheckCircle, ArrowRight, Archive, ChevronLeft, Undo } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Conversation } from '../types';
 import { useSwipeable } from 'react-swipeable';
+import { ReportContentDialog } from '../components/ReportContentDialog';
+import { ReportTargetType } from '../lib/reports';
+
+type ReportDialogPayload = {
+  targetType: ReportTargetType;
+  targetId: string;
+  subject?: string;
+  metadata?: Record<string, unknown>;
+};
 
 // UUID validation regex
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -21,18 +30,15 @@ const ConversationItem = ({
   conversation, 
   isActive, 
   onArchive,
-  onClick,
-  isMobile 
+  onClick
 }: { 
   conversation: Conversation;
   isActive: boolean;
   onArchive: (id: string, archived: boolean) => void;
   onClick: () => void;
-  isMobile: boolean;
 }) => {
   const swipeableHandlers = useSwipeable({
     onSwipedLeft: () => onArchive(conversation.id, !conversation.archived),
-    preventDefaultTouchmoveEvent: true,
     trackMouse: true
   });
 
@@ -115,7 +121,7 @@ const ConversationItem = ({
                   {conversation.offer_item_image && (
                     <img
                       src={conversation.offer_item_image}
-                      alt={conversation.offer_item_title}
+                      alt={conversation.offer_item_title || 'Barter offer item'}
                       className="w-6 h-6 rounded object-cover mr-1"
                     />
                   )}
@@ -161,13 +167,9 @@ interface MessagesProps {
 function Messages({ onUnreadCountChange, onUnreadOffersChange }: MessagesProps) {
   const { user } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [activeConversation, setActiveConversation] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'offers' | 'unread' | 'archived'>('all');
-  const [showReportDialog, setShowReportDialog] = useState(false);
-  const [reportReason, setReportReason] = useState('');
-  const [reportingMessage, setReportingMessage] = useState<string | null>(null);
+  const [reportDialog, setReportDialog] = useState<ReportDialogPayload | null>(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   useEffect(() => {
@@ -181,9 +183,6 @@ function Messages({ onUnreadCountChange, onUnreadOffersChange }: MessagesProps) 
 
     const fetchConversations = async () => {
       try {
-        setLoading(true);
-        setError(null);
-        
         const { data: messagesData, error: messagesError } = await supabase
           .from('messages')
           .select(`
@@ -316,9 +315,7 @@ function Messages({ onUnreadCountChange, onUnreadOffersChange }: MessagesProps) 
 
       } catch (err) {
         console.error('Error fetching conversations:', err);
-        setError('Failed to load conversations');
       } finally {
-        setLoading(false);
       }
     };
 
@@ -418,28 +415,8 @@ function Messages({ onUnreadCountChange, onUnreadOffersChange }: MessagesProps) 
     }
   };
 
-  const handleReport = async () => {
-    if (!reportingMessage || !user || !isValidUUID(reportingMessage)) return;
-
-    try {
-      const { error } = await supabase
-        .from('reported_messages')
-        .insert([
-          {
-            message_id: reportingMessage,
-            reporter_id: user.id,
-            reason: reportReason
-          }
-        ]);
-
-      if (error) throw error;
-    } catch (err) {
-      console.error('Error reporting message:', err);
-    } finally {
-      setReportingMessage(null);
-      setReportReason('');
-      setShowReportDialog(false);
-    }
+  const openReportDialog = (payload: ReportDialogPayload) => {
+    setReportDialog(payload);
   };
 
   const swipeHandlers = useSwipeable({
@@ -562,7 +539,6 @@ function Messages({ onUnreadCountChange, onUnreadOffersChange }: MessagesProps) 
                     isActive={activeConversation === conversation.id}
                     onArchive={handleArchive}
                     onClick={() => handleConversationClick(conversation.id)}
-                    isMobile={isMobile}
                   />
                 ))
               ) : (
@@ -626,6 +602,31 @@ function Messages({ onUnreadCountChange, onUnreadOffersChange }: MessagesProps) 
                     )
                   );
                 }}
+                onReportMessage={(messageId, snippet) => {
+                  if (!messageId) return;
+                  openReportDialog({
+                    targetType: 'message',
+                    targetId: messageId,
+                    subject: 'this message',
+                    metadata: {
+                      source: 'web_messages',
+                      snippet,
+                      conversationId: activeConversation || undefined,
+                    },
+                  });
+                }}
+                onReportUser={() => {
+                  if (!otherUserId) return;
+                  openReportDialog({
+                    targetType: 'user',
+                    targetId: otherUserId,
+                    subject: activeConversationData?.other_user_name || undefined,
+                    metadata: {
+                      source: 'web_messages',
+                      conversationId: activeConversation || undefined,
+                    },
+                  });
+                }}
               />
             </div>
           ) : (
@@ -636,35 +637,15 @@ function Messages({ onUnreadCountChange, onUnreadOffersChange }: MessagesProps) 
         </div>
       )}
 
-      {/* Report Message Dialog */}
-      {showReportDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full">
-            <h3 className="text-lg font-semibold mb-4">Report Message</h3>
-            <textarea
-              value={reportReason}
-              onChange={(e) => setReportReason(e.target.value)}
-              placeholder="Why are you reporting this message?"
-              className="w-full rounded-lg border border-gray-300 p-2 mb-4"
-              rows={4}
-            />
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => setShowReportDialog(false)}
-                className="btn-secondary"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleReport}
-                className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
-                disabled={!reportReason.trim()}
-              >
-                Report Message
-              </button>
-            </div>
-          </div>
-        </div>
+      {reportDialog && (
+        <ReportContentDialog
+          open={!!reportDialog}
+          onClose={() => setReportDialog(null)}
+          targetId={reportDialog.targetId}
+          targetType={reportDialog.targetType}
+          subject={reportDialog.subject}
+          metadata={reportDialog.metadata}
+        />
       )}
     </div>
   );

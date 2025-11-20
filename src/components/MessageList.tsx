@@ -3,7 +3,7 @@ import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { Message } from '../types';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Image as ImageIcon, Send } from 'lucide-react';
+import { ArrowRight, Image as ImageIcon, Send, Shield, Flag, Ban, Unlock } from 'lucide-react';
 import pusherClient from '../lib/pusher';
 import { debounce } from 'throttle-debounce';
 import { MessageReactions } from './MessageReactions';
@@ -23,6 +23,8 @@ import { AttachmentMenu } from './AttachmentMenu';
 import { MessageContextMenu } from './MessageContextMenu';
 import { hapticFeedback } from '../utils/hapticFeedback';
 import { checkContent } from '../lib/contentFilter';
+import { useBlockStatus } from '../hooks/useBlockStatus';
+import { blockUserWithCleanup, unblockUserPair } from '../lib/blocks';
 
 interface MessageListProps {
   itemId: string | null; // Made nullable for unified conversations
@@ -30,6 +32,8 @@ interface MessageListProps {
   otherUserId: string;
   conversationType: 'item' | 'direct_message' | 'unified'; // Added unified type
   onMessageRead?: () => void;
+  onReportMessage?: (messageId: string, snippet?: string) => void;
+  onReportUser?: () => void;
 }
 
 interface MessageWithOfferItem extends Message {
@@ -58,7 +62,15 @@ interface MessageWithOfferItem extends Message {
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export function MessageList({ itemId, currentUserId, otherUserId, conversationType, onMessageRead }: MessageListProps) {
+export function MessageList({
+  itemId,
+  currentUserId,
+  otherUserId,
+  conversationType,
+  onMessageRead,
+  onReportMessage,
+  onReportUser,
+}: MessageListProps) {
   const [messages, setMessages] = useState<MessageWithOfferItem[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -87,6 +99,22 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
   const [contextMenuMessageId, setContextMenuMessageId] = useState<string | null>(null);
+  const [showSafetyMenu, setShowSafetyMenu] = useState(false);
+  const [blockActionLoading, setBlockActionLoading] = useState(false);
+  const safetyMenuRef = useRef<HTMLDivElement | null>(null);
+  const {
+    blockedByMe,
+    blockedByOther,
+    isEitherBlocked,
+    refresh: refreshBlockStatus,
+  } = useBlockStatus(currentUserId, otherUserId);
+
+  const chatDisabledMessage = blockedByMe
+    ? 'You blocked this user. Unblock to continue messaging.'
+    : blockedByOther
+      ? 'This user has blocked you.'
+      : null;
+  const canSendMessages = !isEitherBlocked;
 
   // Message drafts hook
   const { saveDraft, clearDrafts } = useMessageDrafts(currentUserId, otherUserId, conversationType, itemId);
@@ -432,6 +460,10 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!ensureMessagingAllowed()) {
+      e.target.value = '';
+      return;
+    }
 
     const imageUrl = await uploadImage(file);
     if (imageUrl) {
@@ -440,6 +472,7 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
   };
 
   const sendMessageWithImage = async (content: string, imageUrl: string) => {
+    if (!ensureMessagingAllowed()) return;
     try {
       setSending(true);
       setIsTyping(false);
@@ -513,6 +546,7 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim()) return;
+    if (!ensureMessagingAllowed()) return;
 
     try {
       const messageContent = newMessage.trim();
@@ -619,6 +653,17 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  useEffect(() => {
+    if (!showSafetyMenu) return;
+    const handleClick = (event: MouseEvent) => {
+      if (safetyMenuRef.current && !safetyMenuRef.current.contains(event.target as Node)) {
+        setShowSafetyMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showSafetyMenu]);
+
   // Handle search result click
   const handleSearchResultClick = (messageId: string) => {
     setHighlightedMessageId(messageId);
@@ -636,7 +681,54 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
     setNewMessage(draft.content);
   };
 
+  const ensureMessagingAllowed = () => {
+    if (blockedByOther) {
+      alert('You cannot send messages because this user has blocked you.');
+      return false;
+    }
+    if (blockedByMe) {
+      alert('You have blocked this user. Unblock them before sending a message.');
+      return false;
+    }
+    return true;
+  };
+
+  const handleBlockConversation = async () => {
+    if (!otherUserId) return;
+    const confirmed = window.confirm('Block this user? You will no longer see their messages or offers.');
+    if (!confirmed) return;
+    try {
+      setBlockActionLoading(true);
+      await blockUserWithCleanup({ blockerId: currentUserId, blockedId: otherUserId });
+      await refreshBlockStatus();
+      alert('User blocked. Messaging has been disabled.');
+    } catch (err) {
+      console.error('Error blocking user from chat:', err);
+      alert('Failed to block user. Please try again.');
+    } finally {
+      setBlockActionLoading(false);
+    }
+  };
+
+  const handleUnblockConversation = async () => {
+    if (!otherUserId) return;
+    const confirmed = window.confirm('Unblock this user and allow messages again?');
+    if (!confirmed) return;
+    try {
+      setBlockActionLoading(true);
+      await unblockUserPair({ blockerId: currentUserId, blockedId: otherUserId });
+      await refreshBlockStatus();
+      alert('User unblocked. You can chat again.');
+    } catch (err) {
+      console.error('Error unblocking user from chat:', err);
+      alert('Failed to unblock user. Please try again.');
+    } finally {
+      setBlockActionLoading(false);
+    }
+  };
+
   const handleFileUpload = async (fileUrl: string, fileName: string) => {
+    if (!ensureMessagingAllowed()) return;
     try {
       setSending(true);
       setIsTyping(false);
@@ -713,6 +805,7 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
   };
 
   const handleVoiceMessageUpload = async (audioBlob: Blob, duration: number) => {
+    if (!ensureMessagingAllowed()) return;
     try {
       setSending(true);
       setIsTyping(false);
@@ -892,6 +985,56 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
             >
               📦
             </button>
+          {(onReportUser || otherUserId) && (
+            <div className="relative" ref={safetyMenuRef}>
+              <button
+                type="button"
+                onClick={() => setShowSafetyMenu((prev) => !prev)}
+                className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-gray-800 transition-colors"
+                title="Safety & support"
+                aria-label="Safety actions"
+              >
+                <Shield className="w-5 h-5" />
+              </button>
+              {showSafetyMenu && (
+                <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-50" >
+                  <div className="py-1">
+                    {onReportUser && (
+                      <button
+                        className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                        onClick={() => {
+                          setShowSafetyMenu(false);
+                          onReportUser();
+                        }}
+                      >
+                        <Flag className="w-4 h-4 text-red-500" />
+                        Report user
+                      </button>
+                    )}
+                    <button
+                      className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                      onClick={() => {
+                        setShowSafetyMenu(false);
+                        blockedByMe ? handleUnblockConversation() : handleBlockConversation();
+                      }}
+                      disabled={blockActionLoading}
+                    >
+                      {blockedByMe ? (
+                        <Unlock className="w-4 h-4 text-green-600" />
+                      ) : (
+                        <Ban className="w-4 h-4 text-red-500" />
+                      )}
+                      {blockActionLoading
+                        ? 'Working...'
+                        : blockedByMe
+                          ? 'Unblock user'
+                          : 'Block user'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           </div>
         </div>
       
@@ -1290,6 +1433,22 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
           </>
         )}
       </div>
+      {chatDisabledMessage && (
+        <div className="px-4 py-3 bg-yellow-50 border-t border-b border-yellow-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <span className="text-sm text-yellow-900">{chatDisabledMessage}</span>
+          {blockedByMe && (
+            <button
+              type="button"
+              onClick={handleUnblockConversation}
+              disabled={blockActionLoading}
+              className="inline-flex items-center px-3 py-1.5 rounded-md bg-yellow-600 text-white text-sm font-medium hover:bg-yellow-700 disabled:opacity-60"
+            >
+              <Unlock className="w-4 h-4 mr-1" />
+              {blockActionLoading ? 'Unblocking…' : 'Unblock'}
+            </button>
+          )}
+        </div>
+      )}
       <form onSubmit={sendMessage} className="p-4 border-t">
         <div className="flex space-x-2">
           <input
@@ -1301,8 +1460,11 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
           />
           <button
             type="button"
-            onClick={() => setShowAttachmentMenu(true)}
-            disabled={uploading}
+            onClick={() => {
+              if (!ensureMessagingAllowed()) return;
+              setShowAttachmentMenu(true);
+            }}
+            disabled={uploading || !canSendMessages}
             className="bg-gray-100 text-gray-600 px-3 py-2 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
             title="Attach"
           >
@@ -1313,13 +1475,13 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
             value={newMessage}
             onChange={handleInputChange}
             onBlur={handleInputBlur}
-            placeholder="Type your message..."
-            className="flex-1 rounded-lg border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            disabled={sending || uploading}
+            placeholder={chatDisabledMessage ?? 'Type your message...'}
+            className="flex-1 rounded-lg border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-500"
+            disabled={sending || uploading || !canSendMessages}
           />
           <button
             type="submit"
-            disabled={!newMessage.trim() || sending || uploading}
+            disabled={!newMessage.trim() || sending || uploading || !canSendMessages}
             className="btn-primary flex items-center"
           >
             {uploading ? (
@@ -1456,9 +1618,27 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
       <AttachmentMenu
         visible={showAttachmentMenu}
         onClose={() => setShowAttachmentMenu(false)}
-        onCamera={() => fileInputRef.current?.click()}
-        onDocument={() => setShowFileAttachment(true)}
-        onVoice={() => setShowVoiceMessage(true)}
+        onCamera={() => {
+          if (!ensureMessagingAllowed()) {
+            setShowAttachmentMenu(false);
+            return;
+          }
+          fileInputRef.current?.click();
+        }}
+        onDocument={() => {
+          if (!ensureMessagingAllowed()) {
+            setShowAttachmentMenu(false);
+            return;
+          }
+          setShowFileAttachment(true);
+        }}
+        onVoice={() => {
+          if (!ensureMessagingAllowed()) {
+            setShowAttachmentMenu(false);
+            return;
+          }
+          setShowVoiceMessage(true);
+        }}
       />
 
       {/* Context Menu */}
@@ -1493,6 +1673,23 @@ export function MessageList({ itemId, currentUserId, otherUserId, conversationTy
             handleDeleteMessage(contextMenuMessageId);
           }
         }}
+        onReport={
+          onReportMessage && contextMenuMessageId
+            ? () => {
+                const message = messages.find(m => m.id === contextMenuMessageId);
+                if (message) {
+                  const snippet =
+                    message.content ||
+                    (message.image_url
+                      ? '[Image attachment]'
+                      : message.file_url
+                        ? '[File attachment]'
+                        : undefined);
+                  onReportMessage(message.id, snippet);
+                }
+              }
+            : undefined
+        }
         isOwnMessage={contextMenuMessageId ? messages.find(m => m.id === contextMenuMessageId)?.sender_id === currentUserId : false}
       />
     </div>
