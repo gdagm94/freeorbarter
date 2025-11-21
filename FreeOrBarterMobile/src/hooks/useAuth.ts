@@ -7,30 +7,37 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    let isMounted = true;
+
+    const bootstrap = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!isMounted) return;
       if (session?.user) {
         setUser({ ...session.user, full_name: (session.user.user_metadata?.full_name ?? "") } as User);
       }
       setLoading(false);
+    };
+
+    bootstrap();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setUser({
+          ...session.user,
+          full_name: (session.user.user_metadata?.full_name ?? ''),
+        } as User);
+      } else {
+        setUser(null);
+      }
+      setLoading(false);
     });
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (session?.user) {
-          setUser({ 
-            ...session.user, 
-            full_name: (session.user.user_metadata?.full_name ?? "") 
-          } as User);
-        } else {
-          setUser(null);
-        }
-        setLoading(false);
-      }
-    );
+    supabase.auth.startAutoRefresh?.();
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+      supabase.auth.stopAutoRefresh?.();
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {

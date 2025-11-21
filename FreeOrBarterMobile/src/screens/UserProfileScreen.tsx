@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -25,6 +25,7 @@ import {
   sendFriendRequest,
   acceptFriendRequest,
   declineFriendRequest,
+  cancelFriendRequest,
   unfriend,
   FriendshipStatus,
 } from '../lib/friends';
@@ -52,7 +53,7 @@ interface RouteParams {
 }
 
 export default function UserProfileScreen() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const navigation = useNavigation<any>();
   const route = useRoute();
   const { userId } = route.params as RouteParams;
@@ -61,8 +62,10 @@ export default function UserProfileScreen() {
   const [items, setItems] = useState<Item[]>([]);
   const [friendshipStatus, setFriendshipStatus] = useState<FriendshipStatus>('none');
   const [loading, setLoading] = useState(true);
+  const [friendshipLoading, setFriendshipLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [friendActionLoading, setFriendActionLoading] = useState(false);
+  const [activeFriendAction, setActiveFriendAction] = useState<'send' | 'accept' | 'decline' | 'cancel' | 'unfriend' | null>(null);
   const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
   const [showManageMenu, setShowManageMenu] = useState(false);
   const [reportTarget, setReportTarget] = useState<ReportTargetPayload | null>(null);
@@ -73,72 +76,60 @@ export default function UserProfileScreen() {
     refresh: refreshBlockStatus,
   } = useBlockStatus(user?.id, userId);
 
-  useEffect(() => {
-    if (userId) {
-      fetchUserData();
+  const fetchFriendshipStatus = useCallback(async () => {
+    if (!user || user.id === userId) {
+      setFriendshipStatus('none');
+      setFriendshipLoading(false);
+      return;
     }
-  }, [userId]);
 
-  // Refresh data when screen comes into focus
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      if (userId) fetchUserData();
-    });
-    return unsubscribe;
-  }, [navigation, userId]);
+    setFriendshipLoading(true);
 
-  const fetchUserData = async () => {
+    const status = await getFriendshipStatus(user.id, userId);
+    setFriendshipStatus(status);
+
+    if (status === 'pending_received') {
+      const { data: requestData } = await supabase
+        .from('friend_requests')
+        .select('id')
+        .eq('sender_id', userId)
+        .eq('receiver_id', user.id)
+        .eq('status', 'pending')
+        .single();
+
+      setPendingRequestId(requestData?.id || null);
+    } else {
+      setPendingRequestId(null);
+    }
+
+    setFriendshipLoading(false);
+  }, [user, userId]);
+
+  const fetchUserData = useCallback(async (options?: { skipSkeleton?: boolean }) => {
+    if (!userId || authLoading) return;
+
     try {
-      if (!refreshing) setLoading(true);
+      if (!options?.skipSkeleton) {
+        setLoading(true);
+      }
 
-      // Fetch all data in parallel for better performance
-      const [profileResult, itemsResult, friendshipResult] = await Promise.all([
-        // Fetch user profile
-        supabase
-          .from('users')
-          .select('*')
-          .eq('id', userId)
-          .single(),
-        
-        // Fetch user's items
+      const [profileResult, itemsResult] = await Promise.all([
+        supabase.from('users').select('*').eq('id', userId).single(),
         supabase
           .from('items')
           .select('*')
           .eq('user_id', userId)
           .eq('status', 'available')
           .order('created_at', { ascending: false }),
-        
-        // Fetch friendship status if viewing someone else's profile
-        user && user.id !== userId 
-          ? getFriendshipStatus(user.id, userId)
-          : Promise.resolve('none' as FriendshipStatus),
-        
       ]);
 
-      // Handle profile
       if (profileResult.error) throw profileResult.error;
       setProfile(profileResult.data);
 
-      // Handle items
       if (itemsResult.error) throw itemsResult.error;
       setItems(itemsResult.data || []);
 
-      // Handle friendship status
-      setFriendshipStatus(friendshipResult);
-
-      // If there's a pending request received, get the request ID
-      if (friendshipResult === 'pending_received') {
-        const { data: requestData } = await supabase
-          .from('friend_requests')
-          .select('id')
-          .eq('sender_id', userId)
-          .eq('receiver_id', user!.id)
-          .eq('status', 'pending')
-          .single();
-        
-        setPendingRequestId(requestData?.id || null);
-      }
-
+      await fetchFriendshipStatus();
     } catch (error) {
       console.error('Error fetching user data:', error);
       Alert.alert('Error', 'Failed to load user profile');
@@ -146,11 +137,25 @@ export default function UserProfileScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [userId, authLoading, fetchFriendshipStatus]);
+
+  useEffect(() => {
+    if (!authLoading && userId) {
+      fetchUserData();
+    }
+  }, [authLoading, userId, fetchUserData]);
+
+  // Refresh data when screen comes into focus
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (!authLoading && userId) fetchUserData();
+    });
+    return unsubscribe;
+  }, [navigation, userId, authLoading, fetchUserData]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchUserData();
+    await fetchUserData({ skipSkeleton: true });
   };
 
   const handleShareProfile = async () => {
@@ -282,6 +287,7 @@ export default function UserProfileScreen() {
     if (!user || !userId || user.id === userId) return;
 
     setFriendActionLoading(true);
+    setActiveFriendAction(action);
 
     try {
       let result;
@@ -318,7 +324,7 @@ export default function UserProfileScreen() {
 
           if (!sentRequest) throw new Error('No pending request found');
           
-          result = await unfriend(user.id, userId);
+          result = await cancelFriendRequest(sentRequest.id);
           if (result.error) throw result.error;
           break;
 
@@ -343,6 +349,7 @@ export default function UserProfileScreen() {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to perform action');
     } finally {
       setFriendActionLoading(false);
+      setActiveFriendAction(null);
     }
   };
 
@@ -397,8 +404,8 @@ export default function UserProfileScreen() {
       );
     }
 
-    // Show loading state while fetching friendship status
-    if (loading) {
+    // Show loading state while fetching friendship status (prevents wrong button flash)
+    if (friendshipLoading) {
       return (
         <View style={[styles.friendButton, styles.loadingButton]}>
           <ActivityIndicator size="small" color="#3B82F6" />
@@ -435,6 +442,42 @@ export default function UserProfileScreen() {
             disabled={friendActionLoading}
           >
             <Text style={styles.manageButtonText}>⚙️ Manage</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    
+    if (friendshipStatus === 'pending_received') {
+      return (
+        <View style={styles.friendActionsContainer}>
+          <TouchableOpacity
+            style={[styles.friendActionButton, styles.acceptButton]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              handleFriendAction('accept');
+            }}
+            disabled={friendActionLoading}
+          >
+            {friendActionLoading && activeFriendAction === 'accept' ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={styles.friendActionButtonText}>Accept Request</Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.friendActionButton, styles.declineButton]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              handleFriendAction('decline');
+            }}
+            disabled={friendActionLoading}
+          >
+            {friendActionLoading && activeFriendAction === 'decline' ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={styles.friendActionButtonText}>Decline</Text>
+            )}
           </TouchableOpacity>
         </View>
       );
@@ -835,6 +878,9 @@ const styles = StyleSheet.create({
   },
   acceptButton: {
     backgroundColor: '#10B981',
+  },
+  declineButton: {
+    backgroundColor: '#EF4444',
   },
   pendingButton: {
     backgroundColor: '#6B7280',

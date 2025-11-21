@@ -16,6 +16,14 @@ export async function sendFriendRequest(senderId: string, receiverId: string): P
       return { data: null, error: new Error('Friend request already exists or users are already friends') };
     }
 
+    // Clean up any legacy declined requests so we can insert a fresh row
+    const { error: cleanupError } = await supabase.rpc('cleanup_friend_request_pair', {
+      p_sender: senderId,
+      p_receiver: receiverId,
+    });
+
+    if (cleanupError) throw cleanupError;
+
     const { error } = await supabase
       .from('friend_requests')
       .insert([{
@@ -58,18 +66,6 @@ export async function sendFriendRequest(senderId: string, receiverId: string): P
  */
 export async function acceptFriendRequest(requestId: string): Promise<{ error: Error | null }> {
   try {
-    // First get the friend request details for notification
-    const { data: requestData, error: fetchError } = await supabase
-      .from('friend_requests')
-      .select('sender_id, receiver_id')
-      .eq('id', requestId)
-      .eq('status', 'pending')
-      .single();
-
-    if (fetchError) throw fetchError;
-    if (!requestData) throw new Error('Friend request not found');
-
-    // Update the friend request status to accepted
     const { error: updateError } = await supabase
       .from('friend_requests')
       .update({ status: 'accepted' })
@@ -77,43 +73,6 @@ export async function acceptFriendRequest(requestId: string): Promise<{ error: E
       .eq('status', 'pending');
 
     if (updateError) throw updateError;
-
-    // Create a friendship record (with consistent ordering)
-    const user1Id = requestData.sender_id < requestData.receiver_id ? requestData.sender_id : requestData.receiver_id;
-    const user2Id = requestData.sender_id < requestData.receiver_id ? requestData.receiver_id : requestData.sender_id;
-
-    const { error: friendshipError } = await supabase
-      .from('friendships')
-      .insert([{
-        user1_id: user1Id,
-        user2_id: user2Id
-      }]);
-
-    if (friendshipError) throw friendshipError;
-
-    // Trigger real-time notification to the original sender
-    if (requestData) {
-      try {
-        await fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/pusher-trigger`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            channel: `private-user-${requestData.sender_id}`,
-            event: 'new-notification',
-            data: {
-              type: 'friend_request_approved',
-              senderId: requestData.receiver_id
-            }
-          })
-        });
-      } catch (pusherError) {
-        console.error('Error triggering real-time notification:', pusherError);
-        // Don't fail the acceptance if Pusher fails
-      }
-    }
     return { error: null };
   } catch (err) {
     return { error: err instanceof Error ? err : new Error('Failed to accept friend request') };
@@ -125,11 +84,9 @@ export async function acceptFriendRequest(requestId: string): Promise<{ error: E
  */
 export async function declineFriendRequest(requestId: string): Promise<{ error: Error | null }> {
   try {
-    const { error } = await supabase
-      .from('friend_requests')
-      .update({ status: 'declined' })
-      .eq('id', requestId)
-      .eq('status', 'pending');
+    const { error } = await supabase.rpc('decline_friend_request_secure', {
+      p_request_id: requestId,
+    });
 
     if (error) throw error;
 
