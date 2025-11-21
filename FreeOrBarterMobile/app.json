@@ -13,7 +13,11 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "FreeOrBarter needs microphone access so you can record and send voice messages in chats, for example when responding to a barter offer with audio.",
+        "NSContactsUsageDescription": "FreeOrBarter needs access to your contacts so you can quickly share listings with friends, for example when inviting a contact to view a barter offer."
+      }
     },
     "android": {
       "adaptiveIcon": {
