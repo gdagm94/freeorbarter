@@ -1,6 +1,15 @@
+import { AuthApiError } from '@supabase/supabase-js';
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { User } from '../types';
+
+const isInvalidRefreshTokenError = (error: unknown): error is AuthApiError => {
+  return (
+    error instanceof AuthApiError &&
+    typeof error.message === 'string' &&
+    error.message.toLowerCase().includes('invalid refresh token')
+  );
+};
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
@@ -9,17 +18,52 @@ export function useAuth() {
   useEffect(() => {
     let isMounted = true;
 
+    const clearInvalidSession = async () => {
+      try {
+        await supabase.auth.signOut({ scope: 'local' });
+      } catch (signOutError) {
+        console.warn('Failed to clear stale Supabase session', signOutError);
+      } finally {
+        if (isMounted) {
+          setUser(null);
+        }
+      }
+    };
+
     const bootstrap = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession();
       if (!isMounted) return;
+
+      if (error) {
+        if (isInvalidRefreshTokenError(error)) {
+          await clearInvalidSession();
+        } else {
+          console.error('Failed to restore auth session', error);
+        }
+        setLoading(false);
+        return;
+      }
+
       if (session?.user) {
-        setUser({ ...session.user, full_name: (session.user.user_metadata?.full_name ?? "") } as User);
+        setUser({
+          ...session.user,
+          full_name: session.user.user_metadata?.full_name ?? '',
+        } as User);
+      } else {
+        setUser(null);
       }
       setLoading(false);
     };
 
     bootstrap();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!isMounted) return;
       if (session?.user) {
         setUser({
           ...session.user,

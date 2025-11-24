@@ -48,6 +48,7 @@ serve(async (req) => {
       headers: { Authorization: authHeader },
     },
   });
+  const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
   try {
     const {
@@ -86,7 +87,38 @@ serve(async (req) => {
       });
     }
 
-    const { error: upsertError } = await supabaseClient
+    // Ensure a related profile exists so foreign keys succeed
+    const genderMeta = (user.user_metadata?.gender ?? '').toLowerCase();
+    const normalizedGender =
+      genderMeta === 'male' || genderMeta === 'female' ? genderMeta : null;
+
+    const zipcodeMeta = (user.user_metadata?.zipcode ?? '').trim();
+    const normalizedZipcode = /^\d{5}$/.test(zipcodeMeta) ? zipcodeMeta : null;
+
+    const { error: ensureProfileError } = await adminClient
+      .from('users')
+      .upsert(
+        {
+          id: user.id,
+          full_name: user.user_metadata?.full_name ?? user.email ?? '',
+          username: user.user_metadata?.username ?? null,
+          gender: normalizedGender,
+          zipcode: normalizedZipcode,
+          profile_completed: false,
+          created_at: user.created_at ?? new Date().toISOString(),
+        },
+        { onConflict: 'id' },
+      );
+
+    if (ensureProfileError) {
+      console.error('policy-accept profile upsert error', ensureProfileError);
+      return new Response(JSON.stringify({ error: 'Failed to prepare profile record' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const { error: upsertError } = await adminClient
       .from('user_policy_acceptances')
       .upsert(
         {
@@ -100,7 +132,7 @@ serve(async (req) => {
 
     if (upsertError) {
       console.error('policy-accept upsert error', upsertError);
-      return new Response(JSON.stringify({ error: 'Failed to record acceptance' }), {
+      return new Response(JSON.stringify({ error: upsertError.message ?? 'Failed to record acceptance' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
