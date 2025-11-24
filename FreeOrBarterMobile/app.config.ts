@@ -5,7 +5,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   name: 'FreeorBarter',
   slug: 'freeorbarter-mobile',
   scheme: 'FreeOrBarter',
-  version: '1.0.3',
+  version: '1.0.4',
   orientation: 'default',
   userInterfaceStyle: 'light',
   splash: {
