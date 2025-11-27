@@ -8,6 +8,12 @@ function Footer() {
   const [email, setEmail] = useState('');
   const [subscribeSuccess, setSubscribeSuccess] = useState(false);
   const [subscribing, setSubscribing] = useState(false);
+  const [unsubscribeEmail, setUnsubscribeEmail] = useState('');
+  const [unsubscribing, setUnsubscribing] = useState(false);
+  const [unsubscribeFeedback, setUnsubscribeFeedback] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
 
   const handleNavigation = (path: string) => {
     navigate(path);
@@ -30,6 +36,39 @@ function Footer() {
       console.error('Error subscribing to newsletter:', err);
     } finally {
       setSubscribing(false);
+    }
+  };
+
+  const handleUnsubscribe = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUnsubscribeFeedback(null);
+    setUnsubscribing(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('unsubscribe', {
+        body: { email: unsubscribeEmail.trim().toLowerCase() },
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      const already = data?.alreadyUnsubscribed;
+      setUnsubscribeFeedback({
+        type: 'success',
+        message: already
+          ? 'This email was already unsubscribed.'
+          : 'You have been unsubscribed.',
+      });
+      setUnsubscribeEmail('');
+    } catch (err) {
+      console.error('Error unsubscribing from newsletter:', err);
+      setUnsubscribeFeedback({
+        type: 'error',
+        message: 'We could not unsubscribe that email. Please check the address and try again.',
+      });
+    } finally {
+      setUnsubscribing(false);
     }
   };
 
@@ -165,6 +204,38 @@ function Footer() {
                     </button>
                   </div>
                 </>
+              )}
+            </form>
+
+            <form onSubmit={handleUnsubscribe} className="space-y-3 mt-6">
+              <p className="text-sm text-gray-600">
+                Want to stop receiving emails? Enter your address to unsubscribe.
+              </p>
+              <div className="flex space-x-2">
+                <input
+                  type="email"
+                  value={unsubscribeEmail}
+                  onChange={(e) => setUnsubscribeEmail(e.target.value)}
+                  placeholder="Your email"
+                  className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  required
+                />
+                <button
+                  type="submit"
+                  className="bg-gray-100 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium disabled:opacity-70"
+                  disabled={unsubscribing}
+                >
+                  {unsubscribing ? 'Processing...' : 'Unsubscribe'}
+                </button>
+              </div>
+              {unsubscribeFeedback && (
+                <p
+                  className={`text-sm ${
+                    unsubscribeFeedback.type === 'success' ? 'text-green-600' : 'text-red-600'
+                  }`}
+                >
+                  {unsubscribeFeedback.message}
+                </p>
               )}
             </form>
 

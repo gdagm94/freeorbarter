@@ -263,16 +263,25 @@ export interface Database {
           id: string
           email: string
           created_at: string
+          unsubscribe_token: string
+          unsubscribed_at: string | null
+          is_unsubscribed: boolean | null
         }
         Insert: {
           id?: string
           email: string
           created_at?: string
+          unsubscribe_token?: string
+          unsubscribed_at?: string | null
+          is_unsubscribed?: boolean | null
         }
         Update: {
           id?: string
           email?: string
           created_at?: string
+          unsubscribe_token?: string
+          unsubscribed_at?: string | null
+          is_unsubscribed?: boolean | null
         }
       }
       watched_items: {

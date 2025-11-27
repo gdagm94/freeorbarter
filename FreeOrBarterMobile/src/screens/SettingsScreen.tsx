@@ -113,6 +113,11 @@ export default function SettingsScreen() {
   const [deleteReasonOther, setDeleteReasonOther] = useState('');
   const [deleteFeedback, setDeleteFeedback] = useState('');
   const [deleteAccountAcknowledged, setDeleteAccountAcknowledged] = useState(false);
+  const [unsubscribeLoading, setUnsubscribeLoading] = useState(false);
+  const [unsubscribeFeedback, setUnsubscribeFeedback] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
   const isDeleteActionDisabled =
     deleteAccountLoading ||
     !deleteAccountAcknowledged ||
@@ -319,6 +324,50 @@ export default function SettingsScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setDeleteAccountLoading(false);
+    }
+  };
+
+  const handleUnsubscribeFromEmails = async () => {
+    if (!user?.email) {
+      setUnsubscribeFeedback({
+        type: 'error',
+        message: 'No email is associated with this account.',
+      });
+      return;
+    }
+
+    setUnsubscribeFeedback(null);
+    setUnsubscribeLoading(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke<{
+        success?: boolean;
+        alreadyUnsubscribed?: boolean;
+      }>('unsubscribe', {
+        body: { email: user.email.toLowerCase() },
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      const already = data?.alreadyUnsubscribed;
+      setUnsubscribeFeedback({
+        type: 'success',
+        message: already
+          ? 'Your account was already unsubscribed.'
+          : 'You will no longer receive newsletter emails.',
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err) {
+      console.error('Error unsubscribing from newsletter:', err);
+      setUnsubscribeFeedback({
+        type: 'error',
+        message: 'We could not update your email preferences. Please try again later.',
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setUnsubscribeLoading(false);
     }
   };
 
@@ -675,6 +724,35 @@ export default function SettingsScreen() {
             >
               <Text style={styles.safetyCardButtonText}>Email support@freeorbarter.com</Text>
             </TouchableOpacity>
+          </View>
+
+          {/* Email Preferences */}
+          <View style={styles.emailCard}>
+            <Text style={styles.emailCardTitle}>Email preferences</Text>
+            <Text style={styles.emailCardBody}>
+              Control whether you receive FreeOrBarter newsletter updates in your inbox.
+            </Text>
+            <TouchableOpacity
+              style={[styles.emailButton, unsubscribeLoading && styles.emailButtonDisabled]}
+              onPress={handleUnsubscribeFromEmails}
+              disabled={unsubscribeLoading}
+            >
+              <Text style={styles.emailButtonText}>
+                {unsubscribeLoading ? 'Processing...' : 'Unsubscribe from newsletter'}
+              </Text>
+            </TouchableOpacity>
+            {unsubscribeFeedback && (
+              <Text
+                style={[
+                  styles.emailFeedback,
+                  unsubscribeFeedback.type === 'success'
+                    ? styles.emailFeedbackSuccess
+                    : styles.emailFeedbackError,
+                ]}
+              >
+                {unsubscribeFeedback.message}
+              </Text>
+            )}
           </View>
 
           {/* Moderator Section */}
@@ -1147,6 +1225,58 @@ const styles = StyleSheet.create({
   safetyCardButtonText: {
     color: '#FFFFFF',
     fontWeight: '700',
+  },
+  emailCard: {
+    marginTop: 24,
+    marginHorizontal: 20,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+    backgroundColor: '#EFF6FF',
+  },
+  emailCardTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1E3A8A',
+    marginBottom: 8,
+  },
+  emailCardBody: {
+    fontSize: 14,
+    color: '#1E40AF',
+    marginBottom: 16,
+  },
+  emailButton: {
+    backgroundColor: '#1D4ED8',
+    borderRadius: 999,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#1D4ED8',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  emailButtonDisabled: {
+    opacity: 0.7,
+  },
+  emailButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  emailFeedback: {
+    marginTop: 12,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  emailFeedbackSuccess: {
+    color: '#166534',
+  },
+  emailFeedbackError: {
+    color: '#B91C1C',
   },
   fieldContainer: {
     marginBottom: 24,
