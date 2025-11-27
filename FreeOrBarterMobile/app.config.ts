@@ -32,6 +32,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   extra: {
     supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
     supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+    passwordResetRedirect: process.env.EXPO_PUBLIC_PASSWORD_RESET_REDIRECT,
     eas: {
       projectId: '26392f6b-81c3-4ccf-9cf2-e64326418380'
     }

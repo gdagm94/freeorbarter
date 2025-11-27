@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { PASSWORD_RESET_REDIRECT } from '../lib/config';
 import { X, Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -115,7 +116,7 @@ export function Auth({ onClose }: AuthProps) {
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(formData.email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+        redirectTo: PASSWORD_RESET_REDIRECT,
       });
 
       if (error) throw error;

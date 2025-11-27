@@ -1,6 +1,7 @@
 import { AuthApiError } from '@supabase/supabase-js';
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { PASSWORD_RESET_REDIRECT } from '../lib/config';
 import { User } from '../types';
 
 const isInvalidRefreshTokenError = (error: unknown): error is AuthApiError => {
@@ -111,7 +112,9 @@ export function useAuth() {
   };
 
   const resetPassword = async (email: string) => {
-    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: PASSWORD_RESET_REDIRECT,
+    });
     return { error };
   };
 

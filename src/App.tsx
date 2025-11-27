@@ -30,6 +30,19 @@ function App() {
   const [policyStatus, setPolicyStatus] = useState<PolicyStatus | null>(null);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const hash = window.location.hash;
+    const hasRecoveryHash = hash && hash.includes('type=recovery');
+    const alreadyOnResetPage = window.location.pathname === '/reset-password';
+
+    if (hasRecoveryHash && !alreadyOnResetPage) {
+      const targetUrl = `${window.location.origin}/reset-password${hash}`;
+      window.location.replace(targetUrl);
+    }
+  }, []);
+
+  useEffect(() => {
     if (!user) {
       setUnreadCount(0);
       setUnreadOffers(0);
