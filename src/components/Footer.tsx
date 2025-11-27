@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { BarChart2, Mail, Heart, Facebook, Instagram, ChevronRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -48,6 +48,32 @@ function Footer() {
               or trade them with others. Join us in reducing waste and building connections through
               sharing.
             </p>
+            
+            {/* App Store CTA */}
+            <div className="mt-4">
+              <p className="text-xs text-gray-600 mb-2">Get the iOS App</p>
+              <div className="flex items-center space-x-2">
+                <div className="bg-white border border-gray-200 rounded-lg p-1.5 flex-shrink-0">
+                  <img
+                    src="/app-store-qr.png"
+                    alt="QR code to download FreeorBarter on the App Store"
+                    className="w-20 h-20 object-contain"
+                  />
+                </div>
+                <a
+                  href="https://apps.apple.com/us/app/freeorbarter/id6754944684"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block hover:opacity-90 transition-opacity"
+                >
+                  <img
+                    src="/download-app-store-button.png"
+                    alt="Download on the App Store"
+                    className="h-10 w-auto"
+                  />
+                </a>
+              </div>
+            </div>
           </div>
 
           {/* Quick Links */}
@@ -92,15 +118,13 @@ function Footer() {
           {/* Contact */}
           <div>
             <h3 className="text-gray-900 font-semibold mb-4">Contact Us</h3>
-            <div className="space-y-2">
-              <a
-                href="mailto:support@freeorbarter.com"
-                className="flex items-center text-gray-600 hover:text-indigo-600 text-sm"
-              >
-                <Mail className="w-4 h-4 mr-2" />
-                support@freeorbarter.com
-              </a>
-            </div>
+            <a
+              href="mailto:support@freeorbarter.com"
+              className="flex items-center text-gray-600 hover:text-indigo-600 text-sm"
+            >
+              <Mail className="w-4 h-4 mr-2" />
+              support@freeorbarter.com
+            </a>
           </div>
 
           {/* Newsletter */}
@@ -166,6 +190,7 @@ function Footer() {
               </div>
             </div>
           </div>
+
         </div>
 
         {/* Bottom Bar */}
