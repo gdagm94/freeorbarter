@@ -78,6 +78,7 @@ export default function ChatScreen() {
   const { otherUserId, itemId } = route.params || {};
   const [threadId, setThreadId] = useState<string | null>(null);
   const threadChannelRef = useRef<any>(null);
+  const threadCreationDisabled = useRef<boolean>(false);
   const {
     blockedByMe,
     blockedByOther,
@@ -150,6 +151,7 @@ export default function ChatScreen() {
   const ensureThread = async (): Promise<string | null> => {
     if (!user || !otherUserId) return null;
     if (threadId) return threadId;
+    if (threadCreationDisabled.current) return null;
 
     try {
       // Look for existing thread via recent messages with thread_id
@@ -195,6 +197,7 @@ export default function ChatScreen() {
         return created.id;
       }
     } catch (error) {
+      threadCreationDisabled.current = true;
       console.error('Error ensuring thread:', error);
     }
     return null;
@@ -261,10 +264,18 @@ export default function ChatScreen() {
       const unreadFromOther = all.filter(m => m.receiver_id === user.id && !m.read);
       if (unreadFromOther.length > 0) {
         try {
-          await supabase
+          let readQuery = supabase
             .from('messages')
             .update({ read: true })
-            .or(`and(sender_id.eq.${otherUserId},receiver_id.eq.${user.id})`);
+            .eq('sender_id', otherUserId)
+            .eq('receiver_id', user.id)
+            .eq('read', false);
+
+          if (existingThreadId || threadId) {
+            readQuery = readQuery.eq('thread_id', existingThreadId || threadId);
+          }
+
+          await readQuery;
         } catch {}
       }
       setMessages(all);
@@ -569,10 +580,6 @@ export default function ChatScreen() {
 
     try {
       const activeThreadId = threadId || (await ensureThread());
-      if (!activeThreadId) {
-        Alert.alert('Error', 'Unable to start thread for this chat.');
-        return;
-      }
 
       const messageData: Partial<Message> = {
         sender_id: user.id,
@@ -580,7 +587,7 @@ export default function ChatScreen() {
         content: messageContent,
         item_id: itemId || null,
         image_url: imageUrl || null,
-        thread_id: activeThreadId,
+        thread_id: activeThreadId || null,
       } as any;
 
       const { error } = await supabase
