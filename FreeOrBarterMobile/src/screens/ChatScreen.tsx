@@ -78,7 +78,7 @@ export default function ChatScreen() {
   const { otherUserId, itemId } = route.params || {};
   const [threadId, setThreadId] = useState<string | null>(null);
   const threadChannelRef = useRef<any>(null);
-  const threadCreationDisabled = useRef<boolean>(false);
+  const lastThreadCreateFailure = useRef<number | null>(null);
   const {
     blockedByMe,
     blockedByOther,
@@ -151,7 +151,10 @@ export default function ChatScreen() {
   const ensureThread = async (): Promise<string | null> => {
     if (!user || !otherUserId) return null;
     if (threadId) return threadId;
-    if (threadCreationDisabled.current) return null;
+    const now = Date.now();
+    if (lastThreadCreateFailure.current && now - lastThreadCreateFailure.current < 30000) {
+      return null; // back off for 30s after a failure
+    }
 
     try {
       // Look for existing thread via recent messages with thread_id
@@ -168,6 +171,7 @@ export default function ChatScreen() {
       if (!existingError && existingMessages && existingMessages.length > 0 && existingMessages[0].thread_id) {
         const existingId = existingMessages[0].thread_id;
         setThreadId(existingId);
+        lastThreadCreateFailure.current = null;
         await ensureThreadMembers(existingId);
         subscribeToThread(existingId);
         return existingId;
@@ -192,13 +196,14 @@ export default function ChatScreen() {
       if (createError) throw createError;
       if (created?.id) {
         setThreadId(created.id);
+        lastThreadCreateFailure.current = null;
         await ensureThreadMembers(created.id);
         subscribeToThread(created.id);
         return created.id;
       }
     } catch (error) {
-      threadCreationDisabled.current = true;
       console.error('Error ensuring thread:', error);
+      lastThreadCreateFailure.current = Date.now();
     }
     return null;
   };
