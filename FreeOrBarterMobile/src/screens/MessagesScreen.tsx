@@ -11,6 +11,7 @@ import {
   RefreshControl,
   Animated,
   Alert,
+  PanResponder,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
@@ -180,23 +181,35 @@ export default function MessagesScreen() {
     return swipeAnimations.current.get(itemId)!;
   };
 
+  const springToValue = (anim: Animated.Value, toValue: number, options?: Partial<Animated.SpringAnimationConfig>) =>
+    Animated.spring(anim, {
+      toValue,
+      useNativeDriver: true,
+      stiffness: 260,
+      damping: 18,
+      mass: 1,
+      overshootClamping: false,
+      ...(options || {}),
+    });
+
   const handleSwipeLeft = (itemId: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSwipedItemId(itemId);
-    Animated.timing(getSwipeAnimation(itemId), {
-      toValue: -120,
-      duration: 200,
-      useNativeDriver: true,
-    }).start();
+    setTimeout(() => {
+      swipeAnimations.current.forEach((anim, key) => {
+        if (key !== itemId) {
+          springToValue(anim, 0, { stiffness: 280, damping: 20 }).start();
+        }
+      });
+    }, 120);
+    springToValue(getSwipeAnimation(itemId), -120, { stiffness: 240, damping: 16 }).start();
   };
 
   const handleSwipeRight = (itemId: string) => {
     setSwipedItemId(null);
-    Animated.timing(getSwipeAnimation(itemId), {
-      toValue: 0,
-      duration: 200,
-      useNativeDriver: true,
-    }).start();
+    setTimeout(() => {
+      springToValue(getSwipeAnimation(itemId), 0, { stiffness: 300, damping: 20 }).start();
+    }, 80);
   };
 
   const deleteConversation = async (conversationId: string, otherUserId: string) => {
@@ -266,30 +279,49 @@ export default function MessagesScreen() {
     }
   };
 
-  const silenceConversation = async (conversationId: string, otherUserId: string) => {
+  const markConversationUnread = async (conversationId: string, otherUserId: string) => {
     try {
+      if (!user?.id) {
+        Alert.alert('Sign in required', 'Please sign in to mark messages as unread.');
+        return;
+      }
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       
-      const { error } = await supabase
+      const { data, error: fetchError } = await supabase
         .from('messages')
-        .update({ silenced: true })
-        .eq('sender_id', user?.id)
-        .or(`sender_id.eq.${otherUserId},receiver_id.eq.${otherUserId}`)
-        .eq('receiver_id', user?.id);
+        .select('id')
+        .eq('sender_id', otherUserId)
+        .eq('receiver_id', user?.id)
+        .order('created_at', { ascending: false })
+        .limit(1);
 
-      if (error) throw error;
+      if (fetchError) throw fetchError;
+      const latestMessage = (data as any[])?.[0];
+      if (!latestMessage?.id) {
+        Alert.alert('No messages', 'No messages to mark as unread.');
+        return;
+      }
+
+      const { error: updateError } = await supabase
+        .from('messages')
+        .update({ read: false })
+        .eq('id', latestMessage.id);
+
+      if (updateError) throw updateError;
       
       setConversations(prev => 
-        prev.map(conv => 
-          conv.id === conversationId ? { ...conv, silenced: true } : conv
-        )
+        prev.map(conv => {
+          if (conv.id !== conversationId) return conv;
+          const nextCount = conv.unread_count > 0 ? conv.unread_count : 1;
+          return { ...conv, unread_count: nextCount };
+        })
       );
       
       handleSwipeRight(conversationId);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
-      console.error('Error silencing conversation:', error);
-      Alert.alert('Error', 'Failed to silence conversation');
+      console.error('Error marking conversation unread:', error);
+      Alert.alert('Error', 'Failed to mark conversation as unread');
     }
   };
 
@@ -300,61 +332,81 @@ export default function MessagesScreen() {
     return !conv.archived && !conv.deleted;
   });
 
-  const renderConversation = ({ item }: { item: Conversation }) => (
-    <View style={styles.conversationWrapper}>
-      {/* Action Buttons */}
-      <View style={styles.actionButtons}>
-        {item.deleted ? (
-          <TouchableOpacity
-            style={[styles.actionButton, styles.retrieveButton]}
-            onPress={() => retrieveConversation(item.id, item.other_user_id)}
-          >
-            <Text style={styles.actionButtonText}>📥</Text>
-            <Text style={styles.actionButtonLabel}>Retrieve</Text>
-          </TouchableOpacity>
-        ) : (
-          <>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.silenceButton]}
-              onPress={() => silenceConversation(item.id, item.other_user_id)}
-            >
-              <Text style={styles.actionButtonText}>🔇</Text>
-              <Text style={styles.actionButtonLabel}>Silence</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.deleteButton]}
-              onPress={() => deleteConversation(item.id, item.other_user_id)}
-            >
-              <Text style={styles.actionButtonText}>🗑️</Text>
-              <Text style={styles.actionButtonLabel}>Delete</Text>
-            </TouchableOpacity>
-          </>
-        )}
-      </View>
+  const renderConversation = ({ item }: { item: Conversation }) => {
+    const panResponder = PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gesture) =>
+        Math.abs(gesture.dx) > 10 && Math.abs(gesture.dy) < 10,
+      onPanResponderMove: (_, gesture) => {
+        const clamped = Math.max(-120, Math.min(0, gesture.dx));
+        getSwipeAnimation(item.id).setValue(clamped);
+      },
+      onPanResponderRelease: (_, gesture) => {
+        if (gesture.dx < -30) {
+          handleSwipeLeft(item.id);
+        } else if (gesture.dx > 30) {
+          handleSwipeRight(item.id);
+        } else {
+          swipedItemId === item.id ? handleSwipeLeft(item.id) : handleSwipeRight(item.id);
+        }
+      },
+      onPanResponderTerminate: () => handleSwipeRight(item.id),
+    });
 
-      {/* Conversation Item */}
-      <Animated.View
-        style={[
-          styles.conversationItem,
-          item.unread_count > 0 && styles.unreadConversation,
-          item.deleted && styles.deletedConversation,
-          { transform: [{ translateX: getSwipeAnimation(item.id) }] }
-        ]}
-      >
-        <TouchableOpacity 
-          style={styles.conversationTouchable}
-          onPress={() => {
-            if (item.deleted) return;
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            const otherUserId = item.other_user_id;
-            navigation.navigate('Chat', { 
-              otherUserId, 
-              itemId: item.item_id || null 
-            });
-          }}
-          onLongPress={() => handleSwipeLeft(item.id)}
-          activeOpacity={0.8}
+    return (
+      <View style={styles.conversationWrapper}>
+        {/* Action Buttons */}
+        <View style={styles.actionButtons} {...panResponder.panHandlers}>
+          {item.deleted ? (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.retrieveButton]}
+              onPress={() => retrieveConversation(item.id, item.other_user_id)}
+            >
+              <Text style={styles.actionButtonText}>📥</Text>
+              <Text style={styles.actionButtonLabel}>Retrieve</Text>
+            </TouchableOpacity>
+          ) : (
+            <>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.unreadButton]}
+                onPress={() => markConversationUnread(item.id, item.other_user_id)}
+              >
+                <Text style={styles.actionButtonText}>🔵</Text>
+                <Text style={styles.actionButtonLabel}>Unread</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.deleteButton]}
+                onPress={() => deleteConversation(item.id, item.other_user_id)}
+              >
+                <Text style={styles.actionButtonText}>🗑️</Text>
+                <Text style={styles.actionButtonLabel}>Delete</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+
+        {/* Conversation Item */}
+        <Animated.View
+          style={[
+            styles.conversationItem,
+            item.unread_count > 0 && styles.unreadConversation,
+            item.deleted && styles.deletedConversation,
+            { transform: [{ translateX: getSwipeAnimation(item.id) }] }
+          ]}
+          {...panResponder.panHandlers}
         >
+          <TouchableOpacity 
+            style={styles.conversationTouchable}
+            onPress={() => {
+              if (item.deleted) return;
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              const otherUserId = item.other_user_id;
+              navigation.navigate('Chat', { 
+                otherUserId, 
+                itemId: item.item_id || null 
+              });
+            }}
+            activeOpacity={0.8}
+          >
       <View style={styles.conversationContent}>
         {/* User Avatar */}
         <View style={styles.avatarContainer}>
@@ -425,10 +477,11 @@ export default function MessagesScreen() {
         {/* Chevron */}
         <Text style={styles.chevron}>›</Text>
         </View>
-        </TouchableOpacity>
-      </Animated.View>
-    </View>
-  );
+          </TouchableOpacity>
+        </Animated.View>
+      </View>
+    );
+  };
 
   const renderFilterTabs = () => (
     <View style={styles.filterContainer}>
@@ -568,8 +621,8 @@ const styles = StyleSheet.create({
   retrieveButton: {
     backgroundColor: '#10B981',
   },
-  silenceButton: {
-    backgroundColor: '#F59E0B',
+  unreadButton: {
+    backgroundColor: '#3B82F6',
   },
   actionButtonText: {
     fontSize: 20,

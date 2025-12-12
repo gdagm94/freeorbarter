@@ -59,7 +59,9 @@ function Tabs() {
       setPolicyStatus(null);
       return;
     }
+
     let isMounted = true;
+
     const loadCounts = async () => {
       try {
         const { count: msgCount } = await supabase
@@ -77,13 +79,41 @@ function Tabs() {
         if (!isMounted) return;
         setMessageBadge(msgCount && msgCount > 0 ? msgCount : undefined);
         setNotificationBadge(notifCount && notifCount > 0 ? notifCount : undefined);
-      } catch {}
+      } catch (error) {
+        console.error('Error fetching badge counts:', error);
+      }
     };
+
+    // Initial fetch
     loadCounts();
-    const interval = setInterval(loadCounts, 15000);
+
+    // Supabase realtime channels for badge updates
+    const messagesChannel = supabase
+      .channel(`messages-badges-${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'messages', filter: `receiver_id=eq.${user.id}` },
+        () => loadCounts()
+      )
+      .subscribe();
+
+    const notificationsChannel = supabase
+      .channel(`notifications-badges-${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
+        () => loadCounts()
+      )
+      .subscribe();
+
+    // Lightweight fallback polling to guard against missed events
+    const fallbackInterval = setInterval(loadCounts, 60000);
+
     return () => {
       isMounted = false;
-      clearInterval(interval);
+      messagesChannel.unsubscribe();
+      notificationsChannel.unsubscribe();
+      clearInterval(fallbackInterval);
     };
   }, [user?.id]);
 

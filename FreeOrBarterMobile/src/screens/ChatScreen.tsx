@@ -76,6 +76,8 @@ export default function ChatScreen() {
   const route = useRoute<any>();
   const { user } = useAuth();
   const { otherUserId, itemId } = route.params || {};
+  const [threadId, setThreadId] = useState<string | null>(null);
+  const threadChannelRef = useRef<any>(null);
   const {
     blockedByMe,
     blockedByOther,
@@ -100,25 +102,20 @@ export default function ChatScreen() {
 
   useEffect(() => {
     if (!otherUserId || !user) return;
-    fetchMessages();
-    fetchOtherUser();
-
-    const channel = supabase
-      .channel('chat-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'messages', filter: `receiver_id=eq.${user.id}` },
-        fetchMessages
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'messages', filter: `sender_id=eq.${user.id}` },
-        fetchMessages
-      )
-      .subscribe();
+    let isMounted = true;
+    const init = async () => {
+      const ensured = await ensureThread();
+      await fetchMessages(ensured || undefined);
+      fetchOtherUser();
+    };
+    init();
 
     return () => {
-      channel.unsubscribe();
+      isMounted = false;
+      if (threadChannelRef.current) {
+        supabase.removeChannel(threadChannelRef.current);
+        threadChannelRef.current = null;
+      }
     };
   }, [otherUserId, user?.id]);
 
@@ -150,17 +147,109 @@ export default function ChatScreen() {
     }
   };
 
-  const fetchMessages = async () => {
-    if (!otherUserId || !user) return;
+  const ensureThread = async (): Promise<string | null> => {
+    if (!user || !otherUserId) return null;
+    if (threadId) return threadId;
 
     try {
-      const { data, error } = await supabase
+      // Look for existing thread via recent messages with thread_id
+      const { data: existingMessages, error: existingError } = await supabase
         .from('messages')
-        .select('*')
+        .select('thread_id')
         .or(
           `and(sender_id.eq.${user.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${user.id})`
         )
+        .not('thread_id', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (!existingError && existingMessages && existingMessages.length > 0 && existingMessages[0].thread_id) {
+        const existingId = existingMessages[0].thread_id;
+        setThreadId(existingId);
+        await ensureThreadMembers(existingId);
+        subscribeToThread(existingId);
+        return existingId;
+      }
+
+      // Create new thread
+      const title = itemId ? 'Item conversation' : 'Direct conversation';
+
+      // Create with item_id null to satisfy RLS when user isn't item owner
+      const { data: created, error: createError } = await supabase
+        .from('message_threads')
+        .insert([
+          {
+            title,
+            item_id: null,
+            created_by: user.id,
+          },
+        ])
+        .select('id')
+        .single();
+
+      if (createError) throw createError;
+      if (created?.id) {
+        setThreadId(created.id);
+        await ensureThreadMembers(created.id);
+        subscribeToThread(created.id);
+        return created.id;
+      }
+    } catch (error) {
+      console.error('Error ensuring thread:', error);
+    }
+    return null;
+  };
+
+  const ensureThreadMembers = async (id: string) => {
+    try {
+      await supabase
+        .from('thread_members')
+        .upsert(
+          [
+            { thread_id: id, user_id: user?.id },
+            { thread_id: id, user_id: otherUserId },
+          ],
+          { onConflict: 'thread_id,user_id' }
+        );
+    } catch (error) {
+      console.error('Error ensuring thread members:', error);
+    }
+  };
+
+  const subscribeToThread = (id: string) => {
+    if (threadChannelRef.current) {
+      supabase.removeChannel(threadChannelRef.current);
+      threadChannelRef.current = null;
+    }
+
+    threadChannelRef.current = supabase
+      .channel(`room:${id}:messages`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'messages', filter: `thread_id=eq.${id}` },
+        () => fetchMessages(id)
+      )
+      .subscribe();
+  };
+
+  const fetchMessages = async (existingThreadId?: string) => {
+    if (!otherUserId || !user) return;
+
+    try {
+      let query = supabase
+        .from('messages')
+        .select('*')
         .order('created_at', { ascending: true });
+
+      if (existingThreadId || threadId) {
+        query = query.eq('thread_id', existingThreadId || threadId);
+      } else {
+        query = query.or(
+          `and(sender_id.eq.${user.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${user.id})`
+        );
+      }
+
+      const { data, error } = await query;
 
       if (error) {
         console.error('Error fetching messages:', error);
@@ -179,6 +268,18 @@ export default function ChatScreen() {
         } catch {}
       }
       setMessages(all);
+      const thread = existingThreadId || all.find(m => m.thread_id)?.thread_id || null;
+      if (thread && threadId !== thread) {
+        setThreadId(thread);
+        await ensureThreadMembers(thread);
+        subscribeToThread(thread);
+      } else if (!thread && !threadId) {
+        // no thread yet; create one
+        const created = await ensureThread();
+        if (created) {
+          subscribeToThread(created);
+        }
+      }
     } catch (error) {
       console.error('Error fetching messages:', error);
     } finally {
@@ -467,12 +568,19 @@ export default function ChatScreen() {
     }
 
     try {
+      const activeThreadId = threadId || (await ensureThread());
+      if (!activeThreadId) {
+        Alert.alert('Error', 'Unable to start thread for this chat.');
+        return;
+      }
+
       const messageData: Partial<Message> = {
         sender_id: user.id,
         receiver_id: otherUserId,
         content: messageContent,
         item_id: itemId || null,
         image_url: imageUrl || null,
+        thread_id: activeThreadId,
       } as any;
 
       const { error } = await supabase
@@ -1138,8 +1246,9 @@ export default function ChatScreen() {
 
       {/* Image Viewer Modal */}
       <ImageViewer
-        visible={showImageViewer}
-        imageUrl={selectedImageUrl}
+        visible={showImageViewer && !!selectedImageUrl}
+        images={selectedImageUrl ? [selectedImageUrl] : []}
+        initialIndex={0}
         onClose={() => setShowImageViewer(false)}
       />
 
