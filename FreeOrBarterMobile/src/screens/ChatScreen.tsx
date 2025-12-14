@@ -79,6 +79,8 @@ export default function ChatScreen() {
   const [threadId, setThreadId] = useState<string | null>(null);
   const threadChannelRef = useRef<any>(null);
   const lastThreadCreateFailure = useRef<number | null>(null);
+  const threadCreationDisabledRef = useRef<boolean>(false);
+  const getTopic = () => (itemId ? 'item' : 'direct');
   const {
     blockedByMe,
     blockedByOther,
@@ -151,12 +153,21 @@ export default function ChatScreen() {
   const ensureThread = async (): Promise<string | null> => {
     if (!user || !otherUserId) return null;
     if (threadId) return threadId;
+    if (threadCreationDisabledRef.current) {
+      // #region agent log
+      fetch('http://10.0.0.207:7242/ingest/7324c825-d016-44a1-91f7-2f773ba2ff20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H5',location:'ChatScreen.tsx:ensureThread:disabled',message:'thread creation disabled - skipping',data:{userId:user.id, otherUserId},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      return null;
+    }
     const now = Date.now();
     if (lastThreadCreateFailure.current && now - lastThreadCreateFailure.current < 30000) {
       return null; // back off for 30s after a failure
     }
 
     try {
+      // #region agent log
+      fetch('http://10.0.0.207:7242/ingest/7324c825-d016-44a1-91f7-2f773ba2ff20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H4',location:'ChatScreen.tsx:ensureThread:start',message:'ensureThread entry',data:{threadId, userId:user.id, otherUserId, itemId},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       // Look for existing thread via recent messages with thread_id
       const { data: existingMessages, error: existingError } = await supabase
         .from('messages')
@@ -168,6 +179,9 @@ export default function ChatScreen() {
         .order('created_at', { ascending: false })
         .limit(1);
 
+      // #region agent log
+      fetch('http://10.0.0.207:7242/ingest/7324c825-d016-44a1-91f7-2f773ba2ff20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H2',location:'ChatScreen.tsx:ensureThread:existingQuery',message:'existing thread query result',data:{hasError:Boolean(existingError), firstThreadId:existingMessages?.[0]?.thread_id ?? null},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       if (!existingError && existingMessages && existingMessages.length > 0 && existingMessages[0].thread_id) {
         const existingId = existingMessages[0].thread_id;
         setThreadId(existingId);
@@ -177,32 +191,21 @@ export default function ChatScreen() {
         return existingId;
       }
 
-      // Create new thread
-      const title = itemId ? 'Item conversation' : 'Direct conversation';
-
-      // Create with item_id null to satisfy RLS when user isn't item owner
-      const { data: created, error: createError } = await supabase
-        .from('message_threads')
-        .insert([
-          {
-            title,
-            item_id: null,
-            created_by: user.id,
-          },
-        ])
-        .select('id')
-        .single();
-
-      if (createError) throw createError;
-      if (created?.id) {
-        setThreadId(created.id);
-        lastThreadCreateFailure.current = null;
-        await ensureThreadMembers(created.id);
-        subscribeToThread(created.id);
-        return created.id;
-      }
+      // Skip creating a new thread if none exists; operate without thread_id to avoid RLS failures
+      threadCreationDisabledRef.current = true;
+      // #region agent log
+      fetch('http://10.0.0.207:7242/ingest/7324c825-d016-44a1-91f7-2f773ba2ff20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H5',location:'ChatScreen.tsx:ensureThread:skipCreation',message:'no existing thread; skipping creation to avoid RLS',data:{userId:user.id, otherUserId, itemId},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      return null;
     } catch (error) {
       console.error('Error ensuring thread:', error);
+      // #region agent log
+      fetch('http://10.0.0.207:7242/ingest/7324c825-d016-44a1-91f7-2f773ba2ff20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H1',location:'ChatScreen.tsx:ensureThread:catch',message:'ensureThread error',data:{error: (error as any)?.message || String(error)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      // #region agent log
+      fetch('http://10.0.0.207:7242/ingest/7324c825-d016-44a1-91f7-2f773ba2ff20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H5',location:'ChatScreen.tsx:ensureThread:rlsFallback',message:'disabling thread creation after error',data:{error: (error as any)?.message || String(error)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      threadCreationDisabledRef.current = true;
       lastThreadCreateFailure.current = Date.now();
     }
     return null;
@@ -210,6 +213,9 @@ export default function ChatScreen() {
 
   const ensureThreadMembers = async (id: string) => {
     try {
+      // #region agent log
+      fetch('http://10.0.0.207:7242/ingest/7324c825-d016-44a1-91f7-2f773ba2ff20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H3',location:'ChatScreen.tsx:ensureThreadMembers:start',message:'ensureThreadMembers upsert',data:{threadId:id, userId:user?.id, otherUserId},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       await supabase
         .from('thread_members')
         .upsert(
@@ -221,6 +227,9 @@ export default function ChatScreen() {
         );
     } catch (error) {
       console.error('Error ensuring thread members:', error);
+      // #region agent log
+      fetch('http://10.0.0.207:7242/ingest/7324c825-d016-44a1-91f7-2f773ba2ff20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H3',location:'ChatScreen.tsx:ensureThreadMembers:catch',message:'ensureThreadMembers error',data:{threadId:id, error: (error as any)?.message || String(error)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
     }
   };
 
@@ -289,7 +298,7 @@ export default function ChatScreen() {
         setThreadId(thread);
         await ensureThreadMembers(thread);
         subscribeToThread(thread);
-      } else if (!thread && !threadId) {
+      } else if (!thread && !threadId && !threadCreationDisabledRef.current) {
         // no thread yet; create one
         const created = await ensureThread();
         if (created) {
@@ -593,14 +602,21 @@ export default function ChatScreen() {
         item_id: itemId || null,
         image_url: imageUrl || null,
         thread_id: activeThreadId || null,
+        topic: getTopic(),
       } as any;
 
+      // #region agent log
+      fetch('http://10.0.0.207:7242/ingest/7324c825-d016-44a1-91f7-2f773ba2ff20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'H6',location:'ChatScreen.tsx:sendMessage:beforeInsert',message:'sendMessage inserting',data:{hasContent:Boolean(messageContent), hasImage:Boolean(imageUrl), topic:messageData.topic, threadId:messageData.thread_id},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       const { error } = await supabase
         .from('messages')
         .insert([messageData]);
 
       if (error) {
         console.error('Error sending message:', error);
+        // #region agent log
+        fetch('http://10.0.0.207:7242/ingest/7324c825-d016-44a1-91f7-2f773ba2ff20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'H6',location:'ChatScreen.tsx:sendMessage:insertError',message:'sendMessage insert error',data:{errorMessage:error.message, code:(error as any)?.code},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         return;
       }
 
@@ -639,6 +655,7 @@ export default function ChatScreen() {
           item_id: itemId || null,
           is_offer: false,
           read: false,
+          topic: getTopic(),
         }]);
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -683,6 +700,7 @@ export default function ChatScreen() {
           item_id: itemId || null,
           read: false,
           is_offer: false,
+          topic: getTopic(),
         }]);
 
       if (error) {
@@ -733,6 +751,7 @@ export default function ChatScreen() {
           item_id: itemId || null,
           read: false,
           is_offer: false,
+          topic: getTopic(),
         }]);
 
       if (error) {
@@ -794,6 +813,7 @@ export default function ChatScreen() {
           item_id: itemId || null,
           read: false,
           is_offer: false,
+          topic: getTopic(),
         }]);
 
       if (messageError) {

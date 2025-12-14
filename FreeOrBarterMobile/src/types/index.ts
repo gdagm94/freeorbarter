@@ -33,6 +33,7 @@ export interface Message {
   is_offer: boolean;
   archived: boolean;
   image_url?: string;
+  topic?: 'item' | 'direct';
 }
 
 export interface Conversation {
