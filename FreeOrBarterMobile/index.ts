@@ -10,7 +10,7 @@ const sendDebugLog = (hypothesisId: string, message: string, data: Record<string
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       sessionId: 'debug-session',
-      runId: 'pre-fix-3',
+      runId: 'pre-fix-4',
       hypothesisId,
       location: 'index.ts',
       message,
@@ -56,6 +56,13 @@ try {
     nativeModuleKeys: NativeModules ? Object.keys(NativeModules) : null,
   });
   // #endregion
+  // #region agent log
+  sendDebugLog('H6', 'NativeModules detail', {
+    hasDefault: !!(NativeModules as any)?.default,
+    defaultKeys: (NativeModules as any)?.default ? Object.keys((NativeModules as any).default) : null,
+    platformConstantsDefault: (NativeModules as any)?.default?.PlatformConstants ?? null,
+  });
+  // #endregion
 } catch (err) {
   // #region agent log
   sendDebugLog('H1', 'NativeModules probe failed', { error: String(err) });
@@ -75,6 +82,12 @@ try {
     platformModuleExists: !!platformModule,
   });
   // #endregion
+  // #region agent log
+  sendDebugLog('H7', 'TurboModuleRegistry platform detail', {
+    platformModuleType: platformModule ? typeof platformModule : null,
+    platformModuleKeys: platformModule ? Object.keys(platformModule) : null,
+  });
+  // #endregion
 } catch (err) {
   // #region agent log
   sendDebugLog('H2', 'TurboModuleRegistry probe failed', { error: String(err) });
@@ -91,6 +104,25 @@ try {
     constantsPresent: !!Platform?.constants,
   });
   // #endregion
+  try {
+    const RNVersion = require('react-native/Libraries/Core/ReactNativeVersion').version;
+    // #region agent log
+    sendDebugLog('H8', 'ReactNativeVersion', { version: RNVersion });
+    // #endregion
+  } catch {}
+  try {
+    const PlatformConstantsModule = require('react-native/Libraries/ReactNative/PlatformConstants');
+    // #region agent log
+    sendDebugLog('H9', 'PlatformConstants module require', {
+      moduleType: PlatformConstantsModule ? typeof PlatformConstantsModule : null,
+      moduleKeys: PlatformConstantsModule ? Object.keys(PlatformConstantsModule) : null,
+    });
+    // #endregion
+  } catch (err) {
+    // #region agent log
+    sendDebugLog('H9', 'PlatformConstants module require failed', { error: String(err) });
+    // #endregion
+  }
 } catch (err) {
   // #region agent log
   sendDebugLog('H3', 'Platform require failed', { error: String(err) });
