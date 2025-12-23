@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -141,11 +141,12 @@ export default function ProfileScreen() {
 
   const renderItem = ({ item, index }: { item: Item; index: number }) => {
     const isRightColumn = numColumns === 2 ? index % 2 === 1 : (index % numColumns === numColumns - 1);
+    const itemWidth: `${number}%` = `${100 / numColumns}%`;
     return (
       <View style={[
         styles.itemWrapper, 
         isRightColumn && styles.itemWrapperRight,
-        { width: `${100 / numColumns}%` }
+        { width: itemWidth }
       ]}>
         <ItemCard 
           item={item} 
