@@ -15,12 +15,15 @@ declare
   fn_endpoint text;
   service_role_key text;
   payload jsonb;
+  request_id bigint;
 begin
   fn_endpoint := current_setting('app.settings.functions_endpoint', true);
   service_role_key := current_setting('app.settings.service_role_key', true);
 
-  -- If config is missing, do nothing
+  -- If config is missing, do nothing (but log it)
   if fn_endpoint is null or service_role_key is null then
+    raise warning 'send_push_for_notification: missing config (endpoint: %, key: %)', 
+      fn_endpoint is not null, service_role_key is not null;
     return new;
   end if;
 
@@ -35,17 +38,26 @@ begin
     )
   );
 
-  perform
-    net.http_post(
-      url := fn_endpoint,
-      headers := jsonb_build_object(
-        'Authorization', 'Bearer ' || service_role_key,
-        'Content-Type', 'application/json'
-      ),
-      body := payload
-    );
+  -- Use net.http_post and capture the request ID
+  select net.http_post(
+    url := fn_endpoint,
+    headers := jsonb_build_object(
+      'Authorization', 'Bearer ' || service_role_key,
+      'Content-Type', 'application/json'
+    ),
+    body := payload
+  ) into request_id;
+
+  -- Log the request ID for debugging (check net.http_request_queue table)
+  raise log 'send_push_for_notification: HTTP request queued with ID % for user %', 
+    request_id, new.user_id;
 
   return new;
+exception
+  when others then
+    -- Log any errors but don't fail the insert
+    raise warning 'send_push_for_notification error: %', SQLERRM;
+    return new;
 end;
 $$;
 
