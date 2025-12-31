@@ -46,6 +46,11 @@ const getExpoProjectId = () =>
 
 const registerForPushNotifications = async (userId?: string) => {
   try {
+    const projectId = getExpoProjectId();
+    if (!projectId) {
+      console.warn('Push registration: missing projectId (check EAS config)');
+    }
+
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
 
@@ -75,7 +80,6 @@ const registerForPushNotifications = async (userId?: string) => {
       });
     }
 
-    const projectId = getExpoProjectId();
     const pushToken = await Notifications.getExpoPushTokenAsync(
       projectId ? { projectId } : undefined
     );
@@ -88,6 +92,9 @@ const registerForPushNotifications = async (userId?: string) => {
         app_version: Constants.expoConfig?.version ?? 'unknown',
         last_seen_at: new Date().toISOString(),
       });
+      console.log('Push token stored', { platform: Platform.OS, projectId });
+    } else {
+      console.warn('Push registration skipped: missing userId or token');
     }
   } catch (error) {
     console.warn('Failed to register for push notifications', error);
@@ -143,7 +150,7 @@ function Tabs() {
           if (!isMounted) return;
           setMessageBadge(msgCount && msgCount > 0 ? msgCount : undefined);
           setNotificationBadge(notifCount && notifCount > 0 ? notifCount : undefined);
-          const totalBadge = (msgCount ?? 0) + (notifCount ?? 0);
+          const totalBadge = notifCount ?? 0; // App icon badge should reflect notifications only
           if (Platform.OS === 'ios') {
             Notifications.setBadgeCountAsync(totalBadge).catch(() => {});
           }

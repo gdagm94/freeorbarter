@@ -115,6 +115,7 @@ src/
     -d "{\"user_id\":\"$USER_ID\",\"title\":\"Test push\",\"body\":\"Hello from QA\",\"data\":{\"type\":\"diagnostic\"}}"
   ```
 - QA checklist: foreground alert banners, background/locked delivery, badge increments, badge cleared after reading, quick reply from notification, and message deep-link navigation.
+- Dev client debugging: check console for `Push token stored` log, confirm `projectId` appears, and verify `user_push_tokens` row is created for your user after login.
 
 ## Troubleshooting
 

@@ -102,25 +102,18 @@ serve(async (req) => {
       });
     }
 
-    const { count: unreadMessages, error: unreadMsgError } = await supabase
-      .from('messages')
-      .select('id', { count: 'exact', head: true })
-      .eq('receiver_id', user_id)
-      .eq('read', false);
-
     const { count: unreadNotifications, error: unreadNotifError } = await supabase
       .from('notifications')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', user_id)
       .eq('read', false);
 
-    if (unreadMsgError) console.warn('Badge query failed (messages)', unreadMsgError);
     if (unreadNotifError) console.warn('Badge query failed (notifications)', unreadNotifError);
 
     const computedBadge =
       typeof badge === 'number'
         ? badge
-        : (unreadMessages ?? 0) + (unreadNotifications ?? 0);
+        : (unreadNotifications ?? 0);
 
     const expoMessages = tokens.map((token) => ({
       to: token.push_token,
