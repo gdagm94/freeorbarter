@@ -7,6 +7,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
 import { useEffect, useState, useRef } from 'react';
+import Constants from 'expo-constants';
 import { supabase } from './src/lib/supabase';
 
 // ... (Keep all your screen imports exactly as they were) ...
@@ -39,6 +40,60 @@ import { PolicyAcceptanceModal } from './src/components/PolicyAcceptanceModal';
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
+const getExpoProjectId = () =>
+  // Expo Go / dev client uses expoConfig; EAS runtime exposes easConfig
+  Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+
+const registerForPushNotifications = async (userId?: string) => {
+  try {
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync({
+        ios: {
+          allowAlert: true,
+          allowBadge: true,
+          allowSound: true,
+          allowCriticalAlerts: true,
+        },
+      });
+      finalStatus = status;
+    }
+
+    if (finalStatus !== 'granted') return;
+
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.MAX,
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+        sound: 'default',
+        enableVibrate: true,
+        showBadge: true,
+        vibrationPattern: [0, 250, 250, 250],
+      });
+    }
+
+    const projectId = getExpoProjectId();
+    const pushToken = await Notifications.getExpoPushTokenAsync(
+      projectId ? { projectId } : undefined
+    );
+
+    if (userId && pushToken?.data) {
+      await supabase.from('user_push_tokens').upsert({
+        user_id: userId,
+        push_token: pushToken.data,
+        platform: Platform.OS,
+        app_version: Constants.expoConfig?.version ?? 'unknown',
+        last_seen_at: new Date().toISOString(),
+      });
+    }
+  } catch (error) {
+    console.warn('Failed to register for push notifications', error);
+  }
+};
+
 // ... (Keep Placeholder function and Tabs function exactly as they were) ...
 function Placeholder({ title }: { title: string }) {
   return (
@@ -63,6 +118,9 @@ function Tabs() {
         setMessageBadge(undefined);
         setNotificationBadge(undefined);
         setPolicyStatus(null);
+        if (Platform.OS === 'ios') {
+          Notifications.setBadgeCountAsync(0).catch(() => {});
+        }
         return;
       }
   
@@ -85,6 +143,10 @@ function Tabs() {
           if (!isMounted) return;
           setMessageBadge(msgCount && msgCount > 0 ? msgCount : undefined);
           setNotificationBadge(notifCount && notifCount > 0 ? notifCount : undefined);
+          const totalBadge = (msgCount ?? 0) + (notifCount ?? 0);
+          if (Platform.OS === 'ios') {
+            Notifications.setBadgeCountAsync(totalBadge).catch(() => {});
+          }
         } catch (error) {
           console.error('Error fetching badge counts:', error);
         }
@@ -269,7 +331,7 @@ function Tabs() {
 }
 
 export default function App() {
-  const { loading } = useAuth();
+  const { loading, user } = useAuth();
   const navRef = useRef<any>(null);
 
   // --- NEW: Handle LogBox warnings safely here ---
@@ -313,28 +375,19 @@ export default function App() {
     Notifications.setNotificationHandler({
       handleNotification: async () => ({ 
         shouldShowAlert: true, 
-        shouldPlaySound: false, 
-        shouldSetBadge: false,
+        shouldPlaySound: true, 
+        shouldSetBadge: true,
         shouldShowBanner: true,
         shouldShowList: true,
-        priority: Notifications.AndroidNotificationPriority.HIGH,
+        priority: Notifications.AndroidNotificationPriority.MAX,
       }),
     });
   }, []);
 
   useEffect(() => {
-    const register = async () => {
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
-      if (existingStatus !== 'granted') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
-      }
-      if (finalStatus !== 'granted') return;
-      await Notifications.getExpoPushTokenAsync();
-    };
-    register();
-  }, []);
+    if (!user?.id) return;
+    registerForPushNotifications(user.id);
+  }, [user?.id]);
 
   useEffect(() => {
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {

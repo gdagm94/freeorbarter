@@ -46,6 +46,7 @@ import {
 } from '../components/ReportContentSheet';
 import { useBlockStatus } from '../hooks/useBlockStatus';
 import { blockUserWithCleanup, unblockUserPair } from '../lib/blocks';
+import { sendPushNotification } from '../lib/push';
 
 export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -82,6 +83,20 @@ export default function ChatScreen() {
   const lastThreadCreateFailure = useRef<number | null>(null);
   const threadCreationDisabledRef = useRef<boolean>(false);
   const getTopic = () => (itemId ? 'item' : 'direct');
+  const sendRecipientPush = async (bodyText: string, extraData: Record<string, any> = {}) => {
+    if (!otherUserId || !user) return;
+    await sendPushNotification({
+      userId: otherUserId,
+      title: user.full_name ? `${user.full_name}` : 'New message',
+      body: bodyText,
+      data: {
+        type: 'direct_message',
+        sender_id: user.id,
+        item_id: itemId || null,
+        ...extraData,
+      },
+    });
+  };
   const {
     blockedByMe,
     blockedByOther,
@@ -621,6 +636,11 @@ export default function ChatScreen() {
         return;
       }
 
+      await sendRecipientPush(messageContent || 'Sent you an attachment', {
+        thread_id: activeThreadId,
+        item_id: itemId || null,
+      });
+
       setNewMessage('');
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       fetchMessages();
@@ -658,6 +678,8 @@ export default function ChatScreen() {
           read: false,
           topic: getTopic(),
         }]);
+
+      await sendRecipientPush(actionMessage, { item_id: itemId || null });
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert('Success', `Offer ${action}ed successfully`);
@@ -710,6 +732,8 @@ export default function ChatScreen() {
         return;
       }
 
+      await sendRecipientPush(replyContent, { item_id: itemId || null });
+
       setNewMessage('');
       setReplyingTo(null);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -760,6 +784,8 @@ export default function ChatScreen() {
         Alert.alert('Error', 'Failed to send file');
         return;
       }
+
+      await sendRecipientPush(`📎 ${fileName}`, { item_id: itemId || null });
 
       setShowFileAttachment(false);
       fetchMessages();
@@ -822,6 +848,13 @@ export default function ChatScreen() {
         Alert.alert('Error', 'Failed to send voice message');
         return;
       }
+
+      await sendRecipientPush(
+        `🎤 Voice message (${Math.floor(duration / 60)}:${(duration % 60)
+          .toString()
+          .padStart(2, '0')})`,
+        { item_id: itemId || null }
+      );
 
       setShowVoiceMessage(false);
       fetchMessages();

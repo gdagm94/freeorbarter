@@ -8,6 +8,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   version: '1.0.5',
   orientation: 'default',
   userInterfaceStyle: 'light',
+  notification: {
+    // Allow alerts/badges while foreground on iOS; Android channel is created in code
+    iosDisplayInForeground: true,
+  },
   splash: {
     resizeMode: 'contain',
     backgroundColor: '#ffffff'
@@ -18,17 +22,24 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     supportsTablet: true,
     bundleIdentifier: 'com.freeorbarter.mobile',
+    entitlements: {
+      'com.apple.developer.aps-environment': 'production',
+    },
     infoPlist: {
       NSPhotoLibraryUsageDescription: 'We need access to your photos to let you upload item images.',
       NSPhotoLibraryAddUsageDescription: 'We need permission to save images to your photo library.',
       NSCameraUsageDescription: 'We need camera access to take photos of your items.',
+      NSUserNotificationUsageDescription: 'We use notifications to alert you about new messages, offers, and account updates.',
+      UIBackgroundModes: ['remote-notification', 'fetch'],
       ITSAppUsesNonExemptEncryption: false
-    }
+    },
   },
   android: {
     package: 'com.freeorbarter.mobile'
   },
-  plugins: [],
+  plugins: [
+    'expo-notifications',
+  ],
   extra: {
     supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
     supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
