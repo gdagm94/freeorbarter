@@ -45,7 +45,11 @@ serve(async (req) => {
     });
   }
 
-  const authHeader = req.headers.get('Authorization');
+  const authHeaderRaw = req.headers.get('Authorization') || req.headers.get('authorization');
+  const bearerToken = authHeaderRaw?.replace(/Bearer\s+/i, '') ?? null;
+  const isServiceRoleCall = !!(bearerToken && serviceRoleKey && bearerToken === serviceRoleKey);
+
+  const authHeader = authHeaderRaw;
   const supabase = createClient(supabaseUrl, serviceRoleKey, {
     global: {
       headers: authHeader ? { Authorization: authHeader } : undefined,
@@ -60,15 +64,17 @@ serve(async (req) => {
       });
     }
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    if (!isServiceRoleCall) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-    if (!user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      if (!user) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     }
 
     const payload = (await req.json()) as PushRequest;
@@ -148,6 +154,18 @@ serve(async (req) => {
         }
       });
     }
+
+    console.log(
+      JSON.stringify({
+        context: 'send-push',
+        user_id,
+        token_count: tokens.length,
+        sent: sentCount,
+        badge: computedBadge,
+        invalidTokens,
+        response: result,
+      })
+    );
 
     if (invalidTokens.length > 0) {
       await supabase
