@@ -82,6 +82,7 @@ export default function ChatScreen() {
   const threadChannelRef = useRef<any>(null);
   const lastThreadCreateFailure = useRef<number | null>(null);
   const threadCreationDisabledRef = useRef<boolean>(false);
+  const initialScrollDoneRef = useRef(false);
   const getTopic = () => (itemId ? 'item' : 'direct');
   const sendRecipientPush = async (bodyText: string, extraData: Record<string, any> = {}) => {
     if (!otherUserId || !user) return;
@@ -110,6 +111,21 @@ export default function ChatScreen() {
       : null;
   const canSendMessages = Boolean(user && otherUserId && !isEitherBlocked);
   const flatListRef = useRef<FlatList>(null);
+
+  // Reset initial scroll guard when switching conversations
+  useEffect(() => {
+    initialScrollDoneRef.current = false;
+  }, [otherUserId]);
+
+  // One-time, non-animated jump to the latest message on initial load
+  useEffect(() => {
+    if (!initialScrollDoneRef.current && messages.length > 0) {
+      requestAnimationFrame(() => {
+        flatListRef.current?.scrollToEnd({ animated: false });
+        initialScrollDoneRef.current = true;
+      });
+    }
+  }, [messages.length]);
   
   // Message drafts hook
   const { saveDraft, clearDrafts } = useMessageDrafts(
@@ -1189,7 +1205,6 @@ export default function ChatScreen() {
         renderItem={renderMessage}
         keyExtractor={(item: Message) => item.id}
         contentContainerStyle={styles.messagesContainer}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>No messages yet</Text>

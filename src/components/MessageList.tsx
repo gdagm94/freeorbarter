@@ -101,6 +101,7 @@ export function MessageList({
   const [contextMenuMessageId, setContextMenuMessageId] = useState<string | null>(null);
   const [showSafetyMenu, setShowSafetyMenu] = useState(false);
   const [blockActionLoading, setBlockActionLoading] = useState(false);
+  const initialScrollDoneRef = useRef(false);
   const safetyMenuRef = useRef<HTMLDivElement | null>(null);
   const {
     blockedByMe,
@@ -607,9 +608,18 @@ export function MessageList({
     }
   };
 
+  // Reset initial scroll guard when conversation context changes
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    initialScrollDoneRef.current = false;
+  }, [otherUserId, itemId, conversationType]);
+
+  // One-time, non-animated jump to the latest message on initial load
+  useEffect(() => {
+    if (!initialScrollDoneRef.current && messages.length > 0) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+      initialScrollDoneRef.current = true;
+    }
+  }, [messages.length]);
 
   useEffect(() => {
     if (!showSafetyMenu) return;
