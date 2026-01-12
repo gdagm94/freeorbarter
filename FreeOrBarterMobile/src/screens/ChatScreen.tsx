@@ -579,8 +579,18 @@ export default function ChatScreen() {
 
   const sendMessage = async (content?: string, imageUrl?: string) => {
     const messageContent = content || newMessage.trim();
-    if (!messageContent && !imageUrl) return;
-    if (!user || !otherUserId) return;
+    if (!messageContent && !imageUrl) {
+      // #region agent log
+      fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'H0',location:'ChatScreen.tsx:sendMessage:empty',message:'empty message guard hit',data:{hasContent:Boolean(messageContent),hasImage:Boolean(imageUrl)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      return;
+    }
+    if (!user || !otherUserId) {
+      // #region agent log
+      fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'H0',location:'ChatScreen.tsx:sendMessage:noUser',message:'missing user or otherUserId',data:{userPresent:Boolean(user),otherUserIdPresent:Boolean(otherUserId)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      return;
+    }
      if (isEitherBlocked) {
        Alert.alert('Messaging disabled', 'You cannot send messages when a block is in place.');
        return;
@@ -626,6 +636,9 @@ export default function ChatScreen() {
 
     try {
       const activeThreadId = threadId || (await ensureThread());
+      // #region agent log
+      fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H1',location:'ChatScreen.tsx:sendMessage:start',message:'send start',data:{activeThreadId,threadId,topic:getTopic(),itemId,otherUserId,userId:user.id,hasContent:Boolean(messageContent),hasImage:Boolean(imageUrl)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
 
       const messageData: Partial<Message> = {
         sender_id: user.id,
@@ -647,10 +660,14 @@ export default function ChatScreen() {
       if (error) {
         console.error('Error sending message:', error);
         // #region agent log
-        fetch('http://10.0.0.207:7242/ingest/7324c825-d016-44a1-91f7-2f773ba2ff20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'H6',location:'ChatScreen.tsx:sendMessage:insertError',message:'sendMessage insert error',data:{errorMessage:error.message, code:(error as any)?.code},timestamp:Date.now()})}).catch(()=>{});
+        fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H2',location:'ChatScreen.tsx:sendMessage:insertError',message:'supabase insert error',data:{errorMessage:error.message, code:(error as any)?.code},timestamp:Date.now()})}).catch(()=>{});
         // #endregion
         return;
       }
+
+      // #region agent log
+      fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H3',location:'ChatScreen.tsx:sendMessage:success',message:'message inserted',data:{threadId:activeThreadId},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
 
       await sendRecipientPush(messageContent || 'Sent you an attachment', {
         thread_id: activeThreadId,
