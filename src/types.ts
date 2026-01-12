@@ -31,7 +31,6 @@ export interface Message {
   content: string;
   created_at: string;
   item_id: string | null; // Made nullable for direct messages
-  thread_id?: string | null;
   offer_item_id?: string;
   read: boolean;
   is_offer: boolean;

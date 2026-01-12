@@ -24,7 +24,6 @@ import {
   ReportContentSheet,
   ReportTargetPayload,
 } from '../components/ReportContentSheet';
-import { ImageViewer } from '../components/ImageViewer';
 
 interface ItemWithUser extends Item {
   users?: {
@@ -41,10 +40,6 @@ export default function ItemDetailsScreen() {
   const [isWatched, setIsWatched] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [reportTarget, setReportTarget] = useState<ReportTargetPayload | null>(null);
-  const [imageAspectRatio, setImageAspectRatio] = useState(1.25);
-  const [isViewerVisible, setIsViewerVisible] = useState(false);
-  const [viewerIndex, setViewerIndex] = useState(0);
-  const viewerIndexRef = React.useRef(0);
   const route = useRoute<any>();
   const navigation = useNavigation<any>();
   const { user } = useAuth();
@@ -251,30 +246,6 @@ export default function ItemDetailsScreen() {
     });
   };
 
-  useEffect(() => {
-    const uri = item?.images?.[currentImageIndex];
-    if (!uri) return;
-
-    Image.getSize(
-      uri,
-      (width, height) => {
-        if (!width || !height) return;
-        const ratio = width / height;
-        if (Number.isFinite(ratio) && ratio > 0) {
-          setImageAspectRatio(ratio);
-        }
-      },
-      () => setImageAspectRatio(1),
-    );
-  }, [item?.images, currentImageIndex]);
-
-  const openImageViewer = (index: number) => {
-    if (!item?.images?.length) return;
-    setViewerIndex(index);
-    viewerIndexRef.current = index;
-    setIsViewerVisible(true);
-  };
-
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -307,35 +278,7 @@ export default function ItemDetailsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-
-      <View style={[styles.topBar, { paddingHorizontal: padding }]}>
-        <TouchableOpacity
-          style={styles.topBarButton}
-          onPress={() => navigation.goBack()}
-          accessibilityLabel="Go back"
-        >
-          <Text style={styles.topBarButtonText}>‹</Text>
-        </TouchableOpacity>
-        <View style={styles.topBarActions}>
-          <TouchableOpacity
-            style={styles.topBarButton}
-            onPress={handleShare}
-            accessibilityLabel="Share listing"
-          >
-            <Text style={styles.topBarButtonText}>⤴</Text>
-          </TouchableOpacity>
-          {!isOwnItem && (
-            <TouchableOpacity
-              style={styles.topBarButton}
-              onPress={openReportSheet}
-              accessibilityLabel="Report listing"
-            >
-              <Text style={styles.topBarButtonText}>⚑</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
+      <StatusBar barStyle="light-content" backgroundColor="#000000" />
       
       <ScrollView 
         style={styles.scrollView} 
@@ -346,17 +289,17 @@ export default function ItemDetailsScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Image Gallery */}
-        <View style={[styles.imageContainer, { aspectRatio: imageAspectRatio }]}>
+        <View style={styles.imageContainer}>
           <TouchableOpacity 
             style={styles.imageWrapper}
-            onPress={() => openImageViewer(currentImageIndex)}
+            onPress={nextImage}
             activeOpacity={0.9}
           >
             {item.images && item.images.length > 0 ? (
               <Image 
                 source={{ uri: item.images[currentImageIndex] }} 
                 style={styles.image}
-                resizeMode="contain"
+                resizeMode="cover"
               />
             ) : (
               <View style={styles.placeholderImage}>
@@ -369,22 +312,43 @@ export default function ItemDetailsScreen() {
           {/* Image Navigation */}
           {item.images.length > 1 && (
             <>
-              <TouchableOpacity
-                style={styles.prevButton}
-                onPress={prevImage}
-                accessibilityLabel="Previous photo"
-              >
+              <TouchableOpacity style={styles.prevButton} onPress={prevImage}>
                 <Text style={styles.navButtonText}>‹</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.nextButton}
-                onPress={nextImage}
-                accessibilityLabel="Next photo"
-              >
+              <TouchableOpacity style={styles.nextButton} onPress={nextImage}>
                 <Text style={styles.navButtonText}>›</Text>
               </TouchableOpacity>
+              <View style={styles.imageIndicator}>
+                <Text style={styles.imageIndicatorText}>
+                  {currentImageIndex + 1} / {item.images.length}
+                </Text>
+              </View>
             </>
           )}
+
+          {/* Header Actions */}
+          <View style={styles.headerActions}>
+            <TouchableOpacity 
+              style={styles.headerButton}
+              onPress={() => navigation.goBack()}
+            >
+              <Text style={styles.headerButtonText}>‹</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.headerButton}
+              onPress={handleShare}
+            >
+              <Text style={styles.headerButtonText}>⤴</Text>
+            </TouchableOpacity>
+            {!isOwnItem && (
+              <TouchableOpacity
+                style={styles.headerButton}
+                onPress={openReportSheet}
+              >
+                <Text style={styles.headerButtonText}>⚑</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
           {/* Type and Status Badges */}
           <View style={styles.badgeContainer}>
@@ -405,25 +369,6 @@ export default function ItemDetailsScreen() {
             )}
           </View>
         </View>
-
-        {item.images.length > 1 && (
-          <View style={styles.inlineIndicator}>
-            <Text style={styles.inlineIndicatorText}>
-              {currentImageIndex + 1} / {item.images.length}
-            </Text>
-            <View style={styles.dotsRow}>
-              {item.images.map((_, index) => (
-                <View
-                  key={index}
-                  style={[
-                    styles.dot,
-                    index === currentImageIndex && styles.dotActive,
-                  ]}
-                />
-              ))}
-            </View>
-          </View>
-        )}
 
         {/* Content */}
         <View style={styles.content}>
@@ -549,22 +494,6 @@ export default function ItemDetailsScreen() {
         target={reportTarget}
         onClose={() => setReportTarget(null)}
       />
-
-      {item.images?.length > 0 && (
-        <ImageViewer
-          visible={isViewerVisible}
-          images={item.images}
-          initialIndex={viewerIndex}
-          onIndexChange={(index) => {
-            viewerIndexRef.current = index;
-          }}
-          onClose={() => {
-            setIsViewerVisible(false);
-            setCurrentImageIndex(viewerIndexRef.current);
-            setViewerIndex(viewerIndexRef.current);
-          }}
-        />
-      )}
     </SafeAreaView>
   );
 }
@@ -617,32 +546,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     textAlign: 'center',
   },
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-  },
-  topBarActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  topBarButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F1F5F9',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  topBarButtonText: {
-    fontSize: 18,
-    color: '#0F172A',
-    fontWeight: '700',
-  },
   backButton: {
     backgroundColor: '#3B82F6',
     paddingHorizontal: 24,
@@ -657,11 +560,11 @@ const styles = StyleSheet.create({
   imageContainer: {
     position: 'relative',
     width: '100%',
+    maxWidth: 800,
+    aspectRatio: 1.25,
     marginHorizontal: 'auto',
     backgroundColor: '#000000',
     alignSelf: 'center',
-    borderRadius: 12,
-    overflow: 'hidden',
   },
   imageWrapper: {
     width: '100%',
@@ -687,39 +590,77 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
   },
+  headerActions: {
+    position: 'absolute',
+    top: 50,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+  },
+  headerButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerButtonText: {
+    color: '#FFFFFF',
+    fontSize: 24,
+    fontWeight: '600',
+  },
   prevButton: {
     position: 'absolute',
-    left: 12,
+    left: 20,
     top: '50%',
-    marginTop: -18,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    marginTop: -22,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   nextButton: {
     position: 'absolute',
-    right: 12,
+    right: 20,
     top: '50%',
-    marginTop: -18,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    marginTop: -22,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   navButtonText: {
     color: '#FFFFFF',
-    fontSize: 22,
+    fontSize: 28,
     fontWeight: '300',
+  },
+  imageIndicator: {
+    position: 'absolute',
+    bottom: 20,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  imageIndicatorText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
   },
   badgeContainer: {
     position: 'absolute',
-    top: 16,
-    right: 16,
+    top: 100,
+    right: 20,
     alignItems: 'flex-end',
     gap: 8,
   },
@@ -748,29 +689,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 11,
     fontWeight: 'bold',
-  },
-  inlineIndicator: {
-    marginTop: 12,
-    alignItems: 'center',
-    gap: 8,
-  },
-  inlineIndicatorText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#0F172A',
-  },
-  dotsRow: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#E2E8F0',
-  },
-  dotActive: {
-    backgroundColor: '#0EA5E9',
   },
   content: {
     padding: 20,

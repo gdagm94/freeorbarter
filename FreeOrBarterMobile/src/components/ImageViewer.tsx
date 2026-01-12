@@ -1,77 +1,95 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import React from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import ImageViewing from 'react-native-image-viewing';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system';
 
 interface ImageViewerProps {
   visible: boolean;
-  images: string[];
-  initialIndex?: number;
+  imageUrl: string;
   onClose: () => void;
-  onIndexChange?: (index: number) => void;
 }
 
-export function ImageViewer({ visible, images, initialIndex = 0, onClose, onIndexChange }: ImageViewerProps) {
-  if (!images.length) return null;
+export function ImageViewer({ visible, imageUrl, onClose }: ImageViewerProps) {
+  const images = [{ uri: imageUrl }];
 
-  const insets = useSafeAreaInsets();
-  const normalizedImages = useMemo(
-    () => images.map((uri) => ({ uri })),
-    [images],
-  );
+  const handleDownload = async () => {
+    try {
+      if (!(await Sharing.isAvailableAsync())) {
+        Alert.alert('Error', 'Sharing is not available on this device');
+        return;
+      }
 
-  const [currentIndex, setCurrentIndex] = useState(initialIndex);
-
-  useEffect(() => {
-    if (visible) {
-      setCurrentIndex(initialIndex);
+      // Download the image to cache
+      const filename = `image_${Date.now()}.jpg`;
+      const fileUri = `${FileSystem.cacheDirectory}${filename}`;
+      
+      const downloadResult = await FileSystem.downloadAsync(imageUrl, fileUri);
+      
+      if (downloadResult.status === 200) {
+        await Sharing.shareAsync(downloadResult.uri);
+      } else {
+        Alert.alert('Error', 'Failed to download image');
+      }
+    } catch (error) {
+      console.error('Error downloading image:', error);
+      Alert.alert('Error', 'Failed to download image');
     }
-  }, [visible, initialIndex]);
+  };
+
+  const handleShare = async () => {
+    try {
+      if (!(await Sharing.isAvailableAsync())) {
+        Alert.alert('Error', 'Sharing is not available on this device');
+        return;
+      }
+
+      // Download the image to cache
+      const filename = `image_${Date.now()}.jpg`;
+      const fileUri = `${FileSystem.cacheDirectory}${filename}`;
+      
+      const downloadResult = await FileSystem.downloadAsync(imageUrl, fileUri);
+      
+      if (downloadResult.status === 200) {
+        await Sharing.shareAsync(downloadResult.uri, {
+          mimeType: 'image/jpeg',
+          dialogTitle: 'Share Image',
+        });
+      } else {
+        Alert.alert('Error', 'Failed to share image');
+      }
+    } catch (error) {
+      console.error('Error sharing image:', error);
+      Alert.alert('Error', 'Failed to share image');
+    }
+  };
 
   return (
     <ImageViewing
-      images={normalizedImages}
-      imageIndex={currentIndex}
+      images={images}
+      imageIndex={0}
       visible={visible}
       onRequestClose={onClose}
-      onImageIndexChange={(index) => {
-        setCurrentIndex(index);
-        onIndexChange?.(index);
-      }}
-      doubleTapToZoomEnabled
-      swipeToCloseEnabled={false}
-      presentationStyle="overFullScreen"
-      animationType="none"
-      backgroundColor="#000000"
-      HeaderComponent={() => (
-        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-          <TouchableOpacity
-            style={styles.headerButton}
-            onPress={onClose}
-            accessibilityLabel="Close image viewer"
-          >
+      HeaderComponent={({ imageIndex }) => (
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.headerButton} onPress={onClose}>
             <Text style={styles.headerButtonText}>✕</Text>
           </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity style={styles.actionButton} onPress={handleDownload}>
+              <Text style={styles.actionButtonText}>💾</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.actionButton} onPress={handleShare}>
+              <Text style={styles.actionButtonText}>📤</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
-      FooterComponent={() => (
-        <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
-          <View style={styles.footerTop}>
-            <Text style={styles.footerText}>
-              {currentIndex + 1} / {normalizedImages.length}
-            </Text>
-            <View style={styles.dotsRow}>
-              {normalizedImages.map((_, index) => (
-                <View
-                  key={index}
-                  style={[
-                    styles.dot,
-                    index === currentIndex && styles.dotActive,
-                  ]}
-                />
-              ))}
-            </View>
-          </View>
+      FooterComponent={({ imageIndex }) => (
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>
+            {imageIndex + 1} / {images.length}
+          </Text>
         </View>
       )}
     />
@@ -81,11 +99,11 @@ export function ImageViewer({ visible, images, initialIndex = 0, onClose, onInde
 const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
-    justifyContent: 'flex-start',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
   },
   headerButton: {
     width: 40,
@@ -100,11 +118,15 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
   },
+  headerActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
   actionButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -113,32 +135,13 @@ const styles = StyleSheet.create({
   },
   footer: {
     paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingVertical: 15,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
     alignItems: 'center',
-    gap: 12,
-  },
-  footerTop: {
-    alignItems: 'center',
-    gap: 6,
   },
   footerText: {
     color: 'white',
     fontSize: 14,
     fontWeight: '500',
-  },
-  dotsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 8,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.4)',
-  },
-  dotActive: {
-    backgroundColor: '#FFFFFF',
   },
 });

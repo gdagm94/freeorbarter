@@ -20,11 +20,8 @@ export function NotificationDropdown({ onClose, onNotificationRead, onMarkAllAsR
   useEffect(() => {
     if (!user) return;
 
-    let isMounted = true;
-
-    const fetchNotifications = async (options?: { skipLoading?: boolean }) => {
+    const fetchNotifications = async () => {
       try {
-        if (!options?.skipLoading) setLoading(true);
         const { data, error } = await supabase
           .from('notifications')
           .select(`
@@ -40,35 +37,15 @@ export function NotificationDropdown({ onClose, onNotificationRead, onMarkAllAsR
           .limit(10);
 
         if (error) throw error;
-        if (!isMounted) return;
         setNotifications(data || []);
       } catch (err) {
         console.error('Error fetching notifications:', err);
       } finally {
-        if (!options?.skipLoading && isMounted) {
-          setLoading(false);
-        }
+        setLoading(false);
       }
     };
 
     fetchNotifications();
-
-    const channel = supabase
-      .channel(`notifications-dropdown-${user.id}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
-        () => fetchNotifications({ skipLoading: true })
-      )
-      .subscribe();
-
-    const fallbackInterval = setInterval(() => fetchNotifications({ skipLoading: true }), 60000);
-
-    return () => {
-      isMounted = false;
-      channel.unsubscribe();
-      clearInterval(fallbackInterval);
-    };
   }, [user]);
 
   const handleNotificationClick = async (notification: Notification) => {

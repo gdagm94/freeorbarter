@@ -27,13 +27,11 @@ export interface Message {
   content: string;
   created_at: string;
   item_id: string;
-  thread_id?: string;
   offer_item_id?: string;
   read: boolean;
   is_offer: boolean;
   archived: boolean;
   image_url?: string;
-  topic?: 'item' | 'direct';
 }
 
 export interface Conversation {

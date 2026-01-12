@@ -21,6 +21,7 @@ import { supabase } from './lib/supabase';
 import { useAuth } from './hooks/useAuth';
 import { fetchLatestPolicy, PolicyStatus } from './lib/policy';
 import { PolicyModal } from './components/PolicyModal';
+import pusherClient from './lib/pusher';
 
 function App() {
   const { user } = useAuth();
@@ -48,8 +49,7 @@ function App() {
       return;
     }
 
-    let isMounted = true;
-
+    // Initial fetch of unread messages
     const fetchUnreadMessages = async () => {
       try {
         const { data: messages, error } = await supabase
@@ -60,12 +60,11 @@ function App() {
 
         if (error) throw error;
 
-        if (!isMounted) return;
         const totalUnread = messages?.length || 0;
-        const unreadOffersCount = messages?.filter(msg => msg.is_offer)?.length || 0;
+        const unreadOffers = messages?.filter(msg => msg.is_offer)?.length || 0;
 
         setUnreadCount(totalUnread);
-        setUnreadOffers(unreadOffersCount);
+        setUnreadOffers(unreadOffers);
       } catch (err) {
         console.error('Error fetching unread messages:', err);
       }
@@ -73,23 +72,22 @@ function App() {
 
     fetchUnreadMessages();
 
-    // Supabase realtime subscription for message changes
-    const channel = supabase
-      .channel(`messages-unread-${user.id}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'messages', filter: `receiver_id=eq.${user.id}` },
-        () => fetchUnreadMessages()
-      )
-      .subscribe();
+    // Subscribe to new messages
+    const channel = pusherClient.subscribe(`private-user-${user.id}`);
 
-    // Lightweight fallback to guard against missed events
-    const fallbackInterval = setInterval(fetchUnreadMessages, 60000);
+    channel.bind('new-message', async () => {
+      // Refetch unread counts when new message arrives
+      await fetchUnreadMessages();
+    });
+
+    channel.bind('message-read', async () => {
+      // Refetch unread counts when messages are marked as read
+      await fetchUnreadMessages();
+    });
 
     return () => {
-      isMounted = false;
+      channel.unbind_all();
       channel.unsubscribe();
-      clearInterval(fallbackInterval);
     };
   }, [user]);
 

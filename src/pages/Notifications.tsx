@@ -23,11 +23,8 @@ function Notifications() {
 
     if (!user) return;
 
-    let isMounted = true;
-
-    const fetchNotifications = async (options?: { skipLoading?: boolean }) => {
+    const fetchNotifications = async () => {
       try {
-        if (!options?.skipLoading) setLoading(true);
         let query = supabase
           .from('notifications')
           .select(`
@@ -48,35 +45,15 @@ function Notifications() {
         const { data, error } = await query;
 
         if (error) throw error;
-        if (!isMounted) return;
         setNotifications(data || []);
       } catch (err) {
         console.error('Error fetching notifications:', err);
       } finally {
-        if (!options?.skipLoading && isMounted) {
-          setLoading(false);
-        }
+        setLoading(false);
       }
     };
 
     fetchNotifications();
-
-    const channel = supabase
-      .channel(`notifications-page-${user.id}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
-        () => fetchNotifications({ skipLoading: true })
-      )
-      .subscribe();
-
-    const fallbackInterval = setInterval(() => fetchNotifications({ skipLoading: true }), 60000);
-
-    return () => {
-      isMounted = false;
-      channel.unsubscribe();
-      clearInterval(fallbackInterval);
-    };
   }, [user, authLoading, navigate, filter]);
 
   const handleNotificationClick = async (notification: Notification) => {

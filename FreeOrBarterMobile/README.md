@@ -1,4 +1,4 @@
-# FreeorBarter Mobile App
+# Free or Barter Mobile App
 
 A React Native mobile application for the FreeorBarter marketplace, converted from the original web application.
 
@@ -98,24 +98,6 @@ src/
 - [ ] Implement barter offer functionality
 - [ ] Add user profile editing
 - [ ] Implement item watching functionality
-
-## Push notifications (iOS/Android)
-
-- Build with EAS (expo-notifications plugin enabled) and set APNs key/cert in Expo credentials for bundle `com.freeorbarter.mobile`.
-- Device registration happens on login; tokens are stored in `public.user_push_tokens` and deduped.
-- Badge counts come from unread messages + notifications; iOS badges are synced on tab badge refresh.
-- Test a push from your terminal (replace values):
-  ```bash
-  FUNCTION_URL="https://<project-ref>.functions.supabase.co/send-push"
-  SERVICE_ROLE="<SUPABASE_SERVICE_ROLE_KEY>"
-  USER_ID="<recipient user uuid>"
-  curl -X POST "$FUNCTION_URL" \
-    -H "Content-Type: application/json" \
-    -H "Authorization: Bearer $SERVICE_ROLE" \
-    -d "{\"user_id\":\"$USER_ID\",\"title\":\"Test push\",\"body\":\"Hello from QA\",\"data\":{\"type\":\"diagnostic\"}}"
-  ```
-- QA checklist: foreground alert banners, background/locked delivery, badge increments, badge cleared after reading, quick reply from notification, and message deep-link navigation.
-- Dev client debugging: check console for `Push token stored` log, confirm `projectId` appears, and verify `user_push_tokens` row is created for your user after login.
 
 ## Troubleshooting
 

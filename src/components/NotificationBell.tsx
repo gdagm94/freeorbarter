@@ -3,6 +3,7 @@ import { Bell } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { NotificationDropdown } from './NotificationDropdown';
+import pusherClient from '../lib/pusher';
 
 export function NotificationBell() {
   const { user } = useAuth();
@@ -16,8 +17,7 @@ export function NotificationBell() {
       return;
     }
 
-    let isMounted = true;
-
+    // Fetch initial unread count
     const fetchUnreadCount = async () => {
       try {
         const { count, error } = await supabase
@@ -27,7 +27,6 @@ export function NotificationBell() {
           .eq('read', false);
 
         if (error) throw error;
-        if (!isMounted) return;
         setUnreadCount(count || 0);
       } catch (err) {
         console.error('Error fetching unread notifications count:', err);
@@ -36,21 +35,17 @@ export function NotificationBell() {
 
     fetchUnreadCount();
 
-    const channel = supabase
-      .channel(`notifications-count-${user.id}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
-        () => fetchUnreadCount()
-      )
-      .subscribe();
-
-    const fallbackInterval = setInterval(fetchUnreadCount, 60000);
+    // Subscribe to new notifications
+    const channel = pusherClient.subscribe(`private-user-${user.id}`);
+    
+    channel.bind('new-notification', () => {
+      // Increment unread count
+      setUnreadCount(prev => prev + 1);
+    });
 
     return () => {
-      isMounted = false;
+      channel.unbind_all();
       channel.unsubscribe();
-      clearInterval(fallbackInterval);
     };
   }, [user]);
 

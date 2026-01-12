@@ -26,7 +26,7 @@ export function VoiceMessagePlayer({ audioUrl, duration, isOwnMessage }: VoiceMe
     };
   }, [sound]);
 
-  const loadSound = async (): Promise<Audio.Sound | null> => {
+  const loadSound = async () => {
     try {
       setIsLoading(true);
       
@@ -60,57 +60,62 @@ export function VoiceMessagePlayer({ audioUrl, duration, isOwnMessage }: VoiceMe
           }
         }
       });
-
-      return newSound;
     } catch (error) {
       console.error('Error loading audio:', error);
-      return null;
     } finally {
       setIsLoading(false);
     }
   };
 
-  const startPositionUpdate = (activeSound: Audio.Sound) => {
+  const playPause = async () => {
+    if (!sound) {
+      await loadSound();
+      // After loading, check if sound is ready and play
+      if (sound) {
+        const status = await sound.getStatusAsync();
+        if (status.isLoaded) {
+          await sound.playAsync();
+          startPositionUpdate();
+        }
+      }
+      return;
+    }
+
+    try {
+      // Check if sound is loaded before playing
+      const status = await sound.getStatusAsync();
+      if (!status.isLoaded) {
+        await loadSound();
+        return;
+      }
+
+      if (isPlaying) {
+        await sound.pauseAsync();
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+        }
+      } else {
+        await sound.playAsync();
+        startPositionUpdate();
+      }
+    } catch (error) {
+      console.error('Error playing/pausing audio:', error);
+    }
+  };
+
+  const startPositionUpdate = () => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
     }
     
     intervalRef.current = setInterval(async () => {
-      const status = await activeSound.getStatusAsync();
-      if (status.isLoaded) {
-        setPosition(status.positionMillis || 0);
+      if (sound) {
+        const status = await sound.getStatusAsync();
+        if (status.isLoaded) {
+          setPosition(status.positionMillis || 0);
+        }
       }
     }, 100);
-  };
-
-  const ensureSound = async (): Promise<Audio.Sound | null> => {
-    if (sound) return sound;
-    return loadSound();
-  };
-
-  const playPause = async () => {
-    try {
-      let currentSound = await ensureSound();
-      if (!currentSound) return;
-
-      const status = await currentSound.getStatusAsync();
-      if (!status.isLoaded) {
-        currentSound = await loadSound();
-        if (!currentSound) return;
-      }
-
-      if (isPlaying) {
-        await currentSound.pauseAsync();
-        if (intervalRef.current) {
-          clearInterval(intervalRef.current);
-        }
-      } else {
-        await currentSound.playAsync();
-        startPositionUpdate(currentSound);
-      }
-    } catch (error) {
-      console.error('Error playing/pausing audio:', error);
-    }
   };
 
   const formatTime = (milliseconds: number) => {

@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { Message } from '../types';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Image as ImageIcon, Send, Shield, Flag, Ban, Unlock } from 'lucide-react';
+import pusherClient from '../lib/pusher';
 import { debounce } from 'throttle-debounce';
 import { MessageReactions } from './MessageReactions';
 import { ReadReceipt } from './ReadReceipt';
@@ -71,7 +72,6 @@ export function MessageList({
   onReportUser,
 }: MessageListProps) {
   const [messages, setMessages] = useState<MessageWithOfferItem[]>([]);
-  const [threadId, setThreadId] = useState<string | null>(null);
   const [newMessage, setNewMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [otherUserTyping, setOtherUserTyping] = useState(false);
@@ -118,11 +118,33 @@ export function MessageList({
 
   // Message drafts hook
   const { saveDraft, clearDrafts } = useMessageDrafts(currentUserId, otherUserId, conversationType, itemId);
-  const threadChannelRef = useRef<any>(null);
 
   // Debounced function to emit typing status
   const emitTypingStatus = debounce(1000, async (isTyping: boolean) => {
-    // Typing events not wired to room channel yet; skip for now.
+    try {
+      const channelName = conversationType === 'unified' 
+        ? `private-user-${[currentUserId, otherUserId].sort().join('-')}`
+        : conversationType === 'direct_message' 
+        ? `private-dm-${[currentUserId, otherUserId].sort().join('-')}`
+        : `private-messages-${itemId}`;
+
+      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pusher-trigger`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          channel: channelName,
+          event: isTyping ? 'typing.start' : 'typing.stop',
+          data: {
+            userId: currentUserId
+          }
+        })
+      });
+    } catch (err) {
+      console.error('Error sending typing status:', err);
+    }
   });
 
   const markMessagesAsRead = async () => {
@@ -140,13 +162,15 @@ export function MessageList({
         .eq('sender_id', otherUserId)
         .eq('read', false);
 
-      if (threadId) {
-        query = query.eq('thread_id', threadId);
-      } else if (conversationType === 'item' && itemId) {
+      // For unified conversations, we don't filter by item_id
+      // For item conversations, we filter by specific item_id
+      // For direct_message conversations, we filter by null item_id
+      if (conversationType === 'item' && itemId) {
         query = query.eq('item_id', itemId);
       } else if (conversationType === 'direct_message') {
         query = query.is('item_id', null);
       }
+      // For unified conversations, we don't add any item_id filter
 
       const { error } = await query;
       
@@ -195,201 +219,185 @@ export function MessageList({
     }
   };
 
-  const ensureThreadMembers = async (id: string) => {
-    try {
-      await supabase
-        .from('thread_members')
-        .upsert(
-          [
-            { thread_id: id, user_id: currentUserId },
-            { thread_id: id, user_id: otherUserId },
-          ],
-          { onConflict: 'thread_id,user_id' }
-        );
-    } catch (err) {
-      console.error('Error ensuring thread members:', err);
-    }
-  };
-
-  const ensureThread = async (): Promise<string | null> => {
-    if (threadId) return threadId;
-
-    try {
-      const { data: existingMessages, error: existingError } = await supabase
-        .from('messages')
-        .select('thread_id')
-        .or(
-          `and(sender_id.eq.${currentUserId},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${currentUserId})`
-        )
-        .not('thread_id', 'is', null)
-        .order('created_at', { ascending: false })
-        .limit(1);
-
-      if (!existingError && existingMessages && existingMessages.length > 0 && existingMessages[0].thread_id) {
-        const existing = existingMessages[0].thread_id as string;
-        setThreadId(existing);
-        await ensureThreadMembers(existing);
-        subscribeToThread(existing);
-        return existing;
-      }
-
-      const title = conversationType === 'item' ? 'Item conversation' : 'Direct conversation';
-
-      // Create with item_id null to satisfy RLS when user isn't item owner
-      const { data: created, error: createError } = await supabase
-        .from('message_threads')
-        .insert([
-          {
-            title,
-            item_id: null,
-            created_by: currentUserId,
-          },
-        ])
-        .select('id')
-        .single();
-
-      if (createError) throw createError;
-      if (created?.id) {
-        setThreadId(created.id);
-        await ensureThreadMembers(created.id);
-        subscribeToThread(created.id);
-        return created.id;
-      }
-    } catch (err) {
-      console.error('Error ensuring thread:', err);
-    }
-
-    return null;
-  };
-
-  const getActiveThreadId = async (): Promise<string | null> => {
-    const existing = threadId || (await ensureThread());
-    return existing || null;
-  };
-
-  const subscribeToThread = (id: string) => {
-    if (threadChannelRef.current) {
-      supabase.removeChannel(threadChannelRef.current);
-      threadChannelRef.current = null;
-    }
-
-    threadChannelRef.current = supabase
-      .channel(`room:${id}:messages`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'messages', filter: `thread_id=eq.${id}` },
-        () => fetchMessagesInternal(id)
-      )
-      .subscribe();
-  };
-
   useEffect(() => {
-    return () => {
-      if (threadChannelRef.current) {
-        supabase.removeChannel(threadChannelRef.current);
-        threadChannelRef.current = null;
-      }
-    };
-  }, []);
-
-  const fetchMessagesInternal = async (threadOverride?: string | null) => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      if (!otherUserId || !UUID_REGEX.test(otherUserId)) {
-        console.error('Invalid user ID format:', otherUserId);
-        setError('Invalid user ID format');
-        setLoading(false);
-        return;
-      }
-
-      if (conversationType === 'item' && (!itemId || !UUID_REGEX.test(itemId))) {
-        console.error('Invalid item ID format:', itemId);
-        setError('Invalid item ID format');
-        setLoading(false);
-        return;
-      }
-
-      let query = supabase
-        .from('messages')
-        .select(`
-          *,
-          offer_item:offer_item_id (
-            id,
-            title,
-            images,
-            condition,
-            description
-          ),
-          sender:sender_id (
-            username,
-            avatar_url
-          ),
-          items:item_id (
-            id,
-            title,
-            images
-          )
-        `)
-        .order('created_at', { ascending: true });
-
-      const effectiveThread = threadOverride || threadId;
-      if (effectiveThread) {
-        query = query.eq('thread_id', effectiveThread);
-      } else if (conversationType === 'direct_message') {
-        query = query.is('item_id', null);
-      } else if (conversationType === 'item' && itemId) {
-        query = query.eq('item_id', itemId);
-      } else {
-        query = query.or(
-          `and(sender_id.eq.${currentUserId},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${currentUserId})`
-        );
-      }
-
-      const { data, error } = await query;
-
-      if (error) {
-        console.error('Error fetching messages:', error);
-        setError('Failed to load messages');
-        setLoading(false);
-        return;
-      }
-
-      setMessages(data || []);
-
-      const foundThread = (data || []).find((m: any) => m.thread_id)?.thread_id || null;
-      if (foundThread && threadId !== foundThread) {
-        setThreadId(foundThread);
-        await ensureThreadMembers(foundThread);
-        subscribeToThread(foundThread);
-      } else if (!foundThread && !threadId) {
-        const created = await ensureThread();
-        if (created) {
-          subscribeToThread(created);
+    const fetchMessages = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        if (!otherUserId || !UUID_REGEX.test(otherUserId)) {
+          console.error('Invalid user ID format:', otherUserId);
+          setError('Invalid user ID format');
+          setLoading(false);
+          return;
         }
-      }
 
-      if (data && data.length > 0) {
-        await markMessagesAsRead();
-      }
-      
-    } catch (err) {
-      console.error('Error in fetchMessagesInternal:', err);
-      setError('An unexpected error occurred');
-    } finally {
-      setLoading(false);
-    }
-  };
+        if (conversationType === 'item' && (!itemId || !UUID_REGEX.test(itemId))) {
+          console.error('Invalid item ID format:', itemId);
+          setError('Invalid item ID format');
+          setLoading(false);
+          return;
+        }
 
-  useEffect(() => {
-    const init = async () => {
-      const ensured = await ensureThread();
-      await fetchMessagesInternal(ensured);
+        let query = supabase
+          .from('messages')
+          .select(`
+            *,
+            offer_item:offer_item_id (
+              id,
+              title,
+              images,
+              condition,
+              description
+            ),
+            sender:sender_id (
+              username,
+              avatar_url
+            ),
+            items:item_id (
+              id,
+              title,
+              images
+            )
+          `)
+          .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${currentUserId})`)
+          .order('created_at', { ascending: true });
+
+        // Apply different filters based on conversation type
+        if (conversationType === 'direct_message') {
+          query = query.is('item_id', null);
+        } else if (conversationType === 'item' && itemId) {
+          query = query.eq('item_id', itemId);
+        }
+        // For unified conversations, we don't filter by item_id - we get all messages between these users
+
+
+        const { data, error } = await query;
+
+        if (error) {
+          console.error('Error fetching messages:', error);
+          setError('Failed to load messages');
+          setLoading(false);
+          return;
+        }
+
+        setMessages(data || []);
+        
+        if (data && data.length > 0) {
+          setTimeout(() => {
+            markMessagesAsRead();
+          }, 300);
+        }
+        
+      } catch (err) {
+        console.error('Error in fetchMessages:', err);
+        setError('An unexpected error occurred');
+      } finally {
+        setLoading(false);
+      }
     };
-    init();
+
+    fetchMessages();
+
+    // Subscribe to Pusher channels
+    const channelName = conversationType === 'unified' 
+      ? `private-user-${[currentUserId, otherUserId].sort().join('-')}`
+      : conversationType === 'direct_message' 
+      ? `private-dm-${[currentUserId, otherUserId].sort().join('-')}`
+      : `private-messages-${itemId}`;
+
+    const messageChannel = pusherClient.subscribe(channelName);
+    
+    messageChannel.bind('new-message', async (data: { messageId: string }) => {
+      try {
+        const { data: newMessage, error } = await supabase
+          .from('messages')
+          .select(`
+            *,
+            offer_item:offer_item_id (
+              id,
+              title,
+              images,
+              condition,
+              description
+            ),
+            sender:sender_id (
+              username,
+              avatar_url
+            ),
+            items:item_id (
+              id,
+              title,
+              images
+            )
+          `)
+          .eq('id', data.messageId)
+          .single();
+
+        if (error) {
+          console.error('Error fetching new message:', error);
+          return;
+        }
+
+        // Check if this message belongs to the current conversation
+        let messageMatches = false;
+        
+        if (conversationType === 'unified') {
+          // For unified conversations, any message between these two users matches
+          messageMatches = (newMessage.sender_id === currentUserId && newMessage.receiver_id === otherUserId) || 
+                          (newMessage.sender_id === otherUserId && newMessage.receiver_id === currentUserId);
+        } else if (conversationType === 'direct_message') {
+          messageMatches = newMessage.item_id === null &&
+            ((newMessage.sender_id === currentUserId && newMessage.receiver_id === otherUserId) || 
+             (newMessage.sender_id === otherUserId && newMessage.receiver_id === currentUserId));
+        } else if (conversationType === 'item') {
+          messageMatches = newMessage.item_id === itemId &&
+            ((newMessage.sender_id === currentUserId && newMessage.receiver_id === otherUserId) || 
+             (newMessage.sender_id === otherUserId && newMessage.receiver_id === currentUserId));
+        }
+
+        if (newMessage && messageMatches) {
+          setMessages((current) => [...current, newMessage]);
+          
+          if (newMessage.sender_id === otherUserId && newMessage.receiver_id === currentUserId) {
+            setTimeout(() => {
+              markMessagesAsRead();
+            }, 300);
+          }
+        }
+      } catch (err) {
+        console.error('Error handling new message:', err);
+      }
+    });
+
+    messageChannel.bind('messages-read', (data: { readerId: string; senderId: string }) => {
+      if (data.readerId === otherUserId && data.senderId === currentUserId) {
+        setMessages(prev => 
+          prev.map(msg => 
+            msg.sender_id === currentUserId && msg.receiver_id === otherUserId
+              ? { ...msg, read: true }
+              : msg
+          )
+        );
+      }
+    });
+
+    // Handle typing indicators
+    messageChannel.bind('typing.start', (data: { userId: string }) => {
+      if (data.userId === otherUserId) {
+        setOtherUserTyping(true);
+      }
+    });
+
+    messageChannel.bind('typing.stop', (data: { userId: string }) => {
+      if (data.userId === otherUserId) {
+        setOtherUserTyping(false);
+      }
+    });
 
     return () => {
+      messageChannel.unbind_all();
+      messageChannel.unsubscribe();
       emitTypingStatus.cancel();
     };
   }, [itemId, currentUserId, otherUserId, conversationType]);
@@ -470,12 +478,6 @@ export function MessageList({
       setIsTyping(false);
       emitTypingStatus(false);
 
-      const activeThread = await getActiveThreadId();
-      if (!activeThread) {
-        setSending(false);
-        return;
-      }
-
       const { data, error } = await supabase.from('messages').insert([
         {
           content: content,
@@ -483,7 +485,6 @@ export function MessageList({
           item_id: conversationType === 'unified' ? null : itemId,
           sender_id: currentUserId,
           receiver_id: otherUserId,
-          thread_id: activeThread,
           read: false,
           is_offer: false
         },
@@ -514,6 +515,26 @@ export function MessageList({
 
       if (data) {
         setMessages(prev => [...prev, data]);
+
+        // Trigger Pusher event for new message
+        const channelName = conversationType === 'unified' 
+          ? `private-user-${[currentUserId, otherUserId].sort().join('-')}`
+          : conversationType === 'direct_message' 
+          ? `private-dm-${[currentUserId, otherUserId].sort().join('-')}`
+          : `private-messages-${itemId}`;
+
+        await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pusher-trigger`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            channel: channelName,
+            event: 'new-message',
+            data: { messageId: data.id }
+          })
+        });
       }
     } catch (err) {
       console.error('Error sending message:', err);
@@ -555,19 +576,12 @@ export function MessageList({
       setIsTyping(false);
       emitTypingStatus(false);
 
-      const activeThread = await getActiveThreadId();
-      if (!activeThread) {
-        setSending(false);
-        return;
-      }
-
       const { data, error } = await supabase.from('messages').insert([
         {
           content: messageContent,
           item_id: conversationType === 'unified' ? null : itemId, // For unified, always use null
           sender_id: currentUserId,
           receiver_id: otherUserId,
-          thread_id: activeThread,
           read: false,
           is_offer: false
         },
@@ -598,7 +612,35 @@ export function MessageList({
 
       if (data) {
         setMessages(prev => [...prev, data]);
+        
+        // Clear drafts after successful send
         clearDrafts();
+
+        // Trigger Pusher event for new message
+        const channelName = conversationType === 'unified' 
+          ? `private-user-${[currentUserId, otherUserId].sort().join('-')}`
+          : conversationType === 'direct_message' 
+          ? `private-dm-${[currentUserId, otherUserId].sort().join('-')}`
+          : `private-messages-${itemId}`;
+
+        const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pusher-trigger`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            channel: channelName,
+            event: 'new-message',
+            data: {
+              messageId: data.id
+            }
+          })
+        });
+
+        if (!response.ok) {
+          console.error('Failed to trigger Pusher event');
+        }
       }
     } catch (err) {
       console.error('Error in message sending process:', err);
@@ -692,12 +734,6 @@ export function MessageList({
       setIsTyping(false);
       emitTypingStatus(false);
 
-      const activeThread = await getActiveThreadId();
-      if (!activeThread) {
-        setSending(false);
-        return;
-      }
-
       const { data, error } = await supabase.from('messages').insert([
         {
           content: `📎 ${fileName}`,
@@ -707,7 +743,6 @@ export function MessageList({
           item_id: conversationType === 'unified' ? null : itemId,
           sender_id: currentUserId,
           receiver_id: otherUserId,
-          thread_id: activeThread,
           read: false,
           is_offer: false
         },
@@ -741,6 +776,26 @@ export function MessageList({
         
         // Clear drafts after successful send
         clearDrafts();
+
+        // Trigger Pusher event for new message
+        const channelName = conversationType === 'unified' 
+          ? `private-user-${[currentUserId, otherUserId].sort().join('-')}`
+          : conversationType === 'direct_message' 
+          ? `private-dm-${[currentUserId, otherUserId].sort().join('-')}`
+          : `private-messages-${itemId}`;
+
+        await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pusher-trigger`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            channel: channelName,
+            event: 'new-message',
+            data: { messageId: data.id }
+          })
+        });
       }
     } catch (err) {
       console.error('Error sending file:', err);
@@ -771,13 +826,6 @@ export function MessageList({
         .getPublicUrl(fileName);
 
       // Send message with voice attachment
-      const activeThread = await getActiveThreadId();
-      if (!activeThread) {
-        setSending(false);
-        setShowVoiceMessage(false);
-        return;
-      }
-
       const { data, error } = await supabase.from('messages').insert([
         {
           content: `🎤 Voice message (${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')})`,
@@ -785,7 +833,6 @@ export function MessageList({
           item_id: conversationType === 'unified' ? null : itemId,
           sender_id: currentUserId,
           receiver_id: otherUserId,
-          thread_id: activeThread,
           read: false,
           is_offer: false
         },
@@ -819,6 +866,26 @@ export function MessageList({
         
         // Clear drafts after successful send
         clearDrafts();
+
+        // Trigger Pusher event for new message
+        const channelName = conversationType === 'unified' 
+          ? `private-user-${[currentUserId, otherUserId].sort().join('-')}`
+          : conversationType === 'direct_message' 
+          ? `private-dm-${[currentUserId, otherUserId].sort().join('-')}`
+          : `private-messages-${itemId}`;
+
+        await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pusher-trigger`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            channel: channelName,
+            event: 'new-message',
+            data: { messageId: data.id }
+          })
+        });
       }
     } catch (err) {
       console.error('Error sending voice message:', err);
