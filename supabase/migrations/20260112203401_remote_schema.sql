@@ -3777,42 +3777,10 @@ CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXEC
 CREATE TRIGGER on_auth_user_updated AFTER UPDATE ON auth.users FOR EACH ROW EXECUTE FUNCTION public.handle_user_update();
 
 
-  create policy "thread_members_can_read_realtime_messages"
-  on "realtime"."messages"
-  as permissive
-  for select
-  to authenticated
-using ((EXISTS ( SELECT 1
-   FROM public.thread_members tm
-  WHERE (((tm.thread_id)::text = split_part(messages.topic, ':'::text, 2)) AND (tm.user_id = ( SELECT auth.uid() AS uid))))));
 
 
 
-  create policy "thread_members_can_write_realtime_messages"
-  on "realtime"."messages"
-  as permissive
-  for insert
-  to authenticated
-with check ((EXISTS ( SELECT 1
-   FROM public.thread_members tm
-  WHERE (((tm.thread_id)::text = split_part(messages.topic, ':'::text, 2)) AND (tm.user_id = ( SELECT auth.uid() AS uid))))));
 
-
-CREATE TRIGGER messages_set_default_topic_tr BEFORE INSERT OR UPDATE ON realtime.messages FOR EACH ROW EXECUTE FUNCTION realtime.set_default_topic_if_null();
-
-CREATE TRIGGER messages_set_default_topic_tr BEFORE INSERT OR UPDATE ON realtime.messages_2026_01_09 FOR EACH ROW EXECUTE FUNCTION realtime.set_default_topic_if_null();
-
-CREATE TRIGGER messages_set_default_topic_tr BEFORE INSERT OR UPDATE ON realtime.messages_2026_01_10 FOR EACH ROW EXECUTE FUNCTION realtime.set_default_topic_if_null();
-
-CREATE TRIGGER messages_set_default_topic_tr BEFORE INSERT OR UPDATE ON realtime.messages_2026_01_11 FOR EACH ROW EXECUTE FUNCTION realtime.set_default_topic_if_null();
-
-CREATE TRIGGER messages_set_default_topic_tr BEFORE INSERT OR UPDATE ON realtime.messages_2026_01_12 FOR EACH ROW EXECUTE FUNCTION realtime.set_default_topic_if_null();
-
-CREATE TRIGGER messages_set_default_topic_tr BEFORE INSERT OR UPDATE ON realtime.messages_2026_01_13 FOR EACH ROW EXECUTE FUNCTION realtime.set_default_topic_if_null();
-
-CREATE TRIGGER messages_set_default_topic_tr BEFORE INSERT OR UPDATE ON realtime.messages_2026_01_14 FOR EACH ROW EXECUTE FUNCTION realtime.set_default_topic_if_null();
-
-CREATE TRIGGER messages_set_default_topic_tr BEFORE INSERT OR UPDATE ON realtime.messages_2026_01_15 FOR EACH ROW EXECUTE FUNCTION realtime.set_default_topic_if_null();
 
 
   create policy "Anyone can view images"
