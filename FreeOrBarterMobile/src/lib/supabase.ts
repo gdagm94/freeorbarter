@@ -44,6 +44,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: false,
     storage: AsyncStorage,
   },
+  db: {
+    schema: 'public',
+  },
   // Realtime configuration for chat/notifications
   realtime: {
     params: {
