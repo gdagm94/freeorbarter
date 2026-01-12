@@ -613,12 +613,25 @@ export function MessageList({
     initialScrollDoneRef.current = false;
   }, [otherUserId, itemId, conversationType]);
 
-  // One-time, non-animated jump to the latest message on initial load
+  // One-time, non-animated jump to the latest message after layout
   useEffect(() => {
-    if (!initialScrollDoneRef.current && messages.length > 0) {
+    if (initialScrollDoneRef.current || messages.length === 0) return;
+
+    const scrollToBottom = () => {
+      if (messagesContainerRef.current) {
+        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+      }
       messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
       initialScrollDoneRef.current = true;
-    }
+    };
+
+    const rafId = requestAnimationFrame(scrollToBottom);
+    const timeoutId = setTimeout(scrollToBottom, 100);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      clearTimeout(timeoutId);
+    };
   }, [messages.length]);
 
   useEffect(() => {

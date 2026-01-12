@@ -115,7 +115,7 @@ export default function ChatScreen() {
   // Reset initial scroll guard when switching conversations
   useEffect(() => {
     initialScrollDoneRef.current = false;
-  }, [otherUserId]);
+  }, [otherUserId, itemId]);
 
   // One-time, non-animated jump to the latest message on initial load
   useEffect(() => {
@@ -1205,6 +1205,12 @@ export default function ChatScreen() {
         renderItem={renderMessage}
         keyExtractor={(item: Message) => item.id}
         contentContainerStyle={styles.messagesContainer}
+        onContentSizeChange={() => {
+          if (!initialScrollDoneRef.current) {
+            flatListRef.current?.scrollToEnd({ animated: false });
+            initialScrollDoneRef.current = true;
+          }
+        }}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>No messages yet</Text>
