@@ -661,6 +661,7 @@ export default function ChatScreen() {
         console.error('Error sending message:', error);
         // #region agent log
         fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H2',location:'ChatScreen.tsx:sendMessage:insertError',message:'supabase insert error',data:{errorMessage:error.message, code:(error as any)?.code},timestamp:Date.now()})}).catch(()=>{});
+        fetch('http://127.0.0.1:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1b',hypothesisId:'H2',location:'ChatScreen.tsx:sendMessage:insertError',message:'supabase insert error mirror',data:{errorMessage:error.message, code:(error as any)?.code},timestamp:Date.now()})}).catch(()=>{});
         // #endregion
         return;
       }
