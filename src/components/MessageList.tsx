@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, { useState, useEffect, useRef } from 'react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
@@ -102,7 +101,6 @@ export function MessageList({
   const [contextMenuMessageId, setContextMenuMessageId] = useState<string | null>(null);
   const [showSafetyMenu, setShowSafetyMenu] = useState(false);
   const [blockActionLoading, setBlockActionLoading] = useState(false);
-  const initialScrollDoneRef = useRef(false);
   const safetyMenuRef = useRef<HTMLDivElement | null>(null);
   const {
     blockedByMe,
@@ -526,24 +524,11 @@ export function MessageList({
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim()) {
-      // #region agent log
-      fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'H0',location:'MessageList.tsx:sendMessage:empty',message:'empty message guard hit',data:{newMessageLen:newMessage.length},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      return;
-    }
-    if (!ensureMessagingAllowed()) {
-      // #region agent log
-      fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'H0',location:'MessageList.tsx:sendMessage:blocked',message:'ensureMessagingAllowed blocked',data:{otherUserId,blockedByMe:isEitherBlocked && blockedByMe,blockedByOther:isEitherBlocked && blockedByOther},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      return;
-    }
+    if (!newMessage.trim()) return;
+    if (!ensureMessagingAllowed()) return;
 
     try {
       const messageContent = newMessage.trim();
-      // #region agent log
-      fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'H1',location:'MessageList.tsx:sendMessage:start',message:'send start',data:{conversationType,itemId,threadId,otherUserId,currentUserId,len:messageContent.length},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       
       // Check content filtering
       const filterResult = await checkContent({
@@ -572,9 +557,6 @@ export function MessageList({
 
       const activeThread = await getActiveThreadId();
       if (!activeThread) {
-        // #region agent log
-        fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H2',location:'MessageList.tsx:sendMessage:noThread',message:'no active thread',data:{conversationType,itemId,otherUserId},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         setSending(false);
         return;
       }
@@ -610,56 +592,24 @@ export function MessageList({
       `).single();
 
       if (error) {
-        // #region agent log
-        fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H3',location:'MessageList.tsx:sendMessage:error',message:'supabase insert error',data:{code:error.code,message:error.message,details:error.details},timestamp:Date.now()})}).catch(()=>{});
-        fetch('http://127.0.0.1:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1b',hypothesisId:'H3',location:'MessageList.tsx:sendMessage:error',message:'supabase insert error mirror',data:{code:error.code,message:error.message,details:error.details},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         console.error('Error sending message:', error);
         return;
       }
 
       if (data) {
-        // #region agent log
-        fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H4',location:'MessageList.tsx:sendMessage:success',message:'insert ok',data:{id:data.id,thread_id:data.thread_id},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         setMessages(prev => [...prev, data]);
         clearDrafts();
       }
     } catch (err) {
-      // #region agent log
-      fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H5',location:'MessageList.tsx:sendMessage:catch',message:'unexpected error',data:{err:String(err)},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       console.error('Error in message sending process:', err);
     } finally {
       setSending(false);
     }
   };
 
-  // Reset initial scroll guard when conversation context changes
   useEffect(() => {
-    initialScrollDoneRef.current = false;
-  }, [otherUserId, itemId, conversationType]);
-
-  // One-time, non-animated jump to the latest message after layout
-  useEffect(() => {
-    if (initialScrollDoneRef.current || messages.length === 0) return;
-
-    const scrollToBottom = () => {
-      if (messagesContainerRef.current) {
-        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
-      }
-      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
-      initialScrollDoneRef.current = true;
-    };
-
-    const rafId = requestAnimationFrame(scrollToBottom);
-    const timeoutId = setTimeout(scrollToBottom, 100);
-
-    return () => {
-      cancelAnimationFrame(rafId);
-      clearTimeout(timeoutId);
-    };
-  }, [messages.length]);
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   useEffect(() => {
     if (!showSafetyMenu) return;
