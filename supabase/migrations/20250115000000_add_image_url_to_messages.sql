@@ -1,3 +1,4 @@
+
 /*
   # Add image_url column to messages table
 
