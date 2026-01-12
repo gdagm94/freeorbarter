@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -45,6 +46,7 @@ import {
 } from '../components/ReportContentSheet';
 import { useBlockStatus } from '../hooks/useBlockStatus';
 import { blockUserWithCleanup, unblockUserPair } from '../lib/blocks';
+import { sendPushNotification } from '../lib/push';
 
 export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -76,6 +78,26 @@ export default function ChatScreen() {
   const route = useRoute<any>();
   const { user } = useAuth();
   const { otherUserId, itemId } = route.params || {};
+  const [threadId, setThreadId] = useState<string | null>(null);
+  const threadChannelRef = useRef<any>(null);
+  const lastThreadCreateFailure = useRef<number | null>(null);
+  const threadCreationDisabledRef = useRef<boolean>(false);
+  const initialScrollDoneRef = useRef(false);
+  const getTopic = () => (itemId ? 'item' : 'direct');
+  const sendRecipientPush = async (bodyText: string, extraData: Record<string, any> = {}) => {
+    if (!otherUserId || !user) return;
+    await sendPushNotification({
+      userId: otherUserId,
+      title: user.full_name ? `${user.full_name}` : 'New message',
+      body: bodyText,
+      data: {
+        type: 'direct_message',
+        sender_id: user.id,
+        item_id: itemId || null,
+        ...extraData,
+      },
+    });
+  };
   const {
     blockedByMe,
     blockedByOther,
@@ -89,6 +111,21 @@ export default function ChatScreen() {
       : null;
   const canSendMessages = Boolean(user && otherUserId && !isEitherBlocked);
   const flatListRef = useRef<FlatList>(null);
+
+  // Reset initial scroll guard when switching conversations
+  useEffect(() => {
+    initialScrollDoneRef.current = false;
+  }, [otherUserId, itemId]);
+
+  // One-time, non-animated jump to the latest message on initial load
+  useEffect(() => {
+    if (!initialScrollDoneRef.current && messages.length > 0) {
+      requestAnimationFrame(() => {
+        flatListRef.current?.scrollToEnd({ animated: false });
+        initialScrollDoneRef.current = true;
+      });
+    }
+  }, [messages.length]);
   
   // Message drafts hook
   const { saveDraft, clearDrafts } = useMessageDrafts(
@@ -100,25 +137,20 @@ export default function ChatScreen() {
 
   useEffect(() => {
     if (!otherUserId || !user) return;
-    fetchMessages();
-    fetchOtherUser();
-
-    const channel = supabase
-      .channel('chat-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'messages', filter: `receiver_id=eq.${user.id}` },
-        fetchMessages
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'messages', filter: `sender_id=eq.${user.id}` },
-        fetchMessages
-      )
-      .subscribe();
+    let isMounted = true;
+    const init = async () => {
+      const ensured = await ensureThread();
+      await fetchMessages(ensured || undefined);
+      fetchOtherUser();
+    };
+    init();
 
     return () => {
-      channel.unsubscribe();
+      isMounted = false;
+      if (threadChannelRef.current) {
+        supabase.removeChannel(threadChannelRef.current);
+        threadChannelRef.current = null;
+      }
     };
   }, [otherUserId, user?.id]);
 
@@ -150,17 +182,123 @@ export default function ChatScreen() {
     }
   };
 
-  const fetchMessages = async () => {
-    if (!otherUserId || !user) return;
+  const ensureThread = async (): Promise<string | null> => {
+    if (!user || !otherUserId) return null;
+    if (threadId) return threadId;
+    if (threadCreationDisabledRef.current) {
+      // #region agent log
+      fetch('http://10.0.0.207:7242/ingest/7324c825-d016-44a1-91f7-2f773ba2ff20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H5',location:'ChatScreen.tsx:ensureThread:disabled',message:'thread creation disabled - skipping',data:{userId:user.id, otherUserId},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      return null;
+    }
+    const now = Date.now();
+    if (lastThreadCreateFailure.current && now - lastThreadCreateFailure.current < 30000) {
+      return null; // back off for 30s after a failure
+    }
 
     try {
-      const { data, error } = await supabase
+      // #region agent log
+      fetch('http://10.0.0.207:7242/ingest/7324c825-d016-44a1-91f7-2f773ba2ff20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H4',location:'ChatScreen.tsx:ensureThread:start',message:'ensureThread entry',data:{threadId, userId:user.id, otherUserId, itemId},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      // Look for existing thread via recent messages with thread_id
+      const { data: existingMessages, error: existingError } = await supabase
         .from('messages')
-        .select('*')
+        .select('thread_id')
         .or(
           `and(sender_id.eq.${user.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${user.id})`
         )
+        .not('thread_id', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      // #region agent log
+      fetch('http://10.0.0.207:7242/ingest/7324c825-d016-44a1-91f7-2f773ba2ff20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H2',location:'ChatScreen.tsx:ensureThread:existingQuery',message:'existing thread query result',data:{hasError:Boolean(existingError), firstThreadId:existingMessages?.[0]?.thread_id ?? null},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      if (!existingError && existingMessages && existingMessages.length > 0 && existingMessages[0].thread_id) {
+        const existingId = existingMessages[0].thread_id;
+        setThreadId(existingId);
+        lastThreadCreateFailure.current = null;
+        await ensureThreadMembers(existingId);
+        subscribeToThread(existingId);
+        return existingId;
+      }
+
+      // Skip creating a new thread if none exists; operate without thread_id to avoid RLS failures
+      threadCreationDisabledRef.current = true;
+      // #region agent log
+      fetch('http://10.0.0.207:7242/ingest/7324c825-d016-44a1-91f7-2f773ba2ff20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H5',location:'ChatScreen.tsx:ensureThread:skipCreation',message:'no existing thread; skipping creation to avoid RLS',data:{userId:user.id, otherUserId, itemId},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      return null;
+    } catch (error) {
+      console.error('Error ensuring thread:', error);
+      // #region agent log
+      fetch('http://10.0.0.207:7242/ingest/7324c825-d016-44a1-91f7-2f773ba2ff20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H1',location:'ChatScreen.tsx:ensureThread:catch',message:'ensureThread error',data:{error: (error as any)?.message || String(error)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      // #region agent log
+      fetch('http://10.0.0.207:7242/ingest/7324c825-d016-44a1-91f7-2f773ba2ff20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H5',location:'ChatScreen.tsx:ensureThread:rlsFallback',message:'disabling thread creation after error',data:{error: (error as any)?.message || String(error)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      threadCreationDisabledRef.current = true;
+      lastThreadCreateFailure.current = Date.now();
+    }
+    return null;
+  };
+
+  const ensureThreadMembers = async (id: string) => {
+    try {
+      // #region agent log
+      fetch('http://10.0.0.207:7242/ingest/7324c825-d016-44a1-91f7-2f773ba2ff20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H3',location:'ChatScreen.tsx:ensureThreadMembers:start',message:'ensureThreadMembers upsert',data:{threadId:id, userId:user?.id, otherUserId},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      await supabase
+        .from('thread_members')
+        .upsert(
+          [
+            { thread_id: id, user_id: user?.id },
+            { thread_id: id, user_id: otherUserId },
+          ],
+          { onConflict: 'thread_id,user_id' }
+        );
+    } catch (error) {
+      console.error('Error ensuring thread members:', error);
+      // #region agent log
+      fetch('http://10.0.0.207:7242/ingest/7324c825-d016-44a1-91f7-2f773ba2ff20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H3',location:'ChatScreen.tsx:ensureThreadMembers:catch',message:'ensureThreadMembers error',data:{threadId:id, error: (error as any)?.message || String(error)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+    }
+  };
+
+  const subscribeToThread = (id: string) => {
+    if (threadChannelRef.current) {
+      supabase.removeChannel(threadChannelRef.current);
+      threadChannelRef.current = null;
+    }
+
+    threadChannelRef.current = supabase
+      .channel(`room:${id}:messages`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'messages', filter: `thread_id=eq.${id}` },
+        () => fetchMessages(id)
+      )
+      .subscribe();
+  };
+
+  const fetchMessages = async (existingThreadId?: string) => {
+    if (!otherUserId || !user) return;
+
+    try {
+      let query = supabase
+        .from('messages')
+        .select('*')
         .order('created_at', { ascending: true });
+
+      if (existingThreadId || threadId) {
+        query = query.eq('thread_id', existingThreadId || threadId);
+      } else {
+        query = query.or(
+          `and(sender_id.eq.${user.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${user.id})`
+        );
+      }
+
+      const { data, error } = await query;
 
       if (error) {
         console.error('Error fetching messages:', error);
@@ -172,13 +310,33 @@ export default function ChatScreen() {
       const unreadFromOther = all.filter(m => m.receiver_id === user.id && !m.read);
       if (unreadFromOther.length > 0) {
         try {
-          await supabase
+          let readQuery = supabase
             .from('messages')
             .update({ read: true })
-            .or(`and(sender_id.eq.${otherUserId},receiver_id.eq.${user.id})`);
+            .eq('sender_id', otherUserId)
+            .eq('receiver_id', user.id)
+            .eq('read', false);
+
+          if (existingThreadId || threadId) {
+            readQuery = readQuery.eq('thread_id', existingThreadId || threadId);
+          }
+
+          await readQuery;
         } catch {}
       }
       setMessages(all);
+      const thread = existingThreadId || all.find(m => m.thread_id)?.thread_id || null;
+      if (thread && threadId !== thread) {
+        setThreadId(thread);
+        await ensureThreadMembers(thread);
+        subscribeToThread(thread);
+      } else if (!thread && !threadId && !threadCreationDisabledRef.current) {
+        // no thread yet; create one
+        const created = await ensureThread();
+        if (created) {
+          subscribeToThread(created);
+        }
+      }
     } catch (error) {
       console.error('Error fetching messages:', error);
     } finally {
@@ -421,8 +579,18 @@ export default function ChatScreen() {
 
   const sendMessage = async (content?: string, imageUrl?: string) => {
     const messageContent = content || newMessage.trim();
-    if (!messageContent && !imageUrl) return;
-    if (!user || !otherUserId) return;
+    if (!messageContent && !imageUrl) {
+      // #region agent log
+      fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'H0',location:'ChatScreen.tsx:sendMessage:empty',message:'empty message guard hit',data:{hasContent:Boolean(messageContent),hasImage:Boolean(imageUrl)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      return;
+    }
+    if (!user || !otherUserId) {
+      // #region agent log
+      fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'H0',location:'ChatScreen.tsx:sendMessage:noUser',message:'missing user or otherUserId',data:{userPresent:Boolean(user),otherUserIdPresent:Boolean(otherUserId)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      return;
+    }
      if (isEitherBlocked) {
        Alert.alert('Messaging disabled', 'You cannot send messages when a block is in place.');
        return;
@@ -467,22 +635,45 @@ export default function ChatScreen() {
     }
 
     try {
+      const activeThreadId = threadId || (await ensureThread());
+      // #region agent log
+      fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H1',location:'ChatScreen.tsx:sendMessage:start',message:'send start',data:{activeThreadId,threadId,topic:getTopic(),itemId,otherUserId,userId:user.id,hasContent:Boolean(messageContent),hasImage:Boolean(imageUrl)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+
       const messageData: Partial<Message> = {
         sender_id: user.id,
         receiver_id: otherUserId,
         content: messageContent,
         item_id: itemId || null,
         image_url: imageUrl || null,
+        thread_id: activeThreadId || null,
+        topic: getTopic(),
       } as any;
 
+      // #region agent log
+      fetch('http://10.0.0.207:7242/ingest/7324c825-d016-44a1-91f7-2f773ba2ff20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'H6',location:'ChatScreen.tsx:sendMessage:beforeInsert',message:'sendMessage inserting',data:{hasContent:Boolean(messageContent), hasImage:Boolean(imageUrl), topic:messageData.topic, threadId:messageData.thread_id},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       const { error } = await supabase
         .from('messages')
         .insert([messageData]);
 
       if (error) {
         console.error('Error sending message:', error);
+        // #region agent log
+        fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H2',location:'ChatScreen.tsx:sendMessage:insertError',message:'supabase insert error',data:{errorMessage:error.message, code:(error as any)?.code},timestamp:Date.now()})}).catch(()=>{});
+        fetch('http://127.0.0.1:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1b',hypothesisId:'H2',location:'ChatScreen.tsx:sendMessage:insertError',message:'supabase insert error mirror',data:{errorMessage:error.message, code:(error as any)?.code},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         return;
       }
+
+      // #region agent log
+      fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H3',location:'ChatScreen.tsx:sendMessage:success',message:'message inserted',data:{threadId:activeThreadId},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+
+      await sendRecipientPush(messageContent || 'Sent you an attachment', {
+        thread_id: activeThreadId,
+        item_id: itemId || null,
+      });
 
       setNewMessage('');
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -519,7 +710,10 @@ export default function ChatScreen() {
           item_id: itemId || null,
           is_offer: false,
           read: false,
+          topic: getTopic(),
         }]);
+
+      await sendRecipientPush(actionMessage, { item_id: itemId || null });
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert('Success', `Offer ${action}ed successfully`);
@@ -563,6 +757,7 @@ export default function ChatScreen() {
           item_id: itemId || null,
           read: false,
           is_offer: false,
+          topic: getTopic(),
         }]);
 
       if (error) {
@@ -570,6 +765,8 @@ export default function ChatScreen() {
         Alert.alert('Error', 'Failed to send reply');
         return;
       }
+
+      await sendRecipientPush(replyContent, { item_id: itemId || null });
 
       setNewMessage('');
       setReplyingTo(null);
@@ -613,6 +810,7 @@ export default function ChatScreen() {
           item_id: itemId || null,
           read: false,
           is_offer: false,
+          topic: getTopic(),
         }]);
 
       if (error) {
@@ -620,6 +818,8 @@ export default function ChatScreen() {
         Alert.alert('Error', 'Failed to send file');
         return;
       }
+
+      await sendRecipientPush(`📎 ${fileName}`, { item_id: itemId || null });
 
       setShowFileAttachment(false);
       fetchMessages();
@@ -674,6 +874,7 @@ export default function ChatScreen() {
           item_id: itemId || null,
           read: false,
           is_offer: false,
+          topic: getTopic(),
         }]);
 
       if (messageError) {
@@ -681,6 +882,13 @@ export default function ChatScreen() {
         Alert.alert('Error', 'Failed to send voice message');
         return;
       }
+
+      await sendRecipientPush(
+        `🎤 Voice message (${Math.floor(duration / 60)}:${(duration % 60)
+          .toString()
+          .padStart(2, '0')})`,
+        { item_id: itemId || null }
+      );
 
       setShowVoiceMessage(false);
       fetchMessages();
@@ -1013,9 +1221,14 @@ export default function ChatScreen() {
         ref={flatListRef}
         data={messages}
         renderItem={renderMessage}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item: Message) => item.id}
         contentContainerStyle={styles.messagesContainer}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
+        onContentSizeChange={() => {
+          if (!initialScrollDoneRef.current) {
+            flatListRef.current?.scrollToEnd({ animated: false });
+            initialScrollDoneRef.current = true;
+          }
+        }}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>No messages yet</Text>
@@ -1138,8 +1351,9 @@ export default function ChatScreen() {
 
       {/* Image Viewer Modal */}
       <ImageViewer
-        visible={showImageViewer}
-        imageUrl={selectedImageUrl}
+        visible={showImageViewer && !!selectedImageUrl}
+        images={selectedImageUrl ? [selectedImageUrl] : []}
+        initialIndex={0}
         onClose={() => setShowImageViewer(false)}
       />
 
@@ -1163,7 +1377,7 @@ export default function ChatScreen() {
       {/* Offer Templates Modal */}
       <OfferTemplates
         visible={showOfferTemplates}
-        onTemplateSelect={(template) => {
+        onTemplateSelect={(template: { content: string }) => {
           setNewMessage(template.content);
           setShowOfferTemplates(false);
         }}

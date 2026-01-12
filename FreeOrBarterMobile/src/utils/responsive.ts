@@ -11,8 +11,9 @@ export interface ResponsiveStyles {
 /**
  * Get responsive container styles based on device type
  */
-export function useResponsiveStyles() {
+export function useResponsiveStyles(): ResponsiveStyles {
   const { isTablet, width } = useDeviceInfo();
+  const fullWidth: `${number}%` = '100%';
 
   // Max widths for different container types
   const maxWidths = {
@@ -23,25 +24,25 @@ export function useResponsiveStyles() {
 
   return {
     container: {
-      width: '100%',
+      width: fullWidth,
       maxWidth: maxWidths.content,
-      alignSelf: 'center' as const,
+      alignSelf: 'center',
       paddingHorizontal: isTablet ? 24 : 16,
     },
     contentContainer: {
-      width: '100%',
+      width: fullWidth,
       maxWidth: maxWidths.content,
-      alignSelf: 'center' as const,
+      alignSelf: 'center',
     },
     formContainer: {
-      width: '100%',
+      width: fullWidth,
       maxWidth: maxWidths.form,
-      alignSelf: 'center' as const,
+      alignSelf: 'center',
     },
     cardContainer: {
-      width: '100%',
+      width: fullWidth,
       maxWidth: maxWidths.card,
-      alignSelf: 'center' as const,
+      alignSelf: 'center',
     },
   };
 }

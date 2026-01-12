@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { supabase } from '../lib/supabase';
 import * as Haptics from 'expo-haptics';
+import { sendPushNotification } from '../lib/push';
 
 interface QuickReplyProps {
   messageId: string;
@@ -67,6 +68,17 @@ export default function QuickReply({
         Alert.alert('Error', 'Failed to send reply');
         return;
       }
+
+      await sendPushNotification({
+        userId: senderId,
+        title: 'New reply',
+        body: messageContent,
+        data: {
+          type: 'direct_message',
+          sender_id: receiverId,
+          item_id: itemId || null,
+        },
+      });
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setMessage('');

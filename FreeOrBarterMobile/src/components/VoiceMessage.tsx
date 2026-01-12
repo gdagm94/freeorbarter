@@ -235,19 +235,15 @@ const styles = StyleSheet.create({
   },
   bar1: {
     height: 20,
-    animationDuration: '0.5s',
   },
   bar2: {
     height: 30,
-    animationDuration: '0.7s',
   },
   bar3: {
     height: 25,
-    animationDuration: '0.6s',
   },
   bar4: {
     height: 35,
-    animationDuration: '0.8s',
   },
   durationText: {
     fontSize: 24,

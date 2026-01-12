@@ -1,0 +1,10 @@
+project_id = "FreeOrBarterMobile"
+
+[db]
+# Match the remote Postgres major version
+major_version = 17
+
+[analytics]
+# Disable analytics locally to avoid Windows Docker TCP requirement
+enabled = false
+
