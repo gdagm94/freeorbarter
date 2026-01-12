@@ -548,20 +548,3 @@ with check ((EXISTS ( SELECT 1
   WHERE (((tm.thread_id)::text = split_part(messages.topic, ':'::text, 2)) AND (tm.user_id = ( SELECT auth.uid() AS uid))))));
 
 
-CREATE TRIGGER messages_set_default_topic_tr BEFORE INSERT OR UPDATE ON realtime.messages FOR EACH ROW EXECUTE FUNCTION realtime.set_default_topic_if_null();
-
-CREATE TRIGGER messages_set_default_topic_tr BEFORE INSERT OR UPDATE ON realtime.messages_2026_01_09 FOR EACH ROW EXECUTE FUNCTION realtime.set_default_topic_if_null();
-
-CREATE TRIGGER messages_set_default_topic_tr BEFORE INSERT OR UPDATE ON realtime.messages_2026_01_10 FOR EACH ROW EXECUTE FUNCTION realtime.set_default_topic_if_null();
-
-CREATE TRIGGER messages_set_default_topic_tr BEFORE INSERT OR UPDATE ON realtime.messages_2026_01_11 FOR EACH ROW EXECUTE FUNCTION realtime.set_default_topic_if_null();
-
-CREATE TRIGGER messages_set_default_topic_tr BEFORE INSERT OR UPDATE ON realtime.messages_2026_01_12 FOR EACH ROW EXECUTE FUNCTION realtime.set_default_topic_if_null();
-
-CREATE TRIGGER messages_set_default_topic_tr BEFORE INSERT OR UPDATE ON realtime.messages_2026_01_13 FOR EACH ROW EXECUTE FUNCTION realtime.set_default_topic_if_null();
-
-CREATE TRIGGER messages_set_default_topic_tr BEFORE INSERT OR UPDATE ON realtime.messages_2026_01_14 FOR EACH ROW EXECUTE FUNCTION realtime.set_default_topic_if_null();
-
-CREATE TRIGGER messages_set_default_topic_tr BEFORE INSERT OR UPDATE ON realtime.messages_2026_01_15 FOR EACH ROW EXECUTE FUNCTION realtime.set_default_topic_if_null();
-
-
