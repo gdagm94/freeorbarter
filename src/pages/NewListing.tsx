@@ -272,17 +272,8 @@ function NewListing() {
           .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`);
 
         if (!friendsError && friendsData) {
-          // Send notification to each friend
-          const notificationPromises = friendsData.map(async (friendship) => {
-            const friendId = friendship.user1_id === user.id ? friendship.user2_id : friendship.user1_id;
-
-            // Pusher notification removed
-          });
-
-          // Wait for all notifications to be sent (but don't block the UI)
-          Promise.all(notificationPromises).catch(err => {
-            console.error('Some friend notifications failed:', err);
-          });
+          // Notifications are now handled by Supabase Realtime subscription in client
+          console.log('Friends fetched for potential notification:', friendsData.length);
         }
       } catch (friendsError) {
         console.error('Error fetching friends for notifications:', friendsError);
@@ -442,8 +433,8 @@ function NewListing() {
                   type="button"
                   onClick={() => setListingType('free')}
                   className={`p-6 rounded-xl border-2 transition-all duration-200 ${listingType === 'free'
-                      ? 'border-blue-500 bg-blue-50 shadow-md shadow-blue-100'
-                      : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
+                    ? 'border-blue-500 bg-blue-50 shadow-md shadow-blue-100'
+                    : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
                     }`}
                 >
                   <div className="text-center">
@@ -457,8 +448,8 @@ function NewListing() {
                   type="button"
                   onClick={() => setListingType('barter')}
                   className={`p-6 rounded-xl border-2 transition-all duration-200 ${listingType === 'barter'
-                      ? 'border-blue-500 bg-blue-50 shadow-md shadow-blue-100'
-                      : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
+                    ? 'border-blue-500 bg-blue-50 shadow-md shadow-blue-100'
+                    : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
                     }`}
                 >
                   <div className="text-center">
@@ -543,8 +534,8 @@ function NewListing() {
                         type="button"
                         onClick={() => setFormData({ ...formData, category: cat.toLowerCase() })}
                         className={`px-6 py-3 rounded-full text-sm font-semibold transition-all ${formData.category === cat.toLowerCase()
-                            ? 'bg-blue-500 text-white shadow-lg shadow-blue-200'
-                            : 'bg-white text-gray-700 border-2 border-gray-200 hover:border-gray-300 hover:shadow-md'
+                          ? 'bg-blue-500 text-white shadow-lg shadow-blue-200'
+                          : 'bg-white text-gray-700 border-2 border-gray-200 hover:border-gray-300 hover:shadow-md'
                           }`}
                       >
                         {cat}
@@ -564,8 +555,8 @@ function NewListing() {
                         type="button"
                         onClick={() => setFormData({ ...formData, condition: cond })}
                         className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${formData.condition === cond
-                            ? 'bg-green-500 text-white shadow-lg shadow-green-200'
-                            : 'bg-white text-gray-700 border-2 border-gray-200 hover:border-gray-300 hover:shadow-md'
+                          ? 'bg-green-500 text-white shadow-lg shadow-green-200'
+                          : 'bg-white text-gray-700 border-2 border-gray-200 hover:border-gray-300 hover:shadow-md'
                           }`}
                       >
                         {cond.replace('-', ' ').toUpperCase()}
@@ -607,8 +598,8 @@ function NewListing() {
                     onClick={() => setUseCurrentLocation(true)}
                     disabled={isLocating}
                     className={`flex items-center justify-center px-6 py-4 rounded-xl border-2 transition-all ${isLocating
-                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200'
-                        : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-200 hover:shadow-md'
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200'
+                      : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-200 hover:shadow-md'
                       }`}
                   >
                     <MapPin className="w-6 h-6 mr-3" />

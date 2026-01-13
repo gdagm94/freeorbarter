@@ -15,7 +15,7 @@ const MAP_FILTER_STATE_KEY = 'map_filter_state';
 function calculateBoundingBox(lat: number, lon: number, radiusMiles: number) {
   // Convert miles to kilometers
   const radiusKm = radiusMiles * 1.60934;
-  
+
   // Convert latitude and longitude to radians
   const latRad = lat * DEG_TO_RAD;
   const lonRad = lon * DEG_TO_RAD;
@@ -29,7 +29,7 @@ function calculateBoundingBox(lat: number, lon: number, radiusMiles: number) {
 
   // Calculate min and max longitudes
   let deltaLon;
-  if (minLat > -Math.PI/2 && maxLat < Math.PI/2) {
+  if (minLat > -Math.PI / 2 && maxLat < Math.PI / 2) {
     deltaLon = Math.asin(Math.sin(radDist) / Math.cos(latRad));
   } else {
     deltaLon = Math.PI;
@@ -45,6 +45,14 @@ function calculateBoundingBox(lat: number, lon: number, radiusMiles: number) {
     minLon: (minLon * 180) / Math.PI,
     maxLon: (maxLon * 180) / Math.PI
   };
+}
+
+interface FilterState {
+  category: string;
+  condition: string;
+  radius: number;
+  latitude: number;
+  longitude: number;
 }
 
 function Home() {
@@ -64,7 +72,7 @@ function Home() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showChangelog, setShowChangelog] = useState(false);
-  const [filters, setFilters] = useState(() => {
+  const [filters, setFilters] = useState<FilterState>(() => {
     try {
       const savedState = sessionStorage.getItem(MAP_FILTER_STATE_KEY);
       const defaultFilters = {
@@ -147,7 +155,7 @@ function Home() {
         // Apply location-based filtering if coordinates are available
         if (filters.latitude && filters.longitude && filters.radius) {
           const bbox = calculateBoundingBox(filters.latitude, filters.longitude, filters.radius);
-          
+
           query = query
             .gte('latitude', bbox.minLat)
             .lte('latitude', bbox.maxLat)
@@ -232,7 +240,7 @@ function Home() {
   // Filter and sort items based on search query and filters
   const filteredItems = useMemo(() => {
     return items.filter(item => {
-      const matchesSearch = searchQuery.trim() === '' || 
+      const matchesSearch = searchQuery.trim() === '' ||
         item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -269,9 +277,7 @@ function Home() {
     ];
   }, [filteredItems, searchQuery, filters, barteredItems]);
 
-  const handleLocationChange = (lat: number, lng: number) => {
-    setFilters(prev => ({ ...prev, latitude: lat, longitude: lng }));
-  };
+
 
   const handleRadiusChange = (radius: number) => {
     setFilters(prev => ({ ...prev, radius }));
@@ -412,8 +418,8 @@ function Home() {
               </select>
             </div>
           </div>
-          <Map 
-            onLocationChange={handleLocationChange} 
+          <Map
+
             onRadiusChange={handleRadiusChange}
             onLocationSelect={handleLocationSelect}
             selectedLocation={filters.latitude && filters.longitude ? {

@@ -19,11 +19,11 @@ function ResetPassword() {
     const processAuth = async () => {
       try {
         setIsProcessing(true);
-        
+
         // First check if we have the token in the URL (directly from email link)
         const token = searchParams.get('token_hash');
         const type = searchParams.get('type');
-        
+
         if (token && type === 'recovery') {
           // Check if this token has already been used
           const usedToken = localStorage.getItem(`pwd_reset_${token}`);
@@ -40,7 +40,7 @@ function ResetPassword() {
             token_hash: token,
             type: 'recovery',
           });
-          
+
           if (error) {
             console.error('Error verifying OTP:', error);
             setError('Invalid or expired reset link. Please request a new one.');
@@ -48,8 +48,8 @@ function ResetPassword() {
             return;
           }
         } else if (window.location.hash && window.location.hash.includes('type=recovery')) {
-          const { data, error } = await supabase.auth.getSessionFromUrl();
-          
+          const { error } = await supabase.auth.getSession();
+
           if (error) {
             console.error('Error getting session from URL:', error);
             setError('Invalid or expired reset link. Please request a new one.');
@@ -59,22 +59,22 @@ function ResetPassword() {
         } else {
           // Check if we already have a session
           const { data: { session } } = await supabase.auth.getSession();
-          
+
           if (!session) {
             setError('No active session found. Please request a new password reset link.');
             setIsProcessing(false);
             return;
           }
         }
-        
+
         setIsProcessing(false);
       } catch (err) {
         console.error('Auth processing error:', err);
-        setError();
+        setError('An unexpected error occurred');
         setIsProcessing(false);
       }
     };
-    
+
     processAuth();
   }, [searchParams]);
 
@@ -93,15 +93,15 @@ function ResetPassword() {
   const handlePasswordReset = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validatePasswords()) return;
-    
+
     setLoading(true);
     setError(null);
-    
+
     try {
       const { error } = await supabase.auth.updateUser({
         password: newPassword
       });
-      
+
       if (error) throw error;
 
       // Mark the token as used
@@ -109,7 +109,7 @@ function ResetPassword() {
       if (token) {
         localStorage.setItem(`pwd_reset_${token}`, 'used');
       }
-      
+
       setSuccess(true);
       // Clear the URL parameters after successful reset
       window.history.replaceState({}, document.title, window.location.pathname);
@@ -173,7 +173,7 @@ function ResetPassword() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8">
         <h2 className="text-2xl font-bold text-gray-900 mb-6">Reset Your Password</h2>
-        
+
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
             {error}

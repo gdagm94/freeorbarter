@@ -507,9 +507,7 @@ export function MessageList({
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim()) {
-      // #region agent log
-      fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'debug-session', runId: 'run2', hypothesisId: 'H0', location: 'MessageList.tsx:sendMessage:empty', message: 'empty message guard hit', data: { newMessageLen: newMessage.length }, timestamp: Date.now() }) }).catch(() => { });
-      // #endregion
+
       return;
     }
     if (!ensureMessagingAllowed()) {
@@ -521,9 +519,7 @@ export function MessageList({
 
     try {
       const messageContent = newMessage.trim();
-      // #region agent log
-      fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'debug-session', runId: 'run2', hypothesisId: 'H1', location: 'MessageList.tsx:sendMessage:start', message: 'send start', data: { conversationType, itemId, threadId, otherUserId, currentUserId, len: messageContent.length }, timestamp: Date.now() }) }).catch(() => { });
-      // #endregion
+
 
       // Check content filtering
       const filterResult = await checkContent({
@@ -552,9 +548,7 @@ export function MessageList({
 
       const activeThread = await getActiveThreadId();
       if (!activeThread) {
-        // #region agent log
-        fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'debug-session', runId: 'run1', hypothesisId: 'H2', location: 'MessageList.tsx:sendMessage:noThread', message: 'no active thread', data: { conversationType, itemId, otherUserId }, timestamp: Date.now() }) }).catch(() => { });
-        // #endregion
+
         setSending(false);
         return;
       }
@@ -590,10 +584,7 @@ export function MessageList({
       `).single();
 
       if (error) {
-        // #region agent log
-        fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'debug-session', runId: 'run1', hypothesisId: 'H3', location: 'MessageList.tsx:sendMessage:error', message: 'supabase insert error', data: { code: error.code, message: error.message, details: error.details }, timestamp: Date.now() }) }).catch(() => { });
-        fetch('http://127.0.0.1:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'debug-session', runId: 'run1b', hypothesisId: 'H3', location: 'MessageList.tsx:sendMessage:error', message: 'supabase insert error mirror', data: { code: error.code, message: error.message, details: error.details }, timestamp: Date.now() }) }).catch(() => { });
-        // #endregion
+
         console.error('Error sending message:', error);
         return;
       }
@@ -1035,8 +1026,8 @@ export function MessageList({
                   >
                     <div
                       className={`max-w-[80%] rounded-lg px-4 py-2 cursor-pointer ${message.sender_id === currentUserId
-                          ? 'bg-indigo-600 text-white'
-                          : 'bg-gray-100'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-gray-100'
                         }`}
                       onDoubleClick={() => handleMessageDoubleClick(message.id)}
                       onContextMenu={(e) => handleMessageRightClick(e, message.id)}
@@ -1131,8 +1122,8 @@ export function MessageList({
                       {/* Show item context for unified conversations */}
                       {conversationType === 'unified' && message.items && (
                         <div className={`mt-2 p-2 rounded ${message.sender_id === currentUserId
-                            ? 'bg-indigo-700'
-                            : 'bg-white'
+                          ? 'bg-indigo-700'
+                          : 'bg-white'
                           }`}>
                           <div className="mb-1 text-xs font-medium">
                             <span className={message.sender_id === currentUserId ? 'text-indigo-200' : 'text-indigo-600'}>
@@ -1151,8 +1142,8 @@ export function MessageList({
                               />
                               <div className="flex-1 min-w-0">
                                 <p className={`text-xs font-medium ${message.sender_id === currentUserId
-                                    ? 'text-white'
-                                    : 'text-gray-800'
+                                  ? 'text-white'
+                                  : 'text-gray-800'
                                   }`}>
                                   {message.items.title}
                                 </p>
@@ -1164,8 +1155,8 @@ export function MessageList({
                                     View item
                                   </span>
                                   <ArrowRight className={`w-3 h-3 ml-1 ${message.sender_id === currentUserId
-                                      ? 'text-indigo-200'
-                                      : 'text-indigo-600'
+                                    ? 'text-indigo-200'
+                                    : 'text-indigo-600'
                                     }`} />
                                 </div>
                               </div>
@@ -1176,8 +1167,8 @@ export function MessageList({
 
                       {message.offer_item_id && (
                         <div className={`mt-3 p-3 rounded ${message.sender_id === currentUserId
-                            ? 'bg-indigo-700'
-                            : 'bg-white'
+                          ? 'bg-indigo-700'
+                          : 'bg-white'
                           }`}>
                           <div className="mb-2 text-sm font-medium">
                             <span className={message.sender_id === currentUserId ? 'text-indigo-200' : 'text-indigo-600'}>
@@ -1197,20 +1188,20 @@ export function MessageList({
                                 />
                                 <div className="flex-1 min-w-0">
                                   <p className={`text-sm font-medium ${message.sender_id === currentUserId
-                                      ? 'text-white'
-                                      : 'text-gray-800'
+                                    ? 'text-white'
+                                    : 'text-gray-800'
                                     }`}>
                                     {message.offer_item.title}
                                   </p>
                                   <p className={`text-xs ${message.sender_id === currentUserId
-                                      ? 'text-indigo-200'
-                                      : 'text-gray-600'
+                                    ? 'text-indigo-200'
+                                    : 'text-gray-600'
                                     } mt-1`}>
                                     Condition: {message.offer_item.condition}
                                   </p>
                                   <p className={`text-xs ${message.sender_id === currentUserId
-                                      ? 'text-indigo-200'
-                                      : 'text-gray-600'
+                                    ? 'text-indigo-200'
+                                    : 'text-gray-600'
                                     } mt-1 line-clamp-2`}>
                                     {message.offer_item.description}
                                   </p>
@@ -1222,8 +1213,8 @@ export function MessageList({
                                       View item details
                                     </span>
                                     <ArrowRight className={`w-3 h-3 ml-1 ${message.sender_id === currentUserId
-                                        ? 'text-indigo-200'
-                                        : 'text-indigo-600'
+                                      ? 'text-indigo-200'
+                                      : 'text-indigo-600'
                                       }`} />
                                   </div>
                                 </div>
@@ -1231,8 +1222,8 @@ export function MessageList({
                             </Link>
                           ) : (
                             <p className={`text-sm ${message.sender_id === currentUserId
-                                ? 'text-indigo-200'
-                                : 'text-gray-600'
+                              ? 'text-indigo-200'
+                              : 'text-gray-600'
                               }`}>
                               This item is no longer available
                             </p>

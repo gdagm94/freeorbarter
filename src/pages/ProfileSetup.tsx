@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { X, Upload } from 'lucide-react';
-import { LocationSearch } from './LocationSearch';
-import { Map } from './Map';
+import { LocationSearch } from '../components/LocationSearch';
+import { Map } from '../components/Map';
 import { validateLocationData } from '../utils/validation';
 
 interface ProfileSetupProps {
@@ -35,7 +35,8 @@ export function ProfileSetup({ onComplete, onClose, initialData }: ProfileSetupP
   const [selectedLocation, setSelectedLocation] = useState<LocationData | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(initialData?.avatar_url || null);
-  const [searchRadius, setSearchRadius] = useState(10);
+  const [, setSearchRadius] = useState(10);
+
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData({

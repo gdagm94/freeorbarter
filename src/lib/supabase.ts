@@ -1,6 +1,5 @@
-// @ts-nocheck
+
 import { createClient } from '@supabase/supabase-js';
-import { Database } from '../types/supabase';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -11,7 +10,9 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+// TODO: Fix Database type definition to match SupabaseClient generic requirements.
+// Currently using <any> to avoid "Property '...' does not exist on type 'never'" errors.
+export const supabase = createClient<any>(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,

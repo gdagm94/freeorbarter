@@ -258,6 +258,38 @@ export interface Database {
           created_at?: string
         }
       }
+      notifications: {
+        Row: {
+          id: string
+          user_id: string
+          sender_id: string | null
+          type: string
+          content: string
+          related_id: string | null
+          read: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          sender_id?: string | null
+          type: string
+          content: string
+          related_id?: string | null
+          read?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          sender_id?: string | null
+          type?: string
+          content?: string
+          related_id?: string | null
+          read?: boolean
+          created_at?: string
+        }
+      }
       newsletter_subscribers: {
         Row: {
           id: string

@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { FriendRequest, Friendship, FriendRequestWithUser, FriendshipWithUser, FriendshipStatus } from '../types';
+import { FriendRequestWithUser, FriendshipWithUser, FriendshipStatus } from '../types';
 
 /**
  * Send a friend request to another user
@@ -18,7 +18,7 @@ export async function sendFriendRequest(senderId: string, receiverId: string): P
       .insert([{
         sender_id: senderId,
         receiver_id: receiverId,
-        status: 'pending'
+        status: 'pending' as const
       }]);
 
     if (error) throw error;
@@ -50,7 +50,7 @@ export async function acceptFriendRequest(requestId: string): Promise<{ error: E
     // Update the friend request status to accepted
     const { error: updateError } = await supabase
       .from('friend_requests')
-      .update({ status: 'accepted' })
+      .update({ status: 'accepted' as const })
       .eq('id', requestId)
       .eq('status', 'pending');
 
@@ -105,7 +105,7 @@ export async function declineFriendRequest(requestId: string): Promise<{ error: 
   try {
     const { error } = await supabase
       .from('friend_requests')
-      .update({ status: 'declined' })
+      .update({ status: 'declined' as const })
       .eq('id', requestId)
       .eq('status', 'pending');
 
