@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Star } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
@@ -28,7 +28,7 @@ export function WatchButton({ itemId, onAuthRequired }: WatchButtonProps) {
           .eq('item_id', itemId);
 
         // If we get any rows back, the item is being watched
-        setIsWatched(data && data.length > 0);
+        setIsWatched(!!(data && data.length > 0));
       } catch (error) {
         console.error('Error checking watch status:', error);
       } finally {
@@ -79,8 +79,8 @@ export function WatchButton({ itemId, onAuthRequired }: WatchButtonProps) {
       onClick={handleClick}
       disabled={loading}
       className={`flex items-center space-x-1 px-3 py-2 rounded-lg transition-colors ${isWatched
-          ? 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
-          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+        ? 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
+        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
         }`}
       title={isWatched ? 'Remove from Watchlist' : 'Add to Watchlist'}
     >
