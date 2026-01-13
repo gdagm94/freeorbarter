@@ -3,7 +3,7 @@ import { X, Send, User, Image as ImageIcon, Paperclip, Mic } from 'lucide-react'
 import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
 import { useAuth } from '../hooks/useAuth';
-import pusherClient from '../lib/pusher';
+// pusherClient import removed
 import { MessageReactions } from './MessageReactions';
 import { ReadReceipt } from './ReadReceipt';
 import { MessageSearch } from './MessageSearch';
@@ -51,14 +51,14 @@ export function FriendMessageDialog({ friendId, friendName, friendAvatar, onClos
   const [uploading, setUploading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   // New state for enhanced features
   const [showFileAttachment, setShowFileAttachment] = useState(false);
   const [showVoiceMessage, setShowVoiceMessage] = useState(false);
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [selectedImageUrl, setSelectedImageUrl] = useState('');
   const [showFileViewer, setShowFileViewer] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<{url: string; name: string; type: string; size?: number} | null>(null);
+  const [selectedFile, setSelectedFile] = useState<{ url: string; name: string; type: string; size?: number } | null>(null);
   const [lastClickTime, setLastClickTime] = useState(0);
   const [showReactionPicker, setShowReactionPicker] = useState<string | null>(null);
 
@@ -104,48 +104,63 @@ export function FriendMessageDialog({ friendId, friendName, friendAvatar, onClos
 
     fetchMessages();
 
-    // Subscribe to new messages
-    const channel = pusherClient.subscribe(`private-user-${user.id}`);
-    
-    channel.bind('new-message', async (data: { messageId: string }) => {
-      try {
-        const { data: newMessage, error } = await supabase
-          .from('messages')
-          .select(`
-            *,
-            sender:sender_id (
-              username,
-              avatar_url
-            )
-          `)
-          .eq('id', data.messageId)
-          .single();
-
-        if (error) throw error;
-
-        // Only add if it's a direct message from this friend
-        if (newMessage && 
-            !newMessage.item_id && 
-            ((newMessage.sender_id === friendId && newMessage.receiver_id === user.id) ||
-             (newMessage.sender_id === user.id && newMessage.receiver_id === friendId))) {
-          setMessages(prev => [...prev, newMessage]);
-          
-          // Mark as read if from friend
-          if (newMessage.sender_id === friendId) {
-            await supabase
+    // Subscribe to new messages via Supabase Realtime
+    const channel = supabase
+      .channel(`chat:${user.id}:${friendId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `receiver_id=eq.${user.id}`,
+          // Note: Ideally we filter for (sender=friend AND receiver=me) or (sender=me AND receiver=friend)
+          // But RLS filters what we see anyway. Let's just filter by receiver=me for incoming.
+          // Wait, we also want to see our own messages if sent from another device?
+          // Let's filter by the thread participants conceptually.
+          // Since simple filters are limited, we'll filter client-side or just subscribe to all messages for this conversation.
+        },
+        async (payload) => {
+          const newMessage = payload.new as Message;
+          if (
+            (newMessage.sender_id === friendId && newMessage.receiver_id === user.id) ||
+            (newMessage.sender_id === user.id && newMessage.receiver_id === friendId)
+          ) {
+            // Fetch sender details if needed, or just append. 
+            // The payload lacks sender/receiver relations. We might need to fetch.
+            const { data: fullMessage, error } = await supabase
               .from('messages')
-              .update({ read: true, read_at: new Date().toISOString() })
-              .eq('id', newMessage.id);
+              .select(`
+                *,
+                sender:sender_id (
+                  username,
+                  avatar_url
+                )
+              `)
+              .eq('id', newMessage.id)
+              .single();
+
+            if (!error && fullMessage) {
+              setMessages(prev => {
+                if (prev.some(m => m.id === fullMessage.id)) return prev;
+                return [...prev, fullMessage as Message];
+              });
+
+              // Mark as read if from friend
+              if (fullMessage.sender_id === friendId) {
+                await supabase
+                  .from('messages')
+                  .update({ read: true, read_at: new Date().toISOString() })
+                  .eq('id', fullMessage.id);
+              }
+            }
           }
         }
-      } catch (err) {
-        console.error('Error handling new message:', err);
-      }
-    });
+      )
+      .subscribe();
 
     return () => {
-      channel.unbind_all();
-      channel.unsubscribe();
+      supabase.removeChannel(channel);
     };
   }, [user, friendId]);
 
@@ -166,7 +181,7 @@ export function FriendMessageDialog({ friendId, friendName, friendAvatar, onClos
   const handleMessageDoubleClick = (messageId: string) => {
     const now = Date.now();
     const DOUBLE_CLICK_DELAY = 300;
-    
+
     if (lastClickTime && (now - lastClickTime) < DOUBLE_CLICK_DELAY) {
       // Double click detected - show emoji picker
       setShowReactionPicker(messageId);
@@ -179,10 +194,10 @@ export function FriendMessageDialog({ friendId, friendName, friendAvatar, onClos
   const uploadImage = async (file: File): Promise<string | null> => {
     try {
       setUploading(true);
-      
+
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-      
+
       const { error: uploadError } = await supabase.storage
         .from('message-images')
         .upload(fileName, file);
@@ -245,19 +260,7 @@ export function FriendMessageDialog({ friendId, friendName, friendAvatar, onClos
       setMessages(prev => [...prev, data]);
       clearDrafts();
 
-      // Trigger Pusher event
-      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pusher-trigger`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          channel: `private-user-${friendId}`,
-          event: 'new-message',
-          data: { messageId: data.id }
-        })
-      });
+      setSending(false);
 
     } catch (err) {
       console.error('Error sending message:', err);
@@ -271,7 +274,7 @@ export function FriendMessageDialog({ friendId, friendName, friendAvatar, onClos
     if (!newMessage.trim() || !user || sending) return;
 
     const messageContent = newMessage.trim();
-    
+
     // Check content filtering
     try {
       const filterResult = await checkContent({
@@ -326,19 +329,7 @@ export function FriendMessageDialog({ friendId, friendName, friendAvatar, onClos
 
       setMessages(prev => [...prev, data]);
 
-      // Trigger Pusher event
-      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pusher-trigger`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          channel: `private-user-${friendId}`,
-          event: 'new-message',
-          data: { messageId: data.id }
-        })
-      });
+      // Pusher trigger removed
 
     } catch (err) {
       console.error('Error sending message:', err);
@@ -381,19 +372,7 @@ export function FriendMessageDialog({ friendId, friendName, friendAvatar, onClos
       setMessages(prev => [...prev, data]);
       clearDrafts();
 
-      // Trigger Pusher event
-      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pusher-trigger`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          channel: `private-user-${friendId}`,
-          event: 'new-message',
-          data: { messageId: data.id }
-        })
-      });
+      // Pusher trigger removed
     } catch (err) {
       console.error('Error sending file:', err);
     } finally {
@@ -406,10 +385,10 @@ export function FriendMessageDialog({ friendId, friendName, friendAvatar, onClos
 
     setSending(true);
     try {
-      
+
       const fileExt = 'm4a';
       const fileName = `voice_${Date.now()}.${fileExt}`;
-      
+
       const { error: uploadError } = await supabase.storage
         .from('voice-messages')
         .upload(fileName, audioBlob);
@@ -448,19 +427,7 @@ export function FriendMessageDialog({ friendId, friendName, friendAvatar, onClos
       setMessages(prev => [...prev, data]);
       clearDrafts();
 
-      // Trigger Pusher event
-      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pusher-trigger`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          channel: `private-user-${friendId}`,
-          event: 'new-message',
-          data: { messageId: data.id }
-        })
-      });
+      // Pusher trigger removed
     } catch (err) {
       console.error('Error sending voice message:', err);
     } finally {
@@ -536,25 +503,23 @@ export function FriendMessageDialog({ friendId, friendName, friendAvatar, onClos
                 <div
                   key={message.id}
                   id={`message-${message.id}`}
-                  className={`flex ${
-                    message.sender_id === user?.id ? 'justify-end' : 'justify-start'
-                  }`}
+                  className={`flex ${message.sender_id === user?.id ? 'justify-end' : 'justify-start'
+                    }`}
                 >
                   <div
-                    className={`max-w-[80%] rounded-lg px-4 py-2 cursor-pointer ${
-                      message.sender_id === user?.id
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-gray-100 text-gray-900'
-                    }`}
+                    className={`max-w-[80%] rounded-lg px-4 py-2 cursor-pointer ${message.sender_id === user?.id
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-gray-100 text-gray-900'
+                      }`}
                     onDoubleClick={() => handleMessageDoubleClick(message.id)}
                   >
                     <p>{message.content}</p>
-                    
+
                     {/* Message Image */}
                     {message.image_url && (
                       <div className="mt-2">
-                        <img 
-                          src={message.image_url} 
+                        <img
+                          src={message.image_url}
                           alt="Message attachment"
                           className="max-w-xs h-auto rounded-lg cursor-pointer border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
                           onClick={() => {
@@ -610,14 +575,14 @@ export function FriendMessageDialog({ friendId, friendName, friendAvatar, onClos
                     {/* Read Receipt */}
                     {message.sender_id === user?.id && (
                       <ReadReceipt
-                      message={{
-                        read: message.read,
-                        read_at: message.read_at || null,
-                        created_at: message.created_at,
-                        sender_id: message.sender_id
-                      }}
-                      currentUserId={user?.id || ''}
-                    />
+                        message={{
+                          read: message.read,
+                          read_at: message.read_at || null,
+                          created_at: message.created_at,
+                          sender_id: message.sender_id
+                        }}
+                        currentUserId={user?.id || ''}
+                      />
                     )}
 
                     <p className="text-xs opacity-70 mt-1">

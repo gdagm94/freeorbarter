@@ -54,8 +54,8 @@ export default function ChatScreen() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [offerActionLoading, setOfferActionLoading] = useState<string | null>(null);
-  const [otherUser, setOtherUser] = useState<{username: string; avatar_url: string | null} | null>(null);
-  const [replyingTo, setReplyingTo] = useState<{id: string; content: string; senderName: string} | null>(null);
+  const [otherUser, setOtherUser] = useState<{ username: string; avatar_url: string | null } | null>(null);
+  const [replyingTo, setReplyingTo] = useState<{ id: string; content: string; senderName: string } | null>(null);
   const [showFileAttachment, setShowFileAttachment] = useState(false);
   const [showVoiceMessage, setShowVoiceMessage] = useState(false);
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
@@ -64,7 +64,7 @@ export default function ChatScreen() {
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [selectedImageUrl, setSelectedImageUrl] = useState('');
   const [showFileViewer, setShowFileViewer] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<{url: string; name: string; type: string; size?: number} | null>(null);
+  const [selectedFile, setSelectedFile] = useState<{ url: string; name: string; type: string; size?: number } | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const [showOfferTemplates, setShowOfferTemplates] = useState(false);
   const [showBulkOffers, setShowBulkOffers] = useState(false);
@@ -80,8 +80,7 @@ export default function ChatScreen() {
   const { otherUserId, itemId } = route.params || {};
   const [threadId, setThreadId] = useState<string | null>(null);
   const threadChannelRef = useRef<any>(null);
-  const lastThreadCreateFailure = useRef<number | null>(null);
-  const threadCreationDisabledRef = useRef<boolean>(false);
+  // refs removed
   const initialScrollDoneRef = useRef(false);
   const getTopic = () => (itemId ? 'item' : 'direct');
   const sendRecipientPush = async (bodyText: string, extraData: Record<string, any> = {}) => {
@@ -126,7 +125,7 @@ export default function ChatScreen() {
       });
     }
   }, [messages.length]);
-  
+
   // Message drafts hook
   const { saveDraft, clearDrafts } = useMessageDrafts(
     user?.id || '',
@@ -167,14 +166,14 @@ export default function ChatScreen() {
 
   const fetchOtherUser = async () => {
     if (!otherUserId) return;
-    
+
     try {
       const { data, error } = await supabase
         .from('users')
         .select('username, avatar_url')
         .eq('id', otherUserId)
         .single();
-      
+
       if (error) throw error;
       setOtherUser(data);
     } catch (error) {
@@ -185,22 +184,9 @@ export default function ChatScreen() {
   const ensureThread = async (): Promise<string | null> => {
     if (!user || !otherUserId) return null;
     if (threadId) return threadId;
-    if (threadCreationDisabledRef.current) {
-      // #region agent log
-      fetch('http://10.0.0.207:7242/ingest/7324c825-d016-44a1-91f7-2f773ba2ff20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H5',location:'ChatScreen.tsx:ensureThread:disabled',message:'thread creation disabled - skipping',data:{userId:user.id, otherUserId},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      return null;
-    }
-    const now = Date.now();
-    if (lastThreadCreateFailure.current && now - lastThreadCreateFailure.current < 30000) {
-      return null; // back off for 30s after a failure
-    }
 
     try {
-      // #region agent log
-      fetch('http://10.0.0.207:7242/ingest/7324c825-d016-44a1-91f7-2f773ba2ff20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H4',location:'ChatScreen.tsx:ensureThread:start',message:'ensureThread entry',data:{threadId, userId:user.id, otherUserId, itemId},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      // Look for existing thread via recent messages with thread_id
+      // Look for existing thread via recent messages
       const { data: existingMessages, error: existingError } = await supabase
         .from('messages')
         .select('thread_id')
@@ -211,43 +197,43 @@ export default function ChatScreen() {
         .order('created_at', { ascending: false })
         .limit(1);
 
-      // #region agent log
-      fetch('http://10.0.0.207:7242/ingest/7324c825-d016-44a1-91f7-2f773ba2ff20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H2',location:'ChatScreen.tsx:ensureThread:existingQuery',message:'existing thread query result',data:{hasError:Boolean(existingError), firstThreadId:existingMessages?.[0]?.thread_id ?? null},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       if (!existingError && existingMessages && existingMessages.length > 0 && existingMessages[0].thread_id) {
         const existingId = existingMessages[0].thread_id;
         setThreadId(existingId);
-        lastThreadCreateFailure.current = null;
         await ensureThreadMembers(existingId);
         subscribeToThread(existingId);
         return existingId;
       }
 
-      // Skip creating a new thread if none exists; operate without thread_id to avoid RLS failures
-      threadCreationDisabledRef.current = true;
-      // #region agent log
-      fetch('http://10.0.0.207:7242/ingest/7324c825-d016-44a1-91f7-2f773ba2ff20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H5',location:'ChatScreen.tsx:ensureThread:skipCreation',message:'no existing thread; skipping creation to avoid RLS',data:{userId:user.id, otherUserId, itemId},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      return null;
+      // Create new thread if none exists (Aligned with Web logic)
+      const title = itemId ? 'Item conversation' : 'Direct conversation';
+      const { data: created, error: createError } = await supabase
+        .from('message_threads')
+        .insert([
+          {
+            title,
+            item_id: null,
+            created_by: user.id,
+          },
+        ])
+        .select('id')
+        .single();
+
+      if (createError) throw createError;
+      if (created?.id) {
+        setThreadId(created.id);
+        await ensureThreadMembers(created.id);
+        subscribeToThread(created.id);
+        return created.id;
+      }
     } catch (error) {
       console.error('Error ensuring thread:', error);
-      // #region agent log
-      fetch('http://10.0.0.207:7242/ingest/7324c825-d016-44a1-91f7-2f773ba2ff20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H1',location:'ChatScreen.tsx:ensureThread:catch',message:'ensureThread error',data:{error: (error as any)?.message || String(error)},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      // #region agent log
-      fetch('http://10.0.0.207:7242/ingest/7324c825-d016-44a1-91f7-2f773ba2ff20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H5',location:'ChatScreen.tsx:ensureThread:rlsFallback',message:'disabling thread creation after error',data:{error: (error as any)?.message || String(error)},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      threadCreationDisabledRef.current = true;
-      lastThreadCreateFailure.current = Date.now();
     }
     return null;
   };
 
   const ensureThreadMembers = async (id: string) => {
     try {
-      // #region agent log
-      fetch('http://10.0.0.207:7242/ingest/7324c825-d016-44a1-91f7-2f773ba2ff20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H3',location:'ChatScreen.tsx:ensureThreadMembers:start',message:'ensureThreadMembers upsert',data:{threadId:id, userId:user?.id, otherUserId},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       await supabase
         .from('thread_members')
         .upsert(
@@ -259,9 +245,6 @@ export default function ChatScreen() {
         );
     } catch (error) {
       console.error('Error ensuring thread members:', error);
-      // #region agent log
-      fetch('http://10.0.0.207:7242/ingest/7324c825-d016-44a1-91f7-2f773ba2ff20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H3',location:'ChatScreen.tsx:ensureThreadMembers:catch',message:'ensureThreadMembers error',data:{threadId:id, error: (error as any)?.message || String(error)},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
     }
   };
 
@@ -322,7 +305,7 @@ export default function ChatScreen() {
           }
 
           await readQuery;
-        } catch {}
+        } catch { }
       }
       setMessages(all);
       const thread = existingThreadId || all.find(m => m.thread_id)?.thread_id || null;
@@ -359,9 +342,8 @@ export default function ChatScreen() {
     setReportTarget({
       type: 'message',
       id: message.id,
-      displayName: `Message from ${
-        message.sender_id === user.id ? 'you' : otherUser?.username || 'this user'
-      }`,
+      displayName: `Message from ${message.sender_id === user.id ? 'you' : otherUser?.username || 'this user'
+        }`,
       metadata: {
         item_id: message.item_id,
         snippet: message.content?.slice(0, 280),
@@ -452,12 +434,12 @@ export default function ChatScreen() {
   const uploadImage = async (uri: string): Promise<string | null> => {
     try {
       setUploading(true);
-      
+
       // Create FormData for React Native file upload
       const formData = new FormData();
       const fileExt = uri.split('.').pop() || 'jpg';
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-      
+
       // Add file to FormData with proper structure for React Native
       formData.append('file', {
         uri: uri,
@@ -480,7 +462,7 @@ export default function ChatScreen() {
         Alert.alert('Upload Error', `Failed to upload image: ${uploadError.message}`);
         return null;
       }
-      
+
       console.log('Upload successful:', data);
       const { data: { publicUrl } } = supabase.storage
         .from('message-images')
@@ -501,7 +483,7 @@ export default function ChatScreen() {
       console.log('Requesting media library permissions...');
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       console.log('Permission status:', status);
-      
+
       if (status !== 'granted') {
         Alert.alert('Permission needed', 'Please grant camera roll permissions to attach photos');
         return;
@@ -536,7 +518,7 @@ export default function ChatScreen() {
       console.log('Requesting camera permissions...');
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       console.log('Camera permission status:', status);
-      
+
       if (status !== 'granted') {
         Alert.alert('Permission needed', 'Please grant camera permissions to take photos');
         return;
@@ -580,21 +562,15 @@ export default function ChatScreen() {
   const sendMessage = async (content?: string, imageUrl?: string) => {
     const messageContent = content || newMessage.trim();
     if (!messageContent && !imageUrl) {
-      // #region agent log
-      fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'H0',location:'ChatScreen.tsx:sendMessage:empty',message:'empty message guard hit',data:{hasContent:Boolean(messageContent),hasImage:Boolean(imageUrl)},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       return;
     }
     if (!user || !otherUserId) {
-      // #region agent log
-      fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'H0',location:'ChatScreen.tsx:sendMessage:noUser',message:'missing user or otherUserId',data:{userPresent:Boolean(user),otherUserIdPresent:Boolean(otherUserId)},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       return;
     }
-     if (isEitherBlocked) {
-       Alert.alert('Messaging disabled', 'You cannot send messages when a block is in place.');
-       return;
-     }
+    if (isEitherBlocked) {
+      Alert.alert('Messaging disabled', 'You cannot send messages when a block is in place.');
+      return;
+    }
 
     // Check content filtering for text messages
     if (messageContent) {
@@ -636,9 +612,6 @@ export default function ChatScreen() {
 
     try {
       const activeThreadId = threadId || (await ensureThread());
-      // #region agent log
-      fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H1',location:'ChatScreen.tsx:sendMessage:start',message:'send start',data:{activeThreadId,threadId,topic:getTopic(),itemId,otherUserId,userId:user.id,hasContent:Boolean(messageContent),hasImage:Boolean(imageUrl)},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
 
       const messageData: Partial<Message> = {
         sender_id: user.id,
@@ -650,25 +623,14 @@ export default function ChatScreen() {
         topic: getTopic(),
       } as any;
 
-      // #region agent log
-      fetch('http://10.0.0.207:7242/ingest/7324c825-d016-44a1-91f7-2f773ba2ff20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'H6',location:'ChatScreen.tsx:sendMessage:beforeInsert',message:'sendMessage inserting',data:{hasContent:Boolean(messageContent), hasImage:Boolean(imageUrl), topic:messageData.topic, threadId:messageData.thread_id},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       const { error } = await supabase
         .from('messages')
         .insert([messageData]);
 
       if (error) {
         console.error('Error sending message:', error);
-        // #region agent log
-        fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H2',location:'ChatScreen.tsx:sendMessage:insertError',message:'supabase insert error',data:{errorMessage:error.message, code:(error as any)?.code},timestamp:Date.now()})}).catch(()=>{});
-        fetch('http://127.0.0.1:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1b',hypothesisId:'H2',location:'ChatScreen.tsx:sendMessage:insertError',message:'supabase insert error mirror',data:{errorMessage:error.message, code:(error as any)?.code},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         return;
       }
-
-      // #region agent log
-      fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H3',location:'ChatScreen.tsx:sendMessage:success',message:'message inserted',data:{threadId:activeThreadId},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
 
       await sendRecipientPush(messageContent || 'Sent you an attachment', {
         thread_id: activeThreadId,
@@ -697,10 +659,10 @@ export default function ChatScreen() {
       if (offerError) throw offerError;
 
       // Send a system message about the action
-      const actionMessage = action === 'accept' 
-        ? '✅ Barter offer accepted!' 
+      const actionMessage = action === 'accept'
+        ? '✅ Barter offer accepted!'
         : '❌ Barter offer declined';
-      
+
       await supabase
         .from('messages')
         .insert([{
@@ -717,7 +679,7 @@ export default function ChatScreen() {
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert('Success', `Offer ${action}ed successfully`);
-      
+
       // Refresh messages
       await fetchMessages();
 
@@ -747,7 +709,7 @@ export default function ChatScreen() {
 
     try {
       const replyContent = `Replying to "${replyingTo.content}": ${newMessage.trim()}`;
-      
+
       const { error } = await supabase
         .from('messages')
         .insert([{
@@ -903,7 +865,7 @@ export default function ChatScreen() {
   const handleDoubleTap = (messageId: string) => {
     const now = Date.now();
     const DOUBLE_PRESS_DELAY = 300;
-    
+
     if (lastTap && (now - lastTap) < DOUBLE_PRESS_DELAY) {
       // Double tap detected - show emoji picker
       setShowReactionPicker(messageId);
@@ -926,7 +888,7 @@ export default function ChatScreen() {
         ]}>
           {new Date(item.created_at).toLocaleTimeString()}
         </Text>
-        
+
         <TouchableOpacity
           style={[
             styles.messageContainer,
@@ -938,136 +900,136 @@ export default function ChatScreen() {
           delayLongPress={200}
           activeOpacity={0.7}
         >
-        {item.image_url && (
-          <TouchableOpacity 
-            style={styles.messageImageContainer}
-            onPress={() => {
-              if (item.image_url) {
-                setSelectedImageUrl(item.image_url);
-                setShowImageViewer(true);
-              }
-            }}
-          >
-            <Image 
-              source={{ uri: item.image_url }} 
-              style={styles.messageImage}
-              resizeMode="cover"
-            />
-          </TouchableOpacity>
-        )}
-        {item.content && (
-        <Text style={[
-          styles.messageText,
-          isOwnMessage ? styles.ownMessageText : styles.otherMessageText,
-          isOffer && styles.offerMessageText
-        ]}>
-          {item.content}
-        </Text>
-        )}
-        
-        {/* File Display for non-image files */}
-        {(item as any).file_url && !item.image_url && !item.content?.includes('🎤') && (
-          <FileDisplay
-            fileUrl={(item as any).file_url}
-            fileName={(item as any).file_name || 'Unknown file'}
-            fileType={(item as any).file_type || 'unknown'}
-            fileSize={(item as any).file_size}
-            onPress={() => {
-              setSelectedFile({
-                url: (item as any).file_url,
-                name: (item as any).file_name || 'Unknown file',
-                type: (item as any).file_type || 'unknown',
-                size: (item as any).file_size
-              });
-              setShowFileViewer(true);
-            }}
-          />
-        )}
-        
-        {/* Barter Offer Actions - Only show for received offers */}
-        {isOffer && !isOwnMessage && (
-          <View style={styles.offerActions}>
+          {item.image_url && (
             <TouchableOpacity
-              style={[styles.offerButton, styles.acceptButton]}
+              style={styles.messageImageContainer}
               onPress={() => {
-                // We need the offer ID - let's fetch it
-                Alert.alert(
-                  'Accept Offer',
-                  'Are you sure you want to accept this barter offer?',
-                  [
-                    { text: 'Cancel', style: 'cancel' },
-                    {
-                      text: 'Accept',
-                      onPress: async () => {
-                        // Find the offer by message details
-                        const { data: offers } = await supabase
-                          .from('barter_offers')
-                          .select('id')
-                          .eq('offered_item_id', item.offer_item_id!)
-                          .eq('requested_item_id', item.item_id)
-                          .eq('sender_id', item.sender_id)
-                          .eq('status', 'pending')
-                          .limit(1);
-                        
-                        if (offers && offers.length > 0) {
-                          handleOfferAction(item.id, offers[0].id, 'accept');
-                        }
-                      }
-                    }
-                  ]
-                );
-              }}
-              disabled={offerActionLoading === item.id}
-            >
-              <Text style={styles.acceptButtonText}>✓ Accept</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[styles.offerButton, styles.declineButton]}
-              onPress={async () => {
-                // Find the offer by message details
-                const { data: offers } = await supabase
-                  .from('barter_offers')
-                  .select('id')
-                  .eq('offered_item_id', item.offer_item_id!)
-                  .eq('requested_item_id', item.item_id)
-                  .eq('sender_id', item.sender_id)
-                  .eq('status', 'pending')
-                  .limit(1);
-                
-                if (offers && offers.length > 0) {
-                  handleOfferAction(item.id, offers[0].id, 'decline');
+                if (item.image_url) {
+                  setSelectedImageUrl(item.image_url);
+                  setShowImageViewer(true);
                 }
               }}
-              disabled={offerActionLoading === item.id}
             >
-              <Text style={styles.declineButtonText}>✕ Decline</Text>
+              <Image
+                source={{ uri: item.image_url }}
+                style={styles.messageImage}
+                resizeMode="cover"
+              />
             </TouchableOpacity>
-          </View>
-        )}
-        
-        {/* Timestamp moved to be positioned above message bubble */}
-        
-        {/* Message Reactions - Only show if they exist */}
-        <MessageReactions
-          messageId={item.id}
-          currentUserId={user?.id || ''}
-        />
-        
-        {/* Read Receipt */}
-        <ReadReceipt
-          message={item}
-          currentUserId={user?.id || ''}
-        />
-        
-        {/* Voice Message Player */}
-        {(item as any).file_url && item.content?.includes('🎤') && (
-          <VoiceMessagePlayer
-            audioUrl={(item as any).file_url}
-            duration={0} // TODO: Store duration in DB
-            isOwnMessage={isOwnMessage}
+          )}
+          {item.content && (
+            <Text style={[
+              styles.messageText,
+              isOwnMessage ? styles.ownMessageText : styles.otherMessageText,
+              isOffer && styles.offerMessageText
+            ]}>
+              {item.content}
+            </Text>
+          )}
+
+          {/* File Display for non-image files */}
+          {(item as any).file_url && !item.image_url && !item.content?.includes('🎤') && (
+            <FileDisplay
+              fileUrl={(item as any).file_url}
+              fileName={(item as any).file_name || 'Unknown file'}
+              fileType={(item as any).file_type || 'unknown'}
+              fileSize={(item as any).file_size}
+              onPress={() => {
+                setSelectedFile({
+                  url: (item as any).file_url,
+                  name: (item as any).file_name || 'Unknown file',
+                  type: (item as any).file_type || 'unknown',
+                  size: (item as any).file_size
+                });
+                setShowFileViewer(true);
+              }}
+            />
+          )}
+
+          {/* Barter Offer Actions - Only show for received offers */}
+          {isOffer && !isOwnMessage && (
+            <View style={styles.offerActions}>
+              <TouchableOpacity
+                style={[styles.offerButton, styles.acceptButton]}
+                onPress={() => {
+                  // We need the offer ID - let's fetch it
+                  Alert.alert(
+                    'Accept Offer',
+                    'Are you sure you want to accept this barter offer?',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'Accept',
+                        onPress: async () => {
+                          // Find the offer by message details
+                          const { data: offers } = await supabase
+                            .from('barter_offers')
+                            .select('id')
+                            .eq('offered_item_id', item.offer_item_id!)
+                            .eq('requested_item_id', item.item_id)
+                            .eq('sender_id', item.sender_id)
+                            .eq('status', 'pending')
+                            .limit(1);
+
+                          if (offers && offers.length > 0) {
+                            handleOfferAction(item.id, offers[0].id, 'accept');
+                          }
+                        }
+                      }
+                    ]
+                  );
+                }}
+                disabled={offerActionLoading === item.id}
+              >
+                <Text style={styles.acceptButtonText}>✓ Accept</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.offerButton, styles.declineButton]}
+                onPress={async () => {
+                  // Find the offer by message details
+                  const { data: offers } = await supabase
+                    .from('barter_offers')
+                    .select('id')
+                    .eq('offered_item_id', item.offer_item_id!)
+                    .eq('requested_item_id', item.item_id)
+                    .eq('sender_id', item.sender_id)
+                    .eq('status', 'pending')
+                    .limit(1);
+
+                  if (offers && offers.length > 0) {
+                    handleOfferAction(item.id, offers[0].id, 'decline');
+                  }
+                }}
+                disabled={offerActionLoading === item.id}
+              >
+                <Text style={styles.declineButtonText}>✕ Decline</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Timestamp moved to be positioned above message bubble */}
+
+          {/* Message Reactions - Only show if they exist */}
+          <MessageReactions
+            messageId={item.id}
+            currentUserId={user?.id || ''}
           />
-        )}
+
+          {/* Read Receipt */}
+          <ReadReceipt
+            message={item}
+            currentUserId={user?.id || ''}
+          />
+
+          {/* Voice Message Player */}
+          {(item as any).file_url && item.content?.includes('🎤') && (
+            <VoiceMessagePlayer
+              audioUrl={(item as any).file_url}
+              duration={0} // TODO: Store duration in DB
+              isOwnMessage={isOwnMessage}
+            />
+          )}
         </TouchableOpacity>
       </View>
     );
@@ -1094,7 +1056,7 @@ export default function ChatScreen() {
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
         <View style={styles.header}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.backButtonContainer}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -1103,7 +1065,7 @@ export default function ChatScreen() {
           >
             <Text style={styles.backButton}>←</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.headerUserContainer}
             onPress={() => {
               if (otherUserId) {
@@ -1114,8 +1076,8 @@ export default function ChatScreen() {
             activeOpacity={0.7}
           >
             {otherUser?.avatar_url ? (
-              <Image 
-                source={{ uri: otherUser.avatar_url }} 
+              <Image
+                source={{ uri: otherUser.avatar_url }}
                 style={styles.headerAvatar}
               />
             ) : (
@@ -1161,12 +1123,12 @@ export default function ChatScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-    <KeyboardAvoidingView 
-        style={styles.keyboardContainer} 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <View style={styles.header}>
-          <TouchableOpacity 
+      <KeyboardAvoidingView
+        style={styles.keyboardContainer}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <View style={styles.header}>
+          <TouchableOpacity
             style={styles.backButtonContainer}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -1175,7 +1137,7 @@ export default function ChatScreen() {
           >
             <Text style={styles.backButton}>←</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.headerUserContainer}
             onPress={() => {
               if (otherUserId) {
@@ -1186,8 +1148,8 @@ export default function ChatScreen() {
             activeOpacity={0.7}
           >
             {otherUser?.avatar_url ? (
-              <Image 
-                source={{ uri: otherUser.avatar_url }} 
+              <Image
+                source={{ uri: otherUser.avatar_url }}
                 style={styles.headerAvatar}
               />
             ) : (
@@ -1215,61 +1177,61 @@ export default function ChatScreen() {
               onDraftSelect={handleDraftSelect}
             />
           </View>
-      </View>
+        </View>
 
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        renderItem={renderMessage}
-        keyExtractor={(item: Message) => item.id}
-        contentContainerStyle={styles.messagesContainer}
-        onContentSizeChange={() => {
-          if (!initialScrollDoneRef.current) {
-            flatListRef.current?.scrollToEnd({ animated: false });
-            initialScrollDoneRef.current = true;
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          renderItem={renderMessage}
+          keyExtractor={(item: Message) => item.id}
+          contentContainerStyle={styles.messagesContainer}
+          onContentSizeChange={() => {
+            if (!initialScrollDoneRef.current) {
+              flatListRef.current?.scrollToEnd({ animated: false });
+              initialScrollDoneRef.current = true;
+            }
+          }}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No messages yet</Text>
+              <Text style={styles.emptySubtext}>
+                Start the conversation by sending a message
+              </Text>
+            </View>
           }
-        }}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No messages yet</Text>
-            <Text style={styles.emptySubtext}>
-              Start the conversation by sending a message
-            </Text>
-          </View>
-        }
-      />
+        />
 
-      {chatDisabledMessage && (
-        <View style={styles.blockNotice}>
-          <Text style={styles.blockNoticeText}>{chatDisabledMessage}</Text>
-          {blockedByMe && (
-            <TouchableOpacity
-              style={styles.blockNoticeAction}
-              onPress={handleUnblockConversation}
-            >
-              <Text style={styles.blockNoticeActionText}>Unblock</Text>
+        {chatDisabledMessage && (
+          <View style={styles.blockNotice}>
+            <Text style={styles.blockNoticeText}>{chatDisabledMessage}</Text>
+            {blockedByMe && (
+              <TouchableOpacity
+                style={styles.blockNoticeAction}
+                onPress={handleUnblockConversation}
+              >
+                <Text style={styles.blockNoticeActionText}>Unblock</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {/* Reply Context */}
+        {replyingTo && (
+          <View style={styles.replyContext}>
+            <View style={styles.replyContextContent}>
+              <Text style={styles.replyContextLabel}>Replying to {replyingTo.senderName}</Text>
+              <Text style={styles.replyContextMessage} numberOfLines={1}>
+                {replyingTo.content}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={cancelReply} style={styles.cancelReplyButton}>
+              <Text style={styles.cancelReplyText}>✕</Text>
             </TouchableOpacity>
-          )}
-        </View>
-      )}
-
-      {/* Reply Context */}
-      {replyingTo && (
-        <View style={styles.replyContext}>
-          <View style={styles.replyContextContent}>
-            <Text style={styles.replyContextLabel}>Replying to {replyingTo.senderName}</Text>
-            <Text style={styles.replyContextMessage} numberOfLines={1}>
-              {replyingTo.content}
-            </Text>
           </View>
-          <TouchableOpacity onPress={cancelReply} style={styles.cancelReplyButton}>
-            <Text style={styles.cancelReplyText}>✕</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+        )}
 
-      <View style={styles.inputContainer}>
-          <TouchableOpacity 
+        <View style={styles.inputContainer}>
+          <TouchableOpacity
             style={[
               styles.attachButton,
               (!canSendMessages || uploading) && styles.attachButtonDisabled,
@@ -1279,22 +1241,22 @@ export default function ChatScreen() {
           >
             <Text style={styles.attachButtonText}>+</Text>
           </TouchableOpacity>
-          
-        <TextInput
-          style={styles.textInput}
-          value={newMessage}
-          onChangeText={setNewMessage}
-          placeholder={
-            replyingTo
-              ? 'Type your reply...'
-              : chatDisabledMessage ?? 'Type a message...'
-          }
-          multiline
+
+          <TextInput
+            style={styles.textInput}
+            value={newMessage}
+            onChangeText={setNewMessage}
+            placeholder={
+              replyingTo
+                ? 'Type your reply...'
+                : chatDisabledMessage ?? 'Type a message...'
+            }
+            multiline
             maxLength={1000}
-          editable={canSendMessages}
-        />
-          
-        <TouchableOpacity 
+            editable={canSendMessages}
+          />
+
+          <TouchableOpacity
             style={[
               styles.sendButton,
               (!newMessage.trim() && !uploading) || !canSendMessages
@@ -1303,233 +1265,233 @@ export default function ChatScreen() {
             ]}
             onPress={replyingTo ? sendReply : () => sendMessage()}
             disabled={!newMessage.trim() || uploading || !canSendMessages}
-        >
+          >
             <Text style={styles.sendButtonText}>
               {uploading ? '⏳' : 'Send'}
             </Text>
-        </TouchableOpacity>
-      </View>
-      
-      {/* File Attachment Modal */}
-      {showFileAttachment && (
-        <FileAttachment
-          onFileUpload={handleFileUpload}
-          onClose={() => setShowFileAttachment(false)}
-          uploading={uploading}
-          setUploading={setUploading}
+          </TouchableOpacity>
+        </View>
+
+        {/* File Attachment Modal */}
+        {showFileAttachment && (
+          <FileAttachment
+            onFileUpload={handleFileUpload}
+            onClose={() => setShowFileAttachment(false)}
+            uploading={uploading}
+            setUploading={setUploading}
+          />
+        )}
+
+        {/* Voice Message Modal */}
+        {showVoiceMessage && (
+          <VoiceMessage
+            onSend={handleVoiceMessageUpload}
+            onCancel={() => setShowVoiceMessage(false)}
+            isVisible={showVoiceMessage}
+          />
+        )}
+
+        {/* Attachment Menu Modal */}
+        <AttachmentMenu
+          visible={showAttachmentMenu}
+          onClose={() => setShowAttachmentMenu(false)}
+          onCamera={showImagePicker}
+          onDocument={() => setShowFileAttachment(true)}
+          onVoice={() => setShowVoiceMessage(true)}
         />
-      )}
-      
-      {/* Voice Message Modal */}
-      {showVoiceMessage && (
-        <VoiceMessage
-          onSend={handleVoiceMessageUpload}
-          onCancel={() => setShowVoiceMessage(false)}
-          isVisible={showVoiceMessage}
+
+
+        {/* Reaction Picker Modal */}
+        {showReactionPicker && (
+          <MessageReactions
+            messageId={showReactionPicker}
+            currentUserId={user?.id || ''}
+            onReactionChange={() => setShowReactionPicker(null)}
+            showPicker={true}
+          />
+        )}
+
+        {/* Image Viewer Modal */}
+        <ImageViewer
+          visible={showImageViewer && !!selectedImageUrl}
+          images={selectedImageUrl ? [selectedImageUrl] : []}
+          initialIndex={0}
+          onClose={() => setShowImageViewer(false)}
         />
-      )}
 
-      {/* Attachment Menu Modal */}
-      <AttachmentMenu
-        visible={showAttachmentMenu}
-        onClose={() => setShowAttachmentMenu(false)}
-        onCamera={showImagePicker}
-        onDocument={() => setShowFileAttachment(true)}
-        onVoice={() => setShowVoiceMessage(true)}
-      />
+        {/* File Viewer Modal */}
+        {selectedFile && (
+          <FileViewer
+            visible={showFileViewer}
+            fileUrl={selectedFile.url}
+            fileName={selectedFile.name}
+            fileType={selectedFile.type}
+            fileSize={selectedFile.size}
+            onClose={() => {
+              setShowFileViewer(false);
+              setSelectedFile(null);
+            }}
+          />
+        )}
 
 
-      {/* Reaction Picker Modal */}
-      {showReactionPicker && (
-        <MessageReactions
-          messageId={showReactionPicker}
+
+        {/* Offer Templates Modal */}
+        <OfferTemplates
+          visible={showOfferTemplates}
+          onTemplateSelect={(template: { content: string }) => {
+            setNewMessage(template.content);
+            setShowOfferTemplates(false);
+          }}
+          onClose={() => setShowOfferTemplates(false)}
+        />
+
+        {/* Bulk Offers Modal */}
+        <BulkOffers
+          visible={showBulkOffers}
           currentUserId={user?.id || ''}
-          onReactionChange={() => setShowReactionPicker(null)}
-          showPicker={true}
-        />
-      )}
-
-      {/* Image Viewer Modal */}
-      <ImageViewer
-        visible={showImageViewer && !!selectedImageUrl}
-        images={selectedImageUrl ? [selectedImageUrl] : []}
-        initialIndex={0}
-        onClose={() => setShowImageViewer(false)}
-      />
-
-      {/* File Viewer Modal */}
-      {selectedFile && (
-        <FileViewer
-          visible={showFileViewer}
-          fileUrl={selectedFile.url}
-          fileName={selectedFile.name}
-          fileType={selectedFile.type}
-          fileSize={selectedFile.size}
-          onClose={() => {
-            setShowFileViewer(false);
-            setSelectedFile(null);
+          otherUserId={otherUserId}
+          onClose={() => setShowBulkOffers(false)}
+          onOffersSent={() => {
+            // Refresh messages or show success message
           }}
         />
-      )}
 
-
-
-      {/* Offer Templates Modal */}
-      <OfferTemplates
-        visible={showOfferTemplates}
-        onTemplateSelect={(template: { content: string }) => {
-          setNewMessage(template.content);
-          setShowOfferTemplates(false);
-        }}
-        onClose={() => setShowOfferTemplates(false)}
-      />
-
-      {/* Bulk Offers Modal */}
-      <BulkOffers
-        visible={showBulkOffers}
-        currentUserId={user?.id || ''}
-        otherUserId={otherUserId}
-        onClose={() => setShowBulkOffers(false)}
-        onOffersSent={() => {
-          // Refresh messages or show success message
-        }}
-      />
-
-      {/* Counter Offers Modal */}
-      <CounterOffers
-        visible={!!showCounterOffers}
-        messageId={showCounterOffers}
-        currentUserId={user?.id || ''}
-        onClose={() => setShowCounterOffers(null)}
-        onOfferResponse={() => {
-          // Refresh messages or show success message
-        }}
-      />
-      <Modal
-        visible={showSafetyMenu}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowSafetyMenu(false)}
-      >
-        <TouchableOpacity
-          style={styles.safetyMenuOverlay}
-          activeOpacity={1}
-          onPress={() => setShowSafetyMenu(false)}
+        {/* Counter Offers Modal */}
+        <CounterOffers
+          visible={!!showCounterOffers}
+          messageId={showCounterOffers}
+          currentUserId={user?.id || ''}
+          onClose={() => setShowCounterOffers(null)}
+          onOfferResponse={() => {
+            // Refresh messages or show success message
+          }}
+        />
+        <Modal
+          visible={showSafetyMenu}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowSafetyMenu(false)}
         >
-          <View style={styles.safetyMenuContainer}>
-            <Text style={styles.safetyMenuTitle}>Safety & support</Text>
-            <TouchableOpacity
-              style={[
-                styles.safetyMenuOption,
-                styles.safetyMenuOptionAccent,
-              ]}
-              onPress={() => {
-                setShowSafetyMenu(false);
-                handleReportUserFromChat();
-              }}
-            >
-              <Text style={styles.safetyMenuOptionIcon}>⚑</Text>
-              <View style={styles.safetyMenuOptionTextWrap}>
-                <Text
-                  style={[
-                    styles.safetyMenuOptionText,
-                    styles.safetyMenuOptionTextAccent,
-                  ]}
-                >
-                  Report user
+          <TouchableOpacity
+            style={styles.safetyMenuOverlay}
+            activeOpacity={1}
+            onPress={() => setShowSafetyMenu(false)}
+          >
+            <View style={styles.safetyMenuContainer}>
+              <Text style={styles.safetyMenuTitle}>Safety & support</Text>
+              <TouchableOpacity
+                style={[
+                  styles.safetyMenuOption,
+                  styles.safetyMenuOptionAccent,
+                ]}
+                onPress={() => {
+                  setShowSafetyMenu(false);
+                  handleReportUserFromChat();
+                }}
+              >
+                <Text style={styles.safetyMenuOptionIcon}>⚑</Text>
+                <View style={styles.safetyMenuOptionTextWrap}>
+                  <Text
+                    style={[
+                      styles.safetyMenuOptionText,
+                      styles.safetyMenuOptionTextAccent,
+                    ]}
+                  >
+                    Report user
+                  </Text>
+                  <Text
+                    style={[
+                      styles.safetyMenuOptionHelper,
+                      styles.safetyMenuOptionHelperAccent,
+                    ]}
+                  >
+                    Flag {otherUser?.username || 'this user'} for moderator review
+                  </Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.safetyMenuOption,
+                  blockedByMe ? styles.safetyMenuOptionSuccess : styles.safetyMenuOptionDanger,
+                ]}
+                disabled={blockActionLoading}
+                onPress={() => {
+                  setShowSafetyMenu(false);
+                  blockedByMe ? handleUnblockConversation() : handleBlockConversation();
+                }}
+              >
+                <Text style={styles.safetyMenuOptionIcon}>
+                  {blockedByMe ? '✅' : '🚫'}
                 </Text>
-                <Text
-                  style={[
-                    styles.safetyMenuOptionHelper,
-                    styles.safetyMenuOptionHelperAccent,
-                  ]}
-                >
-                  Flag {otherUser?.username || 'this user'} for moderator review
-                </Text>
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.safetyMenuOption,
-                blockedByMe ? styles.safetyMenuOptionSuccess : styles.safetyMenuOptionDanger,
-              ]}
-              disabled={blockActionLoading}
-              onPress={() => {
-                setShowSafetyMenu(false);
-                blockedByMe ? handleUnblockConversation() : handleBlockConversation();
-              }}
-            >
-              <Text style={styles.safetyMenuOptionIcon}>
-                {blockedByMe ? '✅' : '🚫'}
-              </Text>
-              <View style={styles.safetyMenuOptionTextWrap}>
-                <Text
-                  style={[
-                    styles.safetyMenuOptionText,
-                    blockedByMe ? styles.safetyMenuOptionTextSuccess : styles.safetyMenuOptionTextDanger,
-                  ]}
-                >
-                  {blockedByMe ? 'Unblock user' : 'Block user'}
-                </Text>
-                <Text
-                  style={[
-                    styles.safetyMenuOptionHelper,
-                    blockedByMe
-                      ? styles.safetyMenuOptionHelperSuccess
-                      : styles.safetyMenuOptionHelperDanger,
-                  ]}
-                >
-                  {blockedByMe
-                    ? 'Allow messages from this user again'
-                    : 'Stop all messages and remove pending offers'}
-                </Text>
-              </View>
-            </TouchableOpacity>
-            {blockedByOther && !blockedByMe && (
-              <View style={styles.safetyMenuInfo}>
-                <Text style={styles.safetyMenuInfoText}>
-                  You cannot unblock users who have blocked you.
-                </Text>
-              </View>
-            )}
-          </View>
-        </TouchableOpacity>
-      </Modal>
-      <MessageContextMenu
-        visible={showContextMenu}
-        onClose={() => {
-          setShowContextMenu(false);
-          setContextMenuMessage(null);
-        }}
-        onReact={() => {
-          if (contextMenuMessage) {
-            setShowReactionPicker(contextMenuMessage.id);
+                <View style={styles.safetyMenuOptionTextWrap}>
+                  <Text
+                    style={[
+                      styles.safetyMenuOptionText,
+                      blockedByMe ? styles.safetyMenuOptionTextSuccess : styles.safetyMenuOptionTextDanger,
+                    ]}
+                  >
+                    {blockedByMe ? 'Unblock user' : 'Block user'}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.safetyMenuOptionHelper,
+                      blockedByMe
+                        ? styles.safetyMenuOptionHelperSuccess
+                        : styles.safetyMenuOptionHelperDanger,
+                    ]}
+                  >
+                    {blockedByMe
+                      ? 'Allow messages from this user again'
+                      : 'Stop all messages and remove pending offers'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+              {blockedByOther && !blockedByMe && (
+                <View style={styles.safetyMenuInfo}>
+                  <Text style={styles.safetyMenuInfoText}>
+                    You cannot unblock users who have blocked you.
+                  </Text>
+                </View>
+              )}
+            </View>
+          </TouchableOpacity>
+        </Modal>
+        <MessageContextMenu
+          visible={showContextMenu}
+          onClose={() => {
+            setShowContextMenu(false);
+            setContextMenuMessage(null);
+          }}
+          onReact={() => {
+            if (contextMenuMessage) {
+              setShowReactionPicker(contextMenuMessage.id);
+            }
+          }}
+          onReply={() => {
+            if (contextMenuMessage) {
+              const senderName =
+                contextMenuMessage.sender_id === user?.id
+                  ? 'You'
+                  : otherUser?.username || 'Unknown';
+              handleReply(
+                contextMenuMessage.id,
+                contextMenuMessage.content || '',
+                senderName,
+              );
+            }
+          }}
+          onReport={
+            contextMenuMessage ? () => handleReportMessage(contextMenuMessage) : undefined
           }
-        }}
-        onReply={() => {
-          if (contextMenuMessage) {
-            const senderName =
-              contextMenuMessage.sender_id === user?.id
-                ? 'You'
-                : otherUser?.username || 'Unknown';
-            handleReply(
-              contextMenuMessage.id,
-              contextMenuMessage.content || '',
-              senderName,
-            );
-          }
-        }}
-        onReport={
-          contextMenuMessage ? () => handleReportMessage(contextMenuMessage) : undefined
-        }
-        messageId={contextMenuMessage?.id || ''}
-      />
-      <ReportContentSheet
-        visible={!!reportTarget}
-        target={reportTarget}
-        onClose={() => setReportTarget(null)}
-      />
-    </KeyboardAvoidingView>
+          messageId={contextMenuMessage?.id || ''}
+        />
+        <ReportContentSheet
+          visible={!!reportTarget}
+          target={reportTarget}
+          onClose={() => setReportTarget(null)}
+        />
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

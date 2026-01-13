@@ -76,20 +76,20 @@ function NewListing() {
       async (position) => {
         try {
           const { latitude, longitude } = position.coords;
-          
+
           const response = await fetch(
             `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
           );
-          
+
           if (!response.ok) throw new Error('Failed to get location details');
-          
+
           const data = await response.json();
           const address = data.address || {};
-          
+
           const city = address.city || address.town || address.village || '';
           const state = address.state || '';
           const zipcode = address.postcode || '';
-          
+
           if (!city || !state) {
             throw new Error('Could not determine your location');
           }
@@ -129,9 +129,9 @@ function NewListing() {
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     const { city, state, zipcode } = manualFormData;
-    
+
     if (!city || !state || !zipcode) {
       setError('All fields are required for manual entry');
       return;
@@ -146,9 +146,9 @@ function NewListing() {
       const response = await fetch(
         `https://nominatim.openstreetmap.org/search?city=${encodeURIComponent(city)}&state=${encodeURIComponent(state)}&postalcode=${zipcode}&country=usa&format=json`
       );
-      
+
       const data = await response.json();
-      
+
       const location: LocationData = {
         label: `${city}, ${state}`,
         city,
@@ -186,7 +186,7 @@ function NewListing() {
       setError(locationValidation.error || 'Invalid location data');
       return;
     }
-    
+
     setLoading(true);
     setError(null);
 
@@ -275,28 +275,8 @@ function NewListing() {
           // Send notification to each friend
           const notificationPromises = friendsData.map(async (friendship) => {
             const friendId = friendship.user1_id === user.id ? friendship.user2_id : friendship.user1_id;
-            
-            try {
-              await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pusher-trigger`, {
-                method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  channel: `private-user-${friendId}`,
-                  event: 'new-notification',
-                  data: {
-                    type: 'new_listing',
-                    itemId: data.id,
-                    posterId: user.id
-                  }
-                })
-              });
-            } catch (pusherError) {
-              console.error('Error sending notification to friend:', friendId, pusherError);
-              // Continue with other notifications even if one fails
-            }
+
+            // Pusher notification removed
           });
 
           // Wait for all notifications to be sent (but don't block the UI)
@@ -417,7 +397,7 @@ function NewListing() {
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">📸 Photos</h2>
                 <p className="text-gray-600">{images.length}/5 photos</p>
               </div>
-              
+
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
                 {images.map((image, index) => (
                   <div key={index} className="relative group">
@@ -437,13 +417,13 @@ function NewListing() {
                 ))}
                 {images.length < 5 && (
                   <div className="border-2 border-dashed border-gray-300 rounded-xl h-32 flex flex-col items-center justify-center hover:border-gray-400 transition-colors cursor-pointer"
-                       onClick={() => document.getElementById('image-upload')?.click()}>
+                    onClick={() => document.getElementById('image-upload')?.click()}>
                     <span className="text-3xl mb-2">📷</span>
                     <span className="text-sm text-gray-600 font-medium">Add Photo</span>
                   </div>
                 )}
               </div>
-              
+
               <ImageUpload onImagesUploaded={setImages} maxImages={5} />
               {images.length === 0 && (
                 <p className="mt-2 text-sm text-red-500">At least one image is required</p>
@@ -456,16 +436,15 @@ function NewListing() {
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">🎯 Listing Type</h2>
                 <p className="text-gray-600">How do you want to share this item?</p>
               </div>
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <button
                   type="button"
                   onClick={() => setListingType('free')}
-                  className={`p-6 rounded-xl border-2 transition-all duration-200 ${
-                    listingType === 'free'
+                  className={`p-6 rounded-xl border-2 transition-all duration-200 ${listingType === 'free'
                       ? 'border-blue-500 bg-blue-50 shadow-md shadow-blue-100'
                       : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
-                  }`}
+                    }`}
                 >
                   <div className="text-center">
                     <div className="text-3xl mb-3">🎁</div>
@@ -473,15 +452,14 @@ function NewListing() {
                     <p className="text-sm text-gray-600">Give it away</p>
                   </div>
                 </button>
-                
+
                 <button
                   type="button"
                   onClick={() => setListingType('barter')}
-                  className={`p-6 rounded-xl border-2 transition-all duration-200 ${
-                    listingType === 'barter'
+                  className={`p-6 rounded-xl border-2 transition-all duration-200 ${listingType === 'barter'
                       ? 'border-blue-500 bg-blue-50 shadow-md shadow-blue-100'
                       : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
-                  }`}
+                    }`}
                 >
                   <div className="text-center">
                     <div className="text-3xl mb-3">🔄</div>
@@ -498,7 +476,7 @@ function NewListing() {
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">📝 Basic Information</h2>
                 <p className="text-gray-600">Tell us about your item</p>
               </div>
-              
+
               <div className="space-y-6">
                 <div>
                   <label htmlFor="title" className="block text-lg font-semibold text-gray-900 mb-3">
@@ -552,7 +530,7 @@ function NewListing() {
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">🏷️ Item Details</h2>
                 <p className="text-gray-600">Help others find your item</p>
               </div>
-              
+
               <div className="space-y-6">
                 <div>
                   <label className="block text-lg font-semibold text-gray-900 mb-3">
@@ -564,11 +542,10 @@ function NewListing() {
                         key={cat}
                         type="button"
                         onClick={() => setFormData({ ...formData, category: cat.toLowerCase() })}
-                        className={`px-6 py-3 rounded-full text-sm font-semibold transition-all ${
-                          formData.category === cat.toLowerCase()
+                        className={`px-6 py-3 rounded-full text-sm font-semibold transition-all ${formData.category === cat.toLowerCase()
                             ? 'bg-blue-500 text-white shadow-lg shadow-blue-200'
                             : 'bg-white text-gray-700 border-2 border-gray-200 hover:border-gray-300 hover:shadow-md'
-                        }`}
+                          }`}
                       >
                         {cat}
                       </button>
@@ -586,11 +563,10 @@ function NewListing() {
                         key={cond}
                         type="button"
                         onClick={() => setFormData({ ...formData, condition: cond })}
-                        className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${
-                          formData.condition === cond
+                        className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${formData.condition === cond
                             ? 'bg-green-500 text-white shadow-lg shadow-green-200'
                             : 'bg-white text-gray-700 border-2 border-gray-200 hover:border-gray-300 hover:shadow-md'
-                        }`}
+                          }`}
                       >
                         {cond.replace('-', ' ').toUpperCase()}
                       </button>
@@ -606,7 +582,7 @@ function NewListing() {
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">📍 Location</h2>
                 <p className="text-gray-600">Where is this item located?</p>
               </div>
-              
+
               {selectedLocation ? (
                 <div className="bg-green-50 border-2 border-green-200 rounded-xl p-6 flex items-center justify-between">
                   <div className="flex items-center">
@@ -630,18 +606,17 @@ function NewListing() {
                     type="button"
                     onClick={() => setUseCurrentLocation(true)}
                     disabled={isLocating}
-                    className={`flex items-center justify-center px-6 py-4 rounded-xl border-2 transition-all ${
-                      isLocating 
-                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200' 
+                    className={`flex items-center justify-center px-6 py-4 rounded-xl border-2 transition-all ${isLocating
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200'
                         : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-200 hover:shadow-md'
-                    }`}
+                      }`}
                   >
                     <MapPin className="w-6 h-6 mr-3" />
                     <span className="font-semibold">
                       {isLocating ? 'Getting location...' : 'Use my current location'}
                     </span>
                   </button>
-                  
+
                   <button
                     type="button"
                     onClick={() => setShowManualEntry(true)}

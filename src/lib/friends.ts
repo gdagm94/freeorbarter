@@ -8,7 +8,7 @@ export async function sendFriendRequest(senderId: string, receiverId: string): P
   try {
     // Check if users are already friends or have pending request
     const existingStatus = await getFriendshipStatus(senderId, receiverId);
-    
+
     if (existingStatus !== 'none') {
       return { data: null, error: new Error('Friend request already exists or users are already friends') };
     }
@@ -24,26 +24,7 @@ export async function sendFriendRequest(senderId: string, receiverId: string): P
     if (error) throw error;
 
     // Trigger real-time notification
-    try {
-      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pusher-trigger`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          channel: `private-user-${receiverId}`,
-          event: 'new-notification',
-          data: {
-            type: 'friend_request',
-            senderId: senderId
-          }
-        })
-      });
-    } catch (pusherError) {
-      console.error('Error triggering real-time notification:', pusherError);
-      // Don't fail the friend request if Pusher fails
-    }
+    // Pusher notification removed
     return { data: null, error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err : new Error('Failed to send friend request') };

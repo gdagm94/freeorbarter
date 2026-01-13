@@ -93,7 +93,7 @@ export function MessageList({
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [selectedImageUrl, setSelectedImageUrl] = useState('');
   const [showFileViewer, setShowFileViewer] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<{url: string; name: string; type: string; size?: number} | null>(null);
+  const [selectedFile, setSelectedFile] = useState<{ url: string; name: string; type: string; size?: number } | null>(null);
   const [lastClickTime, setLastClickTime] = useState(0);
   const [showReactionPicker, setShowReactionPicker] = useState<string | null>(null);
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
@@ -132,7 +132,7 @@ export function MessageList({
       const unreadMessages = messages.filter(
         msg => msg.receiver_id === currentUserId && !msg.read
       );
-      
+
       if (unreadMessages.length === 0) return;
 
       let query = supabase
@@ -151,47 +151,27 @@ export function MessageList({
       }
 
       const { error } = await query;
-      
+
       if (error) {
         console.error('Error updating message read status:', error);
         return;
       }
 
-      setMessages(prev => 
-        prev.map(msg => 
+      setMessages(prev =>
+        prev.map(msg =>
           (msg.receiver_id === currentUserId && msg.sender_id === otherUserId)
             ? { ...msg, read: true }
             : msg
         )
       );
-      
+
       if (onMessageRead) {
         onMessageRead();
       }
-      
+
       setHasMarkedAsRead(true);
 
-      // Trigger Pusher event for read status update
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pusher-trigger`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          channel: `private-user-${otherUserId}`,
-          event: 'message-read',
-          data: {
-            itemId,
-            readerId: currentUserId,
-            senderId: otherUserId
-          }
-        })
-      });
-
-      if (!response.ok) {
-        console.error('Failed to trigger Pusher event');
-      }
+      setHasMarkedAsRead(true);
     } catch (err) {
       console.error('Error marking messages as read:', err);
     }
@@ -298,7 +278,7 @@ export function MessageList({
     try {
       setLoading(true);
       setError(null);
-      
+
       if (!otherUserId || !UUID_REGEX.test(otherUserId)) {
         console.error('Invalid user ID format:', otherUserId);
         setError('Invalid user ID format');
@@ -375,7 +355,7 @@ export function MessageList({
       if (data && data.length > 0) {
         await markMessagesAsRead();
       }
-      
+
     } catch (err) {
       console.error('Error in fetchMessagesInternal:', err);
       setError('An unexpected error occurred');
@@ -405,12 +385,12 @@ export function MessageList({
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setNewMessage(value);
-    
+
     // Save draft as user types (debounced)
     if (value.trim()) {
       saveDraft(value);
     }
-    
+
     if (!isTyping) {
       setIsTyping(true);
       emitTypingStatus(true);
@@ -427,10 +407,10 @@ export function MessageList({
   const uploadImage = async (file: File): Promise<string | null> => {
     try {
       setUploading(true);
-      
+
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-      
+
       const { error: uploadError } = await supabase.storage
         .from('message-images')
         .upload(fileName, file);
@@ -528,13 +508,13 @@ export function MessageList({
     e.preventDefault();
     if (!newMessage.trim()) {
       // #region agent log
-      fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'H0',location:'MessageList.tsx:sendMessage:empty',message:'empty message guard hit',data:{newMessageLen:newMessage.length},timestamp:Date.now()})}).catch(()=>{});
+      fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'debug-session', runId: 'run2', hypothesisId: 'H0', location: 'MessageList.tsx:sendMessage:empty', message: 'empty message guard hit', data: { newMessageLen: newMessage.length }, timestamp: Date.now() }) }).catch(() => { });
       // #endregion
       return;
     }
     if (!ensureMessagingAllowed()) {
       // #region agent log
-      fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'H0',location:'MessageList.tsx:sendMessage:blocked',message:'ensureMessagingAllowed blocked',data:{otherUserId,blockedByMe:isEitherBlocked && blockedByMe,blockedByOther:isEitherBlocked && blockedByOther},timestamp:Date.now()})}).catch(()=>{});
+      fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'debug-session', runId: 'run2', hypothesisId: 'H0', location: 'MessageList.tsx:sendMessage:blocked', message: 'ensureMessagingAllowed blocked', data: { otherUserId, blockedByMe: isEitherBlocked && blockedByMe, blockedByOther: isEitherBlocked && blockedByOther }, timestamp: Date.now() }) }).catch(() => { });
       // #endregion
       return;
     }
@@ -542,9 +522,9 @@ export function MessageList({
     try {
       const messageContent = newMessage.trim();
       // #region agent log
-      fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'H1',location:'MessageList.tsx:sendMessage:start',message:'send start',data:{conversationType,itemId,threadId,otherUserId,currentUserId,len:messageContent.length},timestamp:Date.now()})}).catch(()=>{});
+      fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'debug-session', runId: 'run2', hypothesisId: 'H1', location: 'MessageList.tsx:sendMessage:start', message: 'send start', data: { conversationType, itemId, threadId, otherUserId, currentUserId, len: messageContent.length }, timestamp: Date.now() }) }).catch(() => { });
       // #endregion
-      
+
       // Check content filtering
       const filterResult = await checkContent({
         content: messageContent,
@@ -573,7 +553,7 @@ export function MessageList({
       const activeThread = await getActiveThreadId();
       if (!activeThread) {
         // #region agent log
-        fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H2',location:'MessageList.tsx:sendMessage:noThread',message:'no active thread',data:{conversationType,itemId,otherUserId},timestamp:Date.now()})}).catch(()=>{});
+        fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'debug-session', runId: 'run1', hypothesisId: 'H2', location: 'MessageList.tsx:sendMessage:noThread', message: 'no active thread', data: { conversationType, itemId, otherUserId }, timestamp: Date.now() }) }).catch(() => { });
         // #endregion
         setSending(false);
         return;
@@ -611,8 +591,8 @@ export function MessageList({
 
       if (error) {
         // #region agent log
-        fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H3',location:'MessageList.tsx:sendMessage:error',message:'supabase insert error',data:{code:error.code,message:error.message,details:error.details},timestamp:Date.now()})}).catch(()=>{});
-        fetch('http://127.0.0.1:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1b',hypothesisId:'H3',location:'MessageList.tsx:sendMessage:error',message:'supabase insert error mirror',data:{code:error.code,message:error.message,details:error.details},timestamp:Date.now()})}).catch(()=>{});
+        fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'debug-session', runId: 'run1', hypothesisId: 'H3', location: 'MessageList.tsx:sendMessage:error', message: 'supabase insert error', data: { code: error.code, message: error.message, details: error.details }, timestamp: Date.now() }) }).catch(() => { });
+        fetch('http://127.0.0.1:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'debug-session', runId: 'run1b', hypothesisId: 'H3', location: 'MessageList.tsx:sendMessage:error', message: 'supabase insert error mirror', data: { code: error.code, message: error.message, details: error.details }, timestamp: Date.now() }) }).catch(() => { });
         // #endregion
         console.error('Error sending message:', error);
         return;
@@ -620,14 +600,14 @@ export function MessageList({
 
       if (data) {
         // #region agent log
-        fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H4',location:'MessageList.tsx:sendMessage:success',message:'insert ok',data:{id:data.id,thread_id:data.thread_id},timestamp:Date.now()})}).catch(()=>{});
+        fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'debug-session', runId: 'run1', hypothesisId: 'H4', location: 'MessageList.tsx:sendMessage:success', message: 'insert ok', data: { id: data.id, thread_id: data.thread_id }, timestamp: Date.now() }) }).catch(() => { });
         // #endregion
         setMessages(prev => [...prev, data]);
         clearDrafts();
       }
     } catch (err) {
       // #region agent log
-      fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H5',location:'MessageList.tsx:sendMessage:catch',message:'unexpected error',data:{err:String(err)},timestamp:Date.now()})}).catch(()=>{});
+      fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'debug-session', runId: 'run1', hypothesisId: 'H5', location: 'MessageList.tsx:sendMessage:catch', message: 'unexpected error', data: { err: String(err) }, timestamp: Date.now() }) }).catch(() => { });
       // #endregion
       console.error('Error in message sending process:', err);
     } finally {
@@ -788,7 +768,7 @@ export function MessageList({
 
       if (data) {
         setMessages(prev => [...prev, data]);
-        
+
         // Clear drafts after successful send
         clearDrafts();
       }
@@ -809,7 +789,7 @@ export function MessageList({
       // Upload audio file
       const fileExt = 'webm';
       const fileName = `voice-${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-      
+
       const { error: uploadError } = await supabase.storage
         .from('message-files')
         .upload(fileName, audioBlob);
@@ -866,7 +846,7 @@ export function MessageList({
 
       if (data) {
         setMessages(prev => [...prev, data]);
-        
+
         // Clear drafts after successful send
         clearDrafts();
       }
@@ -882,7 +862,7 @@ export function MessageList({
   const handleMessageDoubleClick = (messageId: string) => {
     const now = Date.now();
     const DOUBLE_CLICK_DELAY = 300;
-    
+
     if (lastClickTime && (now - lastClickTime) < DOUBLE_CLICK_DELAY) {
       // Double click detected - show emoji picker
       setShowReactionPicker(messageId);
@@ -968,516 +948,504 @@ export function MessageList({
             >
               📦
             </button>
-          {(onReportUser || otherUserId) && (
-            <div className="relative" ref={safetyMenuRef}>
-              <button
-                type="button"
-                onClick={() => setShowSafetyMenu((prev) => !prev)}
-                className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-gray-800 transition-colors"
-                title="Safety & support"
-                aria-label="Safety actions"
-              >
-                <Shield className="w-5 h-5" />
-              </button>
-              {showSafetyMenu && (
-                <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-50" >
-                  <div className="py-1">
-                    {onReportUser && (
+            {(onReportUser || otherUserId) && (
+              <div className="relative" ref={safetyMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowSafetyMenu((prev) => !prev)}
+                  className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-gray-800 transition-colors"
+                  title="Safety & support"
+                  aria-label="Safety actions"
+                >
+                  <Shield className="w-5 h-5" />
+                </button>
+                {showSafetyMenu && (
+                  <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-50" >
+                    <div className="py-1">
+                      {onReportUser && (
+                        <button
+                          className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                          onClick={() => {
+                            setShowSafetyMenu(false);
+                            onReportUser();
+                          }}
+                        >
+                          <Flag className="w-4 h-4 text-red-500" />
+                          Report user
+                        </button>
+                      )}
                       <button
                         className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                         onClick={() => {
                           setShowSafetyMenu(false);
-                          onReportUser();
+                          blockedByMe ? handleUnblockConversation() : handleBlockConversation();
                         }}
+                        disabled={blockActionLoading}
                       >
-                        <Flag className="w-4 h-4 text-red-500" />
-                        Report user
+                        {blockedByMe ? (
+                          <Unlock className="w-4 h-4 text-green-600" />
+                        ) : (
+                          <Ban className="w-4 h-4 text-red-500" />
+                        )}
+                        {blockActionLoading
+                          ? 'Working...'
+                          : blockedByMe
+                            ? 'Unblock user'
+                            : 'Block user'}
                       </button>
-                    )}
-                    <button
-                      className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                      onClick={() => {
-                        setShowSafetyMenu(false);
-                        blockedByMe ? handleUnblockConversation() : handleBlockConversation();
-                      }}
-                      disabled={blockActionLoading}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div
+          ref={messagesContainerRef}
+          className="flex-1 overflow-y-auto p-4 space-y-4"
+        >
+          {loading ? (
+            <div className="flex justify-center items-center h-full">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+            </div>
+          ) : error ? (
+            <div className="flex justify-center items-center h-full">
+              <p className="text-red-500">{error}</p>
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="flex justify-center items-center h-full">
+              <p className="text-gray-500">No messages yet. Start the conversation!</p>
+            </div>
+          ) : (
+            <>
+              {messages.map((message) => (
+                <div
+                  key={message.id}
+                  id={`message-${message.id}`}
+                  className={`flex group ${message.sender_id === currentUserId ? 'justify-end' : 'justify-start'
+                    } ${highlightedMessageId === message.id ? 'bg-yellow-100 rounded-lg p-2' : ''
+                    }`}
+                >
+                  <SwipeToReply
+                    messageId={message.id}
+                    messageContent={message.content}
+                    senderName={message.sender?.username || 'Unknown'}
+                    onReply={handleReplyToMessage}
+                  >
+                    <div
+                      className={`max-w-[80%] rounded-lg px-4 py-2 cursor-pointer ${message.sender_id === currentUserId
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-gray-100'
+                        }`}
+                      onDoubleClick={() => handleMessageDoubleClick(message.id)}
+                      onContextMenu={(e) => handleMessageRightClick(e, message.id)}
                     >
-                      {blockedByMe ? (
-                        <Unlock className="w-4 h-4 text-green-600" />
-                      ) : (
-                        <Ban className="w-4 h-4 text-red-500" />
+                      {message.sender_id !== currentUserId && message.sender && (
+                        <div className="flex items-center mb-1">
+                          <div className="w-5 h-5 rounded-full bg-gray-300 overflow-hidden mr-2">
+                            {message.sender.avatar_url ? (
+                              <img
+                                src={message.sender.avatar_url}
+                                alt={message.sender.username}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : null}
+                          </div>
+                          <span className="text-xs font-medium text-gray-700">
+                            {message.sender.username}
+                          </span>
+                        </div>
                       )}
-                      {blockActionLoading
-                        ? 'Working...'
-                        : blockedByMe
-                          ? 'Unblock user'
-                          : 'Block user'}
-                    </button>
+
+                      {/* Message Image */}
+                      {message.image_url && (
+                        <div className="mt-2">
+                          <img
+                            src={message.image_url}
+                            alt="Message attachment"
+                            className="max-w-xs h-auto rounded-lg cursor-pointer border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
+                            onClick={() => {
+                              if (message.image_url) {
+                                setSelectedImageUrl(message.image_url);
+                                setShowImageViewer(true);
+                              }
+                            }}
+                            onError={(e) => {
+                              console.error('Image failed to load:', message.image_url);
+                              e.currentTarget.style.display = 'none';
+                            }}
+                          />
+                        </div>
+                      )}
+
+                      {/* File Attachment */}
+                      {message.file_url && !message.image_url && !message.content?.includes('🎤') && (
+                        <div className="mt-2">
+                          <FileDisplay
+                            fileUrl={message.file_url}
+                            fileName={message.content?.replace('📎 ', '') || 'Unknown file'}
+                            fileType="application/octet-stream" // We'll need to store this in the database
+                            onPress={() => {
+                              setSelectedFile({
+                                url: message.file_url!,
+                                name: message.content?.replace('📎 ', '') || 'Unknown file',
+                                type: "application/octet-stream",
+                                size: undefined
+                              });
+                              setShowFileViewer(true);
+                            }}
+                          />
+                        </div>
+                      )}
+
+                      {/* Voice Message */}
+                      {message.file_url && message.content?.includes('🎤') && (
+                        <div className="mt-2">
+                          <VoiceMessagePlayer
+                            audioUrl={message.file_url}
+                            duration={0} // We'll need to store duration in the database
+                            isOwnMessage={message.sender_id === currentUserId}
+                          />
+                        </div>
+                      )}
+
+                      {/* Message Content */}
+                      {message.content && (
+                        <p>{message.content}</p>
+                      )}
+
+
+                      {/* Counter Offers Button for Offer Messages */}
+                      {message.is_offer && message.sender_id === currentUserId && (
+                        <div className="mt-2">
+                          <button
+                            onClick={() => setShowCounterOffers(message.id)}
+                            className="text-xs text-indigo-600 hover:text-indigo-700 underline"
+                          >
+                            View counter offers
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Show item context for unified conversations */}
+                      {conversationType === 'unified' && message.items && (
+                        <div className={`mt-2 p-2 rounded ${message.sender_id === currentUserId
+                            ? 'bg-indigo-700'
+                            : 'bg-white'
+                          }`}>
+                          <div className="mb-1 text-xs font-medium">
+                            <span className={message.sender_id === currentUserId ? 'text-indigo-200' : 'text-indigo-600'}>
+                              About item:
+                            </span>
+                          </div>
+                          <Link
+                            to={`/items/${message.items.id}`}
+                            className="block"
+                          >
+                            <div className="flex items-start">
+                              <img
+                                src={message.items.images[0]}
+                                alt={message.items.title}
+                                className="w-12 h-12 object-cover rounded mr-2 flex-shrink-0"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <p className={`text-xs font-medium ${message.sender_id === currentUserId
+                                    ? 'text-white'
+                                    : 'text-gray-800'
+                                  }`}>
+                                  {message.items.title}
+                                </p>
+                                <div className="flex items-center text-xs mt-1">
+                                  <span className={message.sender_id === currentUserId
+                                    ? 'text-indigo-200'
+                                    : 'text-indigo-600'
+                                  }>
+                                    View item
+                                  </span>
+                                  <ArrowRight className={`w-3 h-3 ml-1 ${message.sender_id === currentUserId
+                                      ? 'text-indigo-200'
+                                      : 'text-indigo-600'
+                                    }`} />
+                                </div>
+                              </div>
+                            </div>
+                          </Link>
+                        </div>
+                      )}
+
+                      {message.offer_item_id && (
+                        <div className={`mt-3 p-3 rounded ${message.sender_id === currentUserId
+                            ? 'bg-indigo-700'
+                            : 'bg-white'
+                          }`}>
+                          <div className="mb-2 text-sm font-medium">
+                            <span className={message.sender_id === currentUserId ? 'text-indigo-200' : 'text-indigo-600'}>
+                              Barter Offer
+                            </span>
+                          </div>
+                          {message.offer_item ? (
+                            <Link
+                              to={`/items/${message.offer_item.id}`}
+                              className="block"
+                            >
+                              <div className="flex items-start">
+                                <img
+                                  src={message.offer_item.images[0]}
+                                  alt={message.offer_item.title}
+                                  className="w-16 h-16 object-cover rounded mr-3 flex-shrink-0"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <p className={`text-sm font-medium ${message.sender_id === currentUserId
+                                      ? 'text-white'
+                                      : 'text-gray-800'
+                                    }`}>
+                                    {message.offer_item.title}
+                                  </p>
+                                  <p className={`text-xs ${message.sender_id === currentUserId
+                                      ? 'text-indigo-200'
+                                      : 'text-gray-600'
+                                    } mt-1`}>
+                                    Condition: {message.offer_item.condition}
+                                  </p>
+                                  <p className={`text-xs ${message.sender_id === currentUserId
+                                      ? 'text-indigo-200'
+                                      : 'text-gray-600'
+                                    } mt-1 line-clamp-2`}>
+                                    {message.offer_item.description}
+                                  </p>
+                                  <div className="flex items-center text-xs mt-2">
+                                    <span className={message.sender_id === currentUserId
+                                      ? 'text-indigo-200'
+                                      : 'text-indigo-600'
+                                    }>
+                                      View item details
+                                    </span>
+                                    <ArrowRight className={`w-3 h-3 ml-1 ${message.sender_id === currentUserId
+                                        ? 'text-indigo-200'
+                                        : 'text-indigo-600'
+                                      }`} />
+                                  </div>
+                                </div>
+                              </div>
+                            </Link>
+                          ) : (
+                            <p className={`text-sm ${message.sender_id === currentUserId
+                                ? 'text-indigo-200'
+                                : 'text-gray-600'
+                              }`}>
+                              This item is no longer available
+                            </p>
+                          )}
+
+                          {/* Accept/Decline Buttons - Only for received offers */}
+                          {message.is_offer && message.sender_id !== currentUserId && (
+                            <div className="mt-3 flex gap-2">
+                              <button
+                                onClick={async () => {
+                                  if (!confirm('Are you sure you want to accept this barter offer?')) return;
+
+                                  try {
+                                    // Find the offer
+                                    const { data: offers } = await supabase
+                                      .from('barter_offers')
+                                      .select('id')
+                                      .eq('offered_item_id', message.offer_item_id!)
+                                      .eq('requested_item_id', message.item_id)
+                                      .eq('sender_id', message.sender_id)
+                                      .eq('status', 'pending')
+                                      .limit(1);
+
+                                    if (!offers || offers.length === 0) {
+                                      alert('Offer not found or already processed');
+                                      return;
+                                    }
+
+                                    // Update offer status
+                                    await supabase
+                                      .from('barter_offers')
+                                      .update({ status: 'accepted' })
+                                      .eq('id', offers[0].id);
+
+                                    // Send confirmation message
+                                    await supabase
+                                      .from('messages')
+                                      .insert([{
+                                        sender_id: currentUserId,
+                                        receiver_id: otherUserId,
+                                        content: '✅ Barter offer accepted!',
+                                        item_id: itemId,
+                                        is_offer: false,
+                                        read: false,
+                                      }]);
+
+                                    alert('Offer accepted successfully!');
+                                    // Refresh messages
+                                    window.location.reload();
+                                  } catch (error) {
+                                    console.error('Error accepting offer:', error);
+                                    alert('Failed to accept offer');
+                                  }
+                                }}
+                                className="flex-1 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm font-semibold transition-colors"
+                              >
+                                ✓ Accept
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    // Find the offer
+                                    const { data: offers } = await supabase
+                                      .from('barter_offers')
+                                      .select('id')
+                                      .eq('offered_item_id', message.offer_item_id!)
+                                      .eq('requested_item_id', message.item_id)
+                                      .eq('sender_id', message.sender_id)
+                                      .eq('status', 'pending')
+                                      .limit(1);
+
+                                    if (!offers || offers.length === 0) {
+                                      alert('Offer not found or already processed');
+                                      return;
+                                    }
+
+                                    // Update offer status
+                                    await supabase
+                                      .from('barter_offers')
+                                      .update({ status: 'declined' })
+                                      .eq('id', offers[0].id);
+
+                                    // Send confirmation message
+                                    await supabase
+                                      .from('messages')
+                                      .insert([{
+                                        sender_id: currentUserId,
+                                        receiver_id: otherUserId,
+                                        content: '❌ Barter offer declined',
+                                        item_id: itemId,
+                                        is_offer: false,
+                                        read: false,
+                                      }]);
+
+                                    alert('Offer declined');
+                                    // Refresh messages
+                                    window.location.reload();
+                                  } catch (error) {
+                                    console.error('Error declining offer:', error);
+                                    alert('Failed to decline offer');
+                                  }
+                                }}
+                                className="flex-1 bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-sm font-semibold transition-colors"
+                              >
+                                ✕ Decline
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Message Reactions */}
+                      <MessageReactions
+                        messageId={message.id}
+                        currentUserId={currentUserId}
+                      />
+
+                      <div className="flex items-center justify-between mt-1">
+                        <p className="text-xs opacity-70">
+                          {format(new Date(message.created_at), 'MMM d, h:mm a')}
+                        </p>
+
+                        <ReadReceipt
+                          message={{
+                            read: message.read,
+                            read_at: message.read_at || null,
+                            created_at: message.created_at,
+                            sender_id: message.sender_id
+                          }}
+                          currentUserId={currentUserId}
+                        />
+                      </div>
+                    </div>
+                  </SwipeToReply>
+                </div>
+              ))}
+              {otherUserTyping && (
+                <div className="flex justify-start">
+                  <div className="bg-gray-100 rounded-lg px-4 py-2">
+                    <div className="flex space-x-1">
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+                    </div>
                   </div>
                 </div>
               )}
-            </div>
+              <div ref={messagesEndRef} />
+            </>
           )}
-          </div>
         </div>
-      
-      <div 
-        ref={messagesContainerRef} 
-        className="flex-1 overflow-y-auto p-4 space-y-4"
-      >
-        {loading ? (
-          <div className="flex justify-center items-center h-full">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-          </div>
-        ) : error ? (
-          <div className="flex justify-center items-center h-full">
-            <p className="text-red-500">{error}</p>
-          </div>
-        ) : messages.length === 0 ? (
-          <div className="flex justify-center items-center h-full">
-            <p className="text-gray-500">No messages yet. Start the conversation!</p>
-          </div>
-        ) : (
-          <>
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                id={`message-${message.id}`}
-                className={`flex group ${
-                  message.sender_id === currentUserId ? 'justify-end' : 'justify-start'
-                } ${
-                  highlightedMessageId === message.id ? 'bg-yellow-100 rounded-lg p-2' : ''
-                }`}
+        {chatDisabledMessage && (
+          <div className="px-4 py-3 bg-yellow-50 border-t border-b border-yellow-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <span className="text-sm text-yellow-900">{chatDisabledMessage}</span>
+            {blockedByMe && (
+              <button
+                type="button"
+                onClick={handleUnblockConversation}
+                disabled={blockActionLoading}
+                className="inline-flex items-center px-3 py-1.5 rounded-md bg-yellow-600 text-white text-sm font-medium hover:bg-yellow-700 disabled:opacity-60"
               >
-                <SwipeToReply
-                  messageId={message.id}
-                  messageContent={message.content}
-                  senderName={message.sender?.username || 'Unknown'}
-                  onReply={handleReplyToMessage}
-                >
-                  <div
-                    className={`max-w-[80%] rounded-lg px-4 py-2 cursor-pointer ${
-                      message.sender_id === currentUserId
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-gray-100'
-                    }`}
-                    onDoubleClick={() => handleMessageDoubleClick(message.id)}
-                    onContextMenu={(e) => handleMessageRightClick(e, message.id)}
-                  >
-                  {message.sender_id !== currentUserId && message.sender && (
-                    <div className="flex items-center mb-1">
-                      <div className="w-5 h-5 rounded-full bg-gray-300 overflow-hidden mr-2">
-                        {message.sender.avatar_url ? (
-                          <img 
-                            src={message.sender.avatar_url} 
-                            alt={message.sender.username} 
-                            className="w-full h-full object-cover"
-                          />
-                        ) : null}
-                      </div>
-                      <span className="text-xs font-medium text-gray-700">
-                        {message.sender.username}
-                      </span>
-                    </div>
-                  )}
-                  
-                  {/* Message Image */}
-                  {message.image_url && (
-                    <div className="mt-2">
-                        <img 
-                        src={message.image_url} 
-                        alt="Message attachment"
-                        className="max-w-xs h-auto rounded-lg cursor-pointer border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
-                        onClick={() => {
-                          if (message.image_url) {
-                            setSelectedImageUrl(message.image_url);
-                            setShowImageViewer(true);
-                          }
-                        }}
-                        onError={(e) => {
-                          console.error('Image failed to load:', message.image_url);
-                          e.currentTarget.style.display = 'none';
-                        }}
-                      />
-                    </div>
-                  )}
-
-                  {/* File Attachment */}
-                  {message.file_url && !message.image_url && !message.content?.includes('🎤') && (
-                    <div className="mt-2">
-                      <FileDisplay
-                        fileUrl={message.file_url}
-                        fileName={message.content?.replace('📎 ', '') || 'Unknown file'}
-                        fileType="application/octet-stream" // We'll need to store this in the database
-                        onPress={() => {
-                          setSelectedFile({
-                            url: message.file_url!,
-                            name: message.content?.replace('📎 ', '') || 'Unknown file',
-                            type: "application/octet-stream",
-                            size: undefined
-                          });
-                          setShowFileViewer(true);
-                        }}
-                      />
-                    </div>
-                  )}
-
-                  {/* Voice Message */}
-                  {message.file_url && message.content?.includes('🎤') && (
-                    <div className="mt-2">
-                      <VoiceMessagePlayer
-                        audioUrl={message.file_url}
-                        duration={0} // We'll need to store duration in the database
-                        isOwnMessage={message.sender_id === currentUserId}
-                      />
-                    </div>
-                  )}
-                  
-                  {/* Message Content */}
-                  {message.content && (
-                    <p>{message.content}</p>
-                  )}
-
-
-                  {/* Counter Offers Button for Offer Messages */}
-                  {message.is_offer && message.sender_id === currentUserId && (
-                    <div className="mt-2">
-                      <button
-                        onClick={() => setShowCounterOffers(message.id)}
-                        className="text-xs text-indigo-600 hover:text-indigo-700 underline"
-                      >
-                        View counter offers
-                      </button>
-                    </div>
-                  )}
-                  
-                  {/* Show item context for unified conversations */}
-                  {conversationType === 'unified' && message.items && (
-                    <div className={`mt-2 p-2 rounded ${
-                      message.sender_id === currentUserId
-                        ? 'bg-indigo-700'
-                        : 'bg-white'
-                    }`}>
-                      <div className="mb-1 text-xs font-medium">
-                        <span className={message.sender_id === currentUserId ? 'text-indigo-200' : 'text-indigo-600'}>
-                          About item:
-                        </span>
-                      </div>
-                      <Link 
-                        to={`/items/${message.items.id}`}
-                        className="block"
-                      >
-                        <div className="flex items-start">
-                          <img 
-                            src={message.items.images[0]} 
-                            alt={message.items.title}
-                            className="w-12 h-12 object-cover rounded mr-2 flex-shrink-0"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p className={`text-xs font-medium ${
-                              message.sender_id === currentUserId
-                                ? 'text-white'
-                                : 'text-gray-800'
-                            }`}>
-                              {message.items.title}
-                            </p>
-                            <div className="flex items-center text-xs mt-1">
-                              <span className={message.sender_id === currentUserId
-                                ? 'text-indigo-200'
-                                : 'text-indigo-600'
-                              }>
-                                View item
-                              </span>
-                              <ArrowRight className={`w-3 h-3 ml-1 ${
-                                message.sender_id === currentUserId
-                                  ? 'text-indigo-200'
-                                  : 'text-indigo-600'
-                              }`} />
-                            </div>
-                          </div>
-                        </div>
-                      </Link>
-                    </div>
-                  )}
-                  
-                  {message.offer_item_id && (
-                    <div className={`mt-3 p-3 rounded ${
-                      message.sender_id === currentUserId
-                        ? 'bg-indigo-700'
-                        : 'bg-white'
-                    }`}>
-                      <div className="mb-2 text-sm font-medium">
-                        <span className={message.sender_id === currentUserId ? 'text-indigo-200' : 'text-indigo-600'}>
-                          Barter Offer
-                        </span>
-                      </div>
-                      {message.offer_item ? (
-                        <Link 
-                          to={`/items/${message.offer_item.id}`}
-                          className="block"
-                        >
-                          <div className="flex items-start">
-                            <img 
-                              src={message.offer_item.images[0]} 
-                              alt={message.offer_item.title}
-                              className="w-16 h-16 object-cover rounded mr-3 flex-shrink-0"
-                            />
-                            <div className="flex-1 min-w-0">
-                              <p className={`text-sm font-medium ${
-                                message.sender_id === currentUserId
-                                  ? 'text-white'
-                                  : 'text-gray-800'
-                              }`}>
-                                {message.offer_item.title}
-                              </p>
-                              <p className={`text-xs ${
-                                message.sender_id === currentUserId
-                                  ? 'text-indigo-200'
-                                  : 'text-gray-600'
-                              } mt-1`}>
-                                Condition: {message.offer_item.condition}
-                              </p>
-                              <p className={`text-xs ${
-                                message.sender_id === currentUserId
-                                  ? 'text-indigo-200'
-                                  : 'text-gray-600'
-                              } mt-1 line-clamp-2`}>
-                                {message.offer_item.description}
-                              </p>
-                              <div className="flex items-center text-xs mt-2">
-                                <span className={message.sender_id === currentUserId
-                                  ? 'text-indigo-200'
-                                  : 'text-indigo-600'
-                                }>
-                                  View item details
-                                </span>
-                                <ArrowRight className={`w-3 h-3 ml-1 ${
-                                  message.sender_id === currentUserId
-                                    ? 'text-indigo-200'
-                                    : 'text-indigo-600'
-                                }`} />
-                              </div>
-                            </div>
-                          </div>
-                        </Link>
-                      ) : (
-                        <p className={`text-sm ${
-                          message.sender_id === currentUserId
-                            ? 'text-indigo-200'
-                            : 'text-gray-600'
-                        }`}>
-                          This item is no longer available
-                        </p>
-                      )}
-                      
-                      {/* Accept/Decline Buttons - Only for received offers */}
-                      {message.is_offer && message.sender_id !== currentUserId && (
-                        <div className="mt-3 flex gap-2">
-                          <button
-                            onClick={async () => {
-                              if (!confirm('Are you sure you want to accept this barter offer?')) return;
-                              
-                              try {
-                                // Find the offer
-                                const { data: offers } = await supabase
-                                  .from('barter_offers')
-                                  .select('id')
-                                  .eq('offered_item_id', message.offer_item_id!)
-                                  .eq('requested_item_id', message.item_id)
-                                  .eq('sender_id', message.sender_id)
-                                  .eq('status', 'pending')
-                                  .limit(1);
-                                
-                                if (!offers || offers.length === 0) {
-                                  alert('Offer not found or already processed');
-                                  return;
-                                }
-                                
-                                // Update offer status
-                                await supabase
-                                  .from('barter_offers')
-                                  .update({ status: 'accepted' })
-                                  .eq('id', offers[0].id);
-                                
-                                // Send confirmation message
-                                await supabase
-                                  .from('messages')
-                                  .insert([{
-                                    sender_id: currentUserId,
-                                    receiver_id: otherUserId,
-                                    content: '✅ Barter offer accepted!',
-                                    item_id: itemId,
-                                    is_offer: false,
-                                    read: false,
-                                  }]);
-                                
-                                alert('Offer accepted successfully!');
-                                // Refresh messages
-                                window.location.reload();
-                              } catch (error) {
-                                console.error('Error accepting offer:', error);
-                                alert('Failed to accept offer');
-                              }
-                            }}
-                            className="flex-1 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm font-semibold transition-colors"
-                          >
-                            ✓ Accept
-                          </button>
-                          <button
-                            onClick={async () => {
-                              try {
-                                // Find the offer
-                                const { data: offers } = await supabase
-                                  .from('barter_offers')
-                                  .select('id')
-                                  .eq('offered_item_id', message.offer_item_id!)
-                                  .eq('requested_item_id', message.item_id)
-                                  .eq('sender_id', message.sender_id)
-                                  .eq('status', 'pending')
-                                  .limit(1);
-                                
-                                if (!offers || offers.length === 0) {
-                                  alert('Offer not found or already processed');
-                                  return;
-                                }
-                                
-                                // Update offer status
-                                await supabase
-                                  .from('barter_offers')
-                                  .update({ status: 'declined' })
-                                  .eq('id', offers[0].id);
-                                
-                                // Send confirmation message
-                                await supabase
-                                  .from('messages')
-                                  .insert([{
-                                    sender_id: currentUserId,
-                                    receiver_id: otherUserId,
-                                    content: '❌ Barter offer declined',
-                                    item_id: itemId,
-                                    is_offer: false,
-                                    read: false,
-                                  }]);
-                                
-                                alert('Offer declined');
-                                // Refresh messages
-                                window.location.reload();
-                              } catch (error) {
-                                console.error('Error declining offer:', error);
-                                alert('Failed to decline offer');
-                              }
-                            }}
-                            className="flex-1 bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-sm font-semibold transition-colors"
-                          >
-                            ✕ Decline
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  
-                  {/* Message Reactions */}
-                  <MessageReactions
-                    messageId={message.id}
-                    currentUserId={currentUserId}
-                  />
-                  
-                  <div className="flex items-center justify-between mt-1">
-                    <p className="text-xs opacity-70">
-                      {format(new Date(message.created_at), 'MMM d, h:mm a')}
-                    </p>
-                    
-                    <ReadReceipt
-                      message={{
-                        read: message.read,
-                        read_at: message.read_at || null,
-                        created_at: message.created_at,
-                        sender_id: message.sender_id
-                      }}
-                      currentUserId={currentUserId}
-                    />
-                  </div>
-                  </div>
-                </SwipeToReply>
-              </div>
-            ))}
-            {otherUserTyping && (
-              <div className="flex justify-start">
-                <div className="bg-gray-100 rounded-lg px-4 py-2">
-                  <div className="flex space-x-1">
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
-                  </div>
-                </div>
-              </div>
+                <Unlock className="w-4 h-4 mr-1" />
+                {blockActionLoading ? 'Unblocking…' : 'Unblock'}
+              </button>
             )}
-            <div ref={messagesEndRef} />
-          </>
+          </div>
         )}
-      </div>
-      {chatDisabledMessage && (
-        <div className="px-4 py-3 bg-yellow-50 border-t border-b border-yellow-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <span className="text-sm text-yellow-900">{chatDisabledMessage}</span>
-          {blockedByMe && (
+        <form onSubmit={sendMessage} className="p-4 border-t">
+          <div className="flex space-x-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleImageUpload}
+              className="hidden"
+            />
             <button
               type="button"
-              onClick={handleUnblockConversation}
-              disabled={blockActionLoading}
-              className="inline-flex items-center px-3 py-1.5 rounded-md bg-yellow-600 text-white text-sm font-medium hover:bg-yellow-700 disabled:opacity-60"
+              onClick={() => {
+                if (!ensureMessagingAllowed()) return;
+                setShowAttachmentMenu(true);
+              }}
+              disabled={uploading || !canSendMessages}
+              className="bg-gray-100 text-gray-600 px-3 py-2 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+              title="Attach"
             >
-              <Unlock className="w-4 h-4 mr-1" />
-              {blockActionLoading ? 'Unblocking…' : 'Unblock'}
+              <ImageIcon className="w-5 h-5" />
             </button>
-          )}
-        </div>
-      )}
-      <form onSubmit={sendMessage} className="p-4 border-t">
-        <div className="flex space-x-2">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleImageUpload}
-            className="hidden"
-          />
-          <button
-            type="button"
-            onClick={() => {
-              if (!ensureMessagingAllowed()) return;
-              setShowAttachmentMenu(true);
-            }}
-            disabled={uploading || !canSendMessages}
-            className="bg-gray-100 text-gray-600 px-3 py-2 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-            title="Attach"
-          >
-            <ImageIcon className="w-5 h-5" />
-          </button>
-          <input
-            type="text"
-            value={newMessage}
-            onChange={handleInputChange}
-            onBlur={handleInputBlur}
-            placeholder={chatDisabledMessage ?? 'Type your message...'}
-            className="flex-1 rounded-lg border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-500"
-            disabled={sending || uploading || !canSendMessages}
-          />
-          <button
-            type="submit"
-            disabled={!newMessage.trim() || sending || uploading || !canSendMessages}
-            className="btn-primary flex items-center"
-          >
-            {uploading ? (
-              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            ) : (
-              <>
-                <Send className="w-5 h-5 mr-1" />
-                Send
-              </>
-            )}
-          </button>
-        </div>
-      </form>
+            <input
+              type="text"
+              value={newMessage}
+              onChange={handleInputChange}
+              onBlur={handleInputBlur}
+              placeholder={chatDisabledMessage ?? 'Type your message...'}
+              className="flex-1 rounded-lg border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-500"
+              disabled={sending || uploading || !canSendMessages}
+            />
+            <button
+              type="submit"
+              disabled={!newMessage.trim() || sending || uploading || !canSendMessages}
+              className="btn-primary flex items-center"
+            >
+              {uploading ? (
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <>
+                  <Send className="w-5 h-5 mr-1" />
+                  Send
+                </>
+              )}
+            </button>
+          </div>
+        </form>
       </div>
 
       {/* File Attachment Modal */}
@@ -1659,18 +1627,18 @@ export function MessageList({
         onReport={
           onReportMessage && contextMenuMessageId
             ? () => {
-                const message = messages.find(m => m.id === contextMenuMessageId);
-                if (message) {
-                  const snippet =
-                    message.content ||
-                    (message.image_url
-                      ? '[Image attachment]'
-                      : message.file_url
-                        ? '[File attachment]'
-                        : undefined);
-                  onReportMessage(message.id, snippet);
-                }
+              const message = messages.find(m => m.id === contextMenuMessageId);
+              if (message) {
+                const snippet =
+                  message.content ||
+                  (message.image_url
+                    ? '[Image attachment]'
+                    : message.file_url
+                      ? '[File attachment]'
+                      : undefined);
+                onReportMessage(message.id, snippet);
               }
+            }
             : undefined
         }
         isOwnMessage={contextMenuMessageId ? messages.find(m => m.id === contextMenuMessageId)?.sender_id === currentUserId : false}
