@@ -249,48 +249,39 @@ export function MessageList({
         }
       }
 
-      // 2. RECOVERY: Check for "broken" threads where I am a member, but the other user is missing.
-      // This happens if the previous creation failed halfway. We should repair it.
-      const { data: myThreads } = await supabase
-        .from('thread_members')
-        .select(`
-          thread_id,
-          message_threads!inner (
-            id,
-            item_id,
-            created_at
-          )
-        `)
-        .eq('user_id', currentUserId)
-        .order('created_at', { foreignTable: 'message_threads', ascending: false })
-        .limit(5); // Check latest few threads
+      // 2. RECOVERY: Check for "broken" threads where I am the CREATOR.
+      // Query message_threads directly for reliability.
+      let threadQuery = supabase
+        .from('message_threads')
+        .select('id, item_id, created_at')
+        .eq('created_by', currentUserId)
+        .order('created_at', { ascending: false })
+        .limit(5);
 
-      if (myThreads) {
-        const brokenCandidates = myThreads.filter(c => {
-          const tItemId = c.message_threads.item_id;
-          if (conversationType === 'direct_message') return tItemId === null;
-          if (conversationType === 'item') return tItemId === itemId;
-          if (conversationType === 'unified') return tItemId === null;
-          return true;
-        });
+      if (conversationType === 'direct_message') {
+        threadQuery = threadQuery.is('item_id', null);
+      } else if (conversationType === 'item' && itemId) {
+        threadQuery = threadQuery.eq('item_id', itemId);
+      }
 
-        for (const candidate of brokenCandidates) {
-          // Check if other user is missing
+      const { data: myRecentThreads } = await threadQuery;
+
+      if (myRecentThreads && myRecentThreads.length > 0) {
+        for (const thread of myRecentThreads) {
+          // Check if this thread has the OTHER user
           const { count } = await supabase
             .from('thread_members')
             .select('*', { count: 'exact', head: true })
-            .eq('thread_id', candidate.thread_id)
+            .eq('thread_id', thread.id)
             .eq('user_id', otherUserId);
 
           if (count === 0) {
-            // Found a thread I'm in, that matches context, but Other User is NOT in.
-            // Assume this is the 'lost' thread and repair it.
-            console.log('Repairing broken thread:', candidate.thread_id);
-            await ensureThreadMembers(candidate.thread_id);
+            console.log('Repairing broken thread (adding other user):', thread.id);
+            await ensureThreadMembers(thread.id);
 
-            setThreadId(candidate.thread_id);
-            subscribeToThread(candidate.thread_id);
-            return candidate.thread_id;
+            setThreadId(thread.id);
+            subscribeToThread(thread.id);
+            return thread.id;
           }
         }
       }
