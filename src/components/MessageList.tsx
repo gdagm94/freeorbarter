@@ -179,15 +179,30 @@ export function MessageList({
 
   const ensureThreadMembers = async (id: string) => {
     try {
-      await supabase
+      // Insert current user first to ensure RLS visibility for the second insert
+      const { error: error1 } = await supabase
         .from('thread_members')
         .upsert(
-          [
-            { thread_id: id, user_id: currentUserId },
-            { thread_id: id, user_id: otherUserId },
-          ],
+          { thread_id: id, user_id: currentUserId },
           { onConflict: 'thread_id,user_id' }
         );
+
+      if (error1) {
+        console.error('Error adding current user to thread:', error1);
+        throw error1;
+      }
+
+      // Then insert other user
+      const { error: error2 } = await supabase
+        .from('thread_members')
+        .upsert(
+          { thread_id: id, user_id: otherUserId },
+          { onConflict: 'thread_id,user_id' }
+        );
+
+      if (error2) {
+        console.error('Error adding other user to thread:', error2);
+      }
     } catch (err) {
       console.error('Error ensuring thread members:', err);
     }
@@ -197,38 +212,28 @@ export function MessageList({
     if (!forceRefetch && threadId) return threadId;
 
     try {
-      // 1. Find potential shared threads via thread_members
-      // selecting message_threads details to filter by item_id
+      // 1. Try to find a valid shared thread (strict 2 users)
       const { data: candidates, error: candidateError } = await supabase
         .from('thread_members')
         .select(`
           thread_id,
           message_threads!inner (
             id,
-            item_id
+            item_id,
+            created_at
           )
         `)
         .eq('user_id', otherUserId);
 
-      if (candidateError) {
-        console.error('Error finding candidate threads:', candidateError);
-      }
-
       if (candidates && candidates.length > 0) {
-        // 2. Filter by conversation type/item requirements
         const validCandidates = candidates.filter(c => {
           const tItemId = c.message_threads.item_id;
           if (conversationType === 'direct_message') return tItemId === null;
           if (conversationType === 'item') return tItemId === itemId;
-          // Unified can view any, but for ensureThread we probably want a DM or Item thread context?
-          // Defaulting to DM behavior if unified + no itemId, or specific item if itemId
-          if (conversationType === 'unified') {
-            return tItemId === null;
-          }
+          if (conversationType === 'unified') return tItemId === null;
           return true;
         });
 
-        // 3. Check for specific 2-member strict match to avoid mixed threads
         for (const candidate of validCandidates) {
           const { count } = await supabase
             .from('thread_members')
@@ -238,14 +243,59 @@ export function MessageList({
           if (count === 2) {
             const existing = candidate.thread_id;
             setThreadId(existing);
-            // We don't need to ensure members if count is 2 and we found the other user in it
             subscribeToThread(existing);
             return existing;
           }
         }
       }
 
-      // 4. Create new thread if no valid strict match found
+      // 2. RECOVERY: Check for "broken" threads where I am a member, but the other user is missing.
+      // This happens if the previous creation failed halfway. We should repair it.
+      const { data: myThreads } = await supabase
+        .from('thread_members')
+        .select(`
+          thread_id,
+          message_threads!inner (
+            id,
+            item_id,
+            created_at
+          )
+        `)
+        .eq('user_id', currentUserId)
+        .order('created_at', { foreignTable: 'message_threads', ascending: false })
+        .limit(5); // Check latest few threads
+
+      if (myThreads) {
+        const brokenCandidates = myThreads.filter(c => {
+          const tItemId = c.message_threads.item_id;
+          if (conversationType === 'direct_message') return tItemId === null;
+          if (conversationType === 'item') return tItemId === itemId;
+          if (conversationType === 'unified') return tItemId === null;
+          return true;
+        });
+
+        for (const candidate of brokenCandidates) {
+          // Check if other user is missing
+          const { count } = await supabase
+            .from('thread_members')
+            .select('*', { count: 'exact', head: true })
+            .eq('thread_id', candidate.thread_id)
+            .eq('user_id', otherUserId);
+
+          if (count === 0) {
+            // Found a thread I'm in, that matches context, but Other User is NOT in.
+            // Assume this is the 'lost' thread and repair it.
+            console.log('Repairing broken thread:', candidate.thread_id);
+            await ensureThreadMembers(candidate.thread_id);
+
+            setThreadId(candidate.thread_id);
+            subscribeToThread(candidate.thread_id);
+            return candidate.thread_id;
+          }
+        }
+      }
+
+      // 3. Create new thread if no valid or repairable thread found
       const title = conversationType === 'item' ? 'Item conversation' : 'Direct conversation';
       const threadItemId = conversationType === 'item' ? itemId : null;
 
@@ -254,7 +304,7 @@ export function MessageList({
         .insert([
           {
             title,
-            item_id: threadItemId, // Only set for item convs
+            item_id: threadItemId,
             created_by: currentUserId,
           },
         ])
