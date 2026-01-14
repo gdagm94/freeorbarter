@@ -193,37 +193,68 @@ export function MessageList({
     }
   };
 
-  const ensureThread = async (): Promise<string | null> => {
-    if (threadId) return threadId;
+  const ensureThread = async (forceRefetch = false): Promise<string | null> => {
+    if (!forceRefetch && threadId) return threadId;
 
     try {
-      const { data: existingMessages, error: existingError } = await supabase
-        .from('messages')
-        .select('thread_id')
-        .or(
-          `and(sender_id.eq.${currentUserId},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${currentUserId})`
-        )
-        .not('thread_id', 'is', null)
-        .order('created_at', { ascending: false })
-        .limit(1);
+      // 1. Find potential shared threads via thread_members
+      // selecting message_threads details to filter by item_id
+      const { data: candidates, error: candidateError } = await supabase
+        .from('thread_members')
+        .select(`
+          thread_id,
+          message_threads!inner (
+            id,
+            item_id
+          )
+        `)
+        .eq('user_id', otherUserId);
 
-      if (!existingError && existingMessages && existingMessages.length > 0 && existingMessages[0].thread_id) {
-        const existing = existingMessages[0].thread_id as string;
-        setThreadId(existing);
-        await ensureThreadMembers(existing);
-        subscribeToThread(existing);
-        return existing;
+      if (candidateError) {
+        console.error('Error finding candidate threads:', candidateError);
       }
 
-      const title = conversationType === 'item' ? 'Item conversation' : 'Direct conversation';
+      if (candidates && candidates.length > 0) {
+        // 2. Filter by conversation type/item requirements
+        const validCandidates = candidates.filter(c => {
+          const tItemId = c.message_threads.item_id;
+          if (conversationType === 'direct_message') return tItemId === null;
+          if (conversationType === 'item') return tItemId === itemId;
+          // Unified can view any, but for ensureThread we probably want a DM or Item thread context?
+          // Defaulting to DM behavior if unified + no itemId, or specific item if itemId
+          if (conversationType === 'unified') {
+            return tItemId === null;
+          }
+          return true;
+        });
 
-      // Create with item_id null to satisfy RLS when user isn't item owner
+        // 3. Check for specific 2-member strict match to avoid mixed threads
+        for (const candidate of validCandidates) {
+          const { count } = await supabase
+            .from('thread_members')
+            .select('*', { count: 'exact', head: true })
+            .eq('thread_id', candidate.thread_id);
+
+          if (count === 2) {
+            const existing = candidate.thread_id;
+            setThreadId(existing);
+            // We don't need to ensure members if count is 2 and we found the other user in it
+            subscribeToThread(existing);
+            return existing;
+          }
+        }
+      }
+
+      // 4. Create new thread if no valid strict match found
+      const title = conversationType === 'item' ? 'Item conversation' : 'Direct conversation';
+      const threadItemId = conversationType === 'item' ? itemId : null;
+
       const { data: created, error: createError } = await supabase
         .from('message_threads')
         .insert([
           {
             title,
-            item_id: null,
+            item_id: threadItemId, // Only set for item convs
             created_by: currentUserId,
           },
         ])
@@ -350,9 +381,13 @@ export function MessageList({
         await ensureThreadMembers(foundThread);
         subscribeToThread(foundThread);
       } else if (!foundThread && !threadId) {
-        const created = await ensureThread();
-        if (created) {
-          subscribeToThread(created);
+        // Only run ensureThread if we haven't already passed an override
+        // Otherwise we might infinite loop if ensureThread fails
+        if (!threadOverride) {
+          const created = await ensureThread();
+          if (created) {
+            subscribeToThread(created);
+          }
         }
       }
 
@@ -369,8 +404,17 @@ export function MessageList({
   };
 
   useEffect(() => {
+    // When props change, we MUST reset state to avoid leaking previous conversation data
+    setMessages([]);
+    setThreadId(null);
+    if (threadChannelRef.current) {
+      supabase.removeChannel(threadChannelRef.current);
+      threadChannelRef.current = null;
+    }
+
     const init = async () => {
-      const ensured = await ensureThread();
+      // Force a fresh thread lookup since otherUserId changed
+      const ensured = await ensureThread(true);
       await fetchMessagesInternal(ensured);
     };
     init();
@@ -1024,199 +1068,149 @@ export function MessageList({
                     } ${highlightedMessageId === message.id ? 'bg-yellow-100 rounded-lg p-2' : ''
                     }`}
                 >
-                  <SwipeToReply
-                    messageId={message.id}
-                    messageContent={message.content}
-                    senderName={message.sender?.username || 'Unknown'}
-                    onReply={handleReplyToMessage}
-                  >
-                    <div
-                      className={`relative max-w-[75%] sm:max-w-[60%] px-4 py-2 cursor-pointer shadow-sm ${message.sender_id === currentUserId
-                        ? 'bg-gradient-to-br from-indigo-500 to-indigo-600 text-white rounded-2xl rounded-tr-sm'
-                        : 'bg-white border border-gray-100 text-gray-800 rounded-2xl rounded-tl-sm'
-                        }`}
-                      onDoubleClick={() => handleMessageDoubleClick(message.id)}
-                      onContextMenu={(e) => handleMessageRightClick(e, message.id)}
-                    >
-                      {message.sender_id !== currentUserId && message.sender && (
-                        <div className="flex items-center mb-1">
-                          <div className="w-5 h-5 rounded-full bg-gray-300 overflow-hidden mr-2">
-                            {message.sender.avatar_url ? (
-                              <img
-                                src={message.sender.avatar_url}
-                                alt={message.sender.username}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : null}
-                          </div>
-                          <span className="text-xs font-medium text-gray-700">
-                            {message.sender.username}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Message Image */}
-                      {message.image_url && (
-                        <div className="mt-2">
+                  <div className={`flex items-end gap-2 max-w-[80%] lg:max-w-[60%]`}>
+                    {/* Avatar for receiver - OUTSIDE the bubble */}
+                    {message.sender_id !== currentUserId && message.sender && (
+                      <div className="flex-shrink-0 w-8 h-8 rounded-full overflow-hidden mb-1">
+                        {message.sender.avatar_url ? (
                           <img
-                            src={message.image_url}
-                            alt="Message attachment"
-                            className="max-w-xs h-auto rounded-lg cursor-pointer border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
-                            onClick={() => {
-                              if (message.image_url) {
-                                setSelectedImageUrl(message.image_url);
-                                setShowImageViewer(true);
-                              }
-                            }}
-                            onError={(e) => {
-                              console.error('Image failed to load:', message.image_url);
-                              e.currentTarget.style.display = 'none';
-                            }}
+                            src={message.sender.avatar_url}
+                            alt={message.sender.username}
+                            className="w-full h-full object-cover"
                           />
-                        </div>
-                      )}
-
-                      {/* File Attachment */}
-                      {message.file_url && !message.image_url && !message.content?.includes('🎤') && (
-                        <div className="mt-2">
-                          <FileDisplay
-                            fileUrl={message.file_url}
-                            fileName={message.content?.replace('📎 ', '') || 'Unknown file'}
-                            fileType="application/octet-stream" // We'll need to store this in the database
-                            onPress={() => {
-                              setSelectedFile({
-                                url: message.file_url!,
-                                name: message.content?.replace('📎 ', '') || 'Unknown file',
-                                type: "application/octet-stream",
-                                size: undefined
-                              });
-                              setShowFileViewer(true);
-                            }}
-                          />
-                        </div>
-                      )}
-
-                      {/* Voice Message */}
-                      {message.file_url && message.content?.includes('🎤') && (
-                        <div className="mt-2">
-                          <VoiceMessagePlayer
-                            audioUrl={message.file_url}
-                            duration={0} // We'll need to store duration in the database
-                            isOwnMessage={message.sender_id === currentUserId}
-                          />
-                        </div>
-                      )}
-
-                      {/* Message Content */}
-                      {message.content && (
-                        <p>{message.content}</p>
-                      )}
-
-
-                      {/* Counter Offers Button for Offer Messages */}
-                      {message.is_offer && message.sender_id === currentUserId && (
-                        <div className="mt-2">
-                          <button
-                            onClick={() => setShowCounterOffers(message.id)}
-                            className="text-xs text-indigo-600 hover:text-indigo-700 underline"
-                          >
-                            View counter offers
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Show item context for unified conversations */}
-                      {conversationType === 'unified' && message.items && (
-                        <div className={`mt-2 p-2 rounded ${message.sender_id === currentUserId
-                          ? 'bg-indigo-700'
-                          : 'bg-white'
-                          }`}>
-                          <div className="mb-1 text-xs font-medium">
-                            <span className={message.sender_id === currentUserId ? 'text-indigo-200' : 'text-indigo-600'}>
-                              About item:
-                            </span>
+                        ) : (
+                          <div className="w-full h-full bg-gray-300 flex items-center justify-center text-xs font-medium text-gray-600">
+                            {message.sender.username?.charAt(0).toUpperCase()}
                           </div>
-                          <Link
-                            to={`/items/${message.items.id}`}
-                            className="block"
-                          >
-                            <div className="flex items-start">
-                              <img
-                                src={message.items.images[0]}
-                                alt={message.items.title}
-                                className="w-12 h-12 object-cover rounded mr-2 flex-shrink-0"
-                              />
-                              <div className="flex-1 min-w-0">
-                                <p className={`text-xs font-medium ${message.sender_id === currentUserId
-                                  ? 'text-white'
-                                  : 'text-gray-800'
-                                  }`}>
-                                  {message.items.title}
-                                </p>
-                                <div className="flex items-center text-xs mt-1">
-                                  <span className={message.sender_id === currentUserId
-                                    ? 'text-indigo-200'
-                                    : 'text-indigo-600'
-                                  }>
-                                    View item
-                                  </span>
-                                  <ArrowRight className={`w-3 h-3 ml-1 ${message.sender_id === currentUserId
-                                    ? 'text-indigo-200'
-                                    : 'text-indigo-600'
-                                    }`} />
-                                </div>
-                              </div>
+                        )}
+                      </div>
+                    )}
+
+                    <SwipeToReply
+                      messageId={message.id}
+                      messageContent={message.content}
+                      senderName={message.sender?.username || 'Unknown'}
+                      onReply={handleReplyToMessage}
+                    >
+                      <div
+                        className={`relative px-4 py-2 cursor-pointer shadow-sm min-w-[80px] ${message.sender_id === currentUserId
+                          ? 'bg-gradient-to-br from-indigo-500 to-indigo-600 text-white rounded-2xl rounded-tr-sm'
+                          : 'bg-white border border-gray-100 text-gray-800 rounded-2xl rounded-tl-sm'
+                          }`}
+                        onDoubleClick={() => handleMessageDoubleClick(message.id)}
+                        onContextMenu={(e) => handleMessageRightClick(e, message.id)}
+                      >
+                        {/* Username inside bubble for group chats or just visual context, but small */}
+                        {message.sender_id !== currentUserId && message.sender && (
+                          <div className="text-[10px] font-bold text-gray-500 mb-0.5 ml-1">
+                            {message.sender.username}
+                          </div>
+                        )}
+
+                        {/* Message Image */}
+                        {message.image_url && (
+                          <div className="mt-1 mb-2">
+                            <img
+                              src={message.image_url}
+                              alt="Message attachment"
+                              className="max-w-xs h-auto rounded-lg cursor-pointer border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
+                              onClick={() => {
+                                if (message.image_url) {
+                                  setSelectedImageUrl(message.image_url);
+                                  setShowImageViewer(true);
+                                }
+                              }}
+                              onError={(e) => {
+                                console.error('Image failed to load:', message.image_url);
+                                e.currentTarget.style.display = 'none';
+                              }}
+                            />
+                          </div>
+                        )}
+
+                        {/* File Attachment */}
+                        {message.file_url && !message.image_url && !message.content?.includes('🎤') && (
+                          <div className="mt-2">
+                            <FileDisplay
+                              fileUrl={message.file_url}
+                              fileName={message.content?.replace('📎 ', '') || 'Unknown file'}
+                              fileType="application/octet-stream"
+                              onPress={() => {
+                                setSelectedFile({
+                                  url: message.file_url!,
+                                  name: message.content?.replace('📎 ', '') || 'Unknown file',
+                                  type: "application/octet-stream",
+                                  size: undefined
+                                });
+                                setShowFileViewer(true);
+                              }}
+                            />
+                          </div>
+                        )}
+
+                        {/* Voice Message */}
+                        {message.file_url && message.content?.includes('🎤') && (
+                          <div className="mt-2">
+                            <VoiceMessagePlayer
+                              audioUrl={message.file_url}
+                              duration={0}
+                              isOwnMessage={message.sender_id === currentUserId}
+                            />
+                          </div>
+                        )}
+
+                        {/* Message Content */}
+                        {message.content && (
+                          <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                        )}
+
+
+                        {/* Counter Offers Button for Offer Messages */}
+                        {message.is_offer && message.sender_id === currentUserId && (
+                          <div className="mt-2">
+                            <button
+                              onClick={() => setShowCounterOffers(message.id)}
+                              className="text-xs text-indigo-600 hover:text-indigo-700 underline"
+                            >
+                              View counter offers
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Show item context for unified conversations */}
+                        {conversationType === 'unified' && message.items && (
+                          <div className={`mt-2 p-2 rounded ${message.sender_id === currentUserId
+                            ? 'bg-indigo-700'
+                            : 'bg-white'
+                            }`}>
+                            <div className="mb-1 text-xs font-medium">
+                              <span className={message.sender_id === currentUserId ? 'text-indigo-200' : 'text-indigo-600'}>
+                                About item:
+                              </span>
                             </div>
-                          </Link>
-                        </div>
-                      )}
-
-                      {message.offer_item_id && (
-                        <div className={`mt-3 p-3 rounded ${message.sender_id === currentUserId
-                          ? 'bg-indigo-700'
-                          : 'bg-white'
-                          }`}>
-                          <div className="mb-2 text-sm font-medium">
-                            <span className={message.sender_id === currentUserId ? 'text-indigo-200' : 'text-indigo-600'}>
-                              Barter Offer
-                            </span>
-                          </div>
-                          {message.offer_item ? (
                             <Link
-                              to={`/items/${message.offer_item.id}`}
+                              to={`/items/${message.items.id}`}
                               className="block"
                             >
                               <div className="flex items-start">
                                 <img
-                                  src={message.offer_item.images[0]}
-                                  alt={message.offer_item.title}
-                                  className="w-16 h-16 object-cover rounded mr-3 flex-shrink-0"
+                                  src={message.items.images[0]}
+                                  alt={message.items.title}
+                                  className="w-12 h-12 object-cover rounded mr-2 flex-shrink-0"
                                 />
                                 <div className="flex-1 min-w-0">
-                                  <p className={`text-sm font-medium ${message.sender_id === currentUserId
+                                  <p className={`text-xs font-medium ${message.sender_id === currentUserId
                                     ? 'text-white'
                                     : 'text-gray-800'
                                     }`}>
-                                    {message.offer_item.title}
+                                    {message.items.title}
                                   </p>
-                                  <p className={`text-xs ${message.sender_id === currentUserId
-                                    ? 'text-indigo-200'
-                                    : 'text-gray-600'
-                                    } mt-1`}>
-                                    Condition: {message.offer_item.condition}
-                                  </p>
-                                  <p className={`text-xs ${message.sender_id === currentUserId
-                                    ? 'text-indigo-200'
-                                    : 'text-gray-600'
-                                    } mt-1 line-clamp-2`}>
-                                    {message.offer_item.description}
-                                  </p>
-                                  <div className="flex items-center text-xs mt-2">
+                                  <div className="flex items-center text-xs mt-1">
                                     <span className={message.sender_id === currentUserId
                                       ? 'text-indigo-200'
                                       : 'text-indigo-600'
                                     }>
-                                      View item details
+                                      View item
                                     </span>
                                     <ArrowRight className={`w-3 h-3 ml-1 ${message.sender_id === currentUserId
                                       ? 'text-indigo-200'
@@ -1226,144 +1220,203 @@ export function MessageList({
                                 </div>
                               </div>
                             </Link>
-                          ) : (
-                            <p className={`text-sm ${message.sender_id === currentUserId
-                              ? 'text-indigo-200'
-                              : 'text-gray-600'
-                              }`}>
-                              This item is no longer available
-                            </p>
-                          )}
+                          </div>
+                        )}
 
-                          {/* Accept/Decline Buttons - Only for received offers */}
-                          {message.is_offer && message.sender_id !== currentUserId && (
-                            <div className="mt-3 flex gap-2">
-                              <button
-                                onClick={async () => {
-                                  if (!confirm('Are you sure you want to accept this barter offer?')) return;
-
-                                  try {
-                                    // Find the offer
-                                    const { data: offers } = await supabase
-                                      .from('barter_offers')
-                                      .select('id')
-                                      .eq('offered_item_id', message.offer_item_id!)
-                                      .eq('requested_item_id', message.item_id)
-                                      .eq('sender_id', message.sender_id)
-                                      .eq('status', 'pending')
-                                      .limit(1);
-
-                                    if (!offers || offers.length === 0) {
-                                      alert('Offer not found or already processed');
-                                      return;
-                                    }
-
-                                    // Update offer status
-                                    await supabase
-                                      .from('barter_offers')
-                                      .update({ status: 'accepted' })
-                                      .eq('id', offers[0].id);
-
-                                    // Send confirmation message
-                                    await supabase
-                                      .from('messages')
-                                      .insert([{
-                                        sender_id: currentUserId,
-                                        receiver_id: otherUserId,
-                                        content: '✅ Barter offer accepted!',
-                                        item_id: itemId,
-                                        is_offer: false,
-                                        read: false,
-                                      }]);
-
-                                    alert('Offer accepted successfully!');
-                                    // Refresh messages
-                                    window.location.reload();
-                                  } catch (error) {
-                                    console.error('Error accepting offer:', error);
-                                    alert('Failed to accept offer');
-                                  }
-                                }}
-                                className="flex-1 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm font-semibold transition-colors"
-                              >
-                                ✓ Accept
-                              </button>
-                              <button
-                                onClick={async () => {
-                                  try {
-                                    // Find the offer
-                                    const { data: offers } = await supabase
-                                      .from('barter_offers')
-                                      .select('id')
-                                      .eq('offered_item_id', message.offer_item_id!)
-                                      .eq('requested_item_id', message.item_id)
-                                      .eq('sender_id', message.sender_id)
-                                      .eq('status', 'pending')
-                                      .limit(1);
-
-                                    if (!offers || offers.length === 0) {
-                                      alert('Offer not found or already processed');
-                                      return;
-                                    }
-
-                                    // Update offer status
-                                    await supabase
-                                      .from('barter_offers')
-                                      .update({ status: 'declined' })
-                                      .eq('id', offers[0].id);
-
-                                    // Send confirmation message
-                                    await supabase
-                                      .from('messages')
-                                      .insert([{
-                                        sender_id: currentUserId,
-                                        receiver_id: otherUserId,
-                                        content: '❌ Barter offer declined',
-                                        item_id: itemId,
-                                        is_offer: false,
-                                        read: false,
-                                      }]);
-
-                                    alert('Offer declined');
-                                    // Refresh messages
-                                    window.location.reload();
-                                  } catch (error) {
-                                    console.error('Error declining offer:', error);
-                                    alert('Failed to decline offer');
-                                  }
-                                }}
-                                className="flex-1 bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-sm font-semibold transition-colors"
-                              >
-                                ✕ Decline
-                              </button>
+                        {message.offer_item_id && (
+                          <div className={`mt-3 p-3 rounded ${message.sender_id === currentUserId
+                            ? 'bg-indigo-700'
+                            : 'bg-white'
+                            }`}>
+                            <div className="mb-2 text-sm font-medium">
+                              <span className={message.sender_id === currentUserId ? 'text-indigo-200' : 'text-indigo-600'}>
+                                Barter Offer
+                              </span>
                             </div>
-                          )}
-                        </div>
-                      )}
+                            {message.offer_item ? (
+                              <Link
+                                to={`/items/${message.offer_item.id}`}
+                                className="block"
+                              >
+                                <div className="flex items-start">
+                                  <img
+                                    src={message.offer_item.images[0]}
+                                    alt={message.offer_item.title}
+                                    className="w-16 h-16 object-cover rounded mr-3 flex-shrink-0"
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <p className={`text-sm font-medium ${message.sender_id === currentUserId
+                                      ? 'text-white'
+                                      : 'text-gray-800'
+                                      }`}>
+                                      {message.offer_item.title}
+                                    </p>
+                                    <p className={`text-xs ${message.sender_id === currentUserId
+                                      ? 'text-indigo-200'
+                                      : 'text-gray-600'
+                                      } mt-1`}>
+                                      Condition: {message.offer_item.condition}
+                                    </p>
+                                    <p className={`text-xs ${message.sender_id === currentUserId
+                                      ? 'text-indigo-200'
+                                      : 'text-gray-600'
+                                      } mt-1 line-clamp-2`}>
+                                      {message.offer_item.description}
+                                    </p>
+                                    <div className="flex items-center text-xs mt-2">
+                                      <span className={message.sender_id === currentUserId
+                                        ? 'text-indigo-200'
+                                        : 'text-indigo-600'
+                                      }>
+                                        View item details
+                                      </span>
+                                      <ArrowRight className={`w-3 h-3 ml-1 ${message.sender_id === currentUserId
+                                        ? 'text-indigo-200'
+                                        : 'text-indigo-600'
+                                        }`} />
+                                    </div>
+                                  </div>
+                                </div>
+                              </Link>
+                            ) : (
+                              <p className={`text-sm ${message.sender_id === currentUserId
+                                ? 'text-indigo-200'
+                                : 'text-gray-600'
+                                }`}>
+                                This item is no longer available
+                              </p>
+                            )}
 
-                      {/* Message Reactions */}
-                      <MessageReactions
-                        messageId={message.id}
-                        currentUserId={currentUserId}
-                      />
+                            {/* Accept/Decline Buttons - Only for received offers */}
+                            {message.is_offer && message.sender_id !== currentUserId && (
+                              <div className="mt-3 flex gap-2">
+                                <button
+                                  onClick={async () => {
+                                    if (!confirm('Are you sure you want to accept this barter offer?')) return;
 
-                      <div className="flex items-center justify-end mt-1 gap-1">
-                        <p className={`text-[10px] ${message.sender_id === currentUserId ? 'text-indigo-100' : 'text-gray-400'}`}>
-                          {format(new Date(message.created_at), 'h:mm a')}
-                        </p>
+                                    try {
+                                      // Find the offer
+                                      const { data: offers } = await supabase
+                                        .from('barter_offers')
+                                        .select('id')
+                                        .eq('offered_item_id', message.offer_item_id!)
+                                        .eq('requested_item_id', message.item_id)
+                                        .eq('sender_id', message.sender_id)
+                                        .eq('status', 'pending')
+                                        .limit(1);
 
-                        <ReadReceipt
-                          message={{
-                            read: message.read,
-                            read_at: message.read_at || null,
-                            created_at: message.created_at,
-                            sender_id: message.sender_id
-                          }}
+                                      if (!offers || offers.length === 0) {
+                                        alert('Offer not found or already processed');
+                                        return;
+                                      }
+
+                                      // Update offer status
+                                      await supabase
+                                        .from('barter_offers')
+                                        .update({ status: 'accepted' })
+                                        .eq('id', offers[0].id);
+
+                                      // Send confirmation message
+                                      await supabase
+                                        .from('messages')
+                                        .insert([{
+                                          sender_id: currentUserId,
+                                          receiver_id: otherUserId,
+                                          content: '✅ Barter offer accepted!',
+                                          item_id: itemId,
+                                          is_offer: false,
+                                          read: false,
+                                        }]);
+
+                                      alert('Offer accepted successfully!');
+                                      // Refresh messages
+                                      window.location.reload();
+                                    } catch (error) {
+                                      console.error('Error accepting offer:', error);
+                                      alert('Failed to accept offer');
+                                    }
+                                  }}
+                                  className="flex-1 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm font-semibold transition-colors"
+                                >
+                                  ✓ Accept
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      // Find the offer
+                                      const { data: offers } = await supabase
+                                        .from('barter_offers')
+                                        .select('id')
+                                        .eq('offered_item_id', message.offer_item_id!)
+                                        .eq('requested_item_id', message.item_id)
+                                        .eq('sender_id', message.sender_id)
+                                        .eq('status', 'pending')
+                                        .limit(1);
+
+                                      if (!offers || offers.length === 0) {
+                                        alert('Offer not found or already processed');
+                                        return;
+                                      }
+
+                                      // Update offer status
+                                      await supabase
+                                        .from('barter_offers')
+                                        .update({ status: 'declined' })
+                                        .eq('id', offers[0].id);
+
+                                      // Send confirmation message
+                                      await supabase
+                                        .from('messages')
+                                        .insert([{
+                                          sender_id: currentUserId,
+                                          receiver_id: otherUserId,
+                                          content: '❌ Barter offer declined',
+                                          item_id: itemId,
+                                          is_offer: false,
+                                          read: false,
+                                        }]);
+
+                                      alert('Offer declined');
+                                      // Refresh messages
+                                      window.location.reload();
+                                    } catch (error) {
+                                      console.error('Error declining offer:', error);
+                                      alert('Failed to decline offer');
+                                    }
+                                  }}
+                                  className="flex-1 bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-sm font-semibold transition-colors"
+                                >
+                                  ✕ Decline
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Message Reactions */}
+                        <MessageReactions
+                          messageId={message.id}
                           currentUserId={currentUserId}
                         />
+
+                        <div className="flex items-center justify-end mt-1 gap-2 whitespace-nowrap">
+                          <p className={`text-[10px] ${message.sender_id === currentUserId ? 'text-indigo-100' : 'text-gray-400'}`}>
+                            {format(new Date(message.created_at), 'h:mm a')}
+                          </p>
+
+                          <ReadReceipt
+                            message={{
+                              read: message.read,
+                              read_at: message.read_at || null,
+                              created_at: message.created_at,
+                              sender_id: message.sender_id
+                            }}
+                            currentUserId={currentUserId}
+                          />
+                        </div>
                       </div>
-                    </div>
-                  </SwipeToReply>
+                    </SwipeToReply>
+                  </div>
                 </div>
               ))}
               {otherUserTyping && (
