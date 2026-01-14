@@ -32,7 +32,7 @@ function Notifications() {
           .from('notifications')
           .select(`
             *,
-            sender:sender_id (
+            sender:users!notifications_sender_id_fkey (
               id,
               username,
               avatar_url
@@ -196,7 +196,7 @@ function Notifications() {
               Mark all read ({unreadCount})
             </button>
           )}
-          <button 
+          <button
             onClick={() => setShowSettings(true)}
             className="text-gray-600 hover:text-indigo-600"
           >
@@ -210,21 +210,19 @@ function Notifications() {
         <div className="flex border-b">
           <button
             onClick={() => setFilter('all')}
-            className={`flex-1 py-3 px-4 text-center ${
-              filter === 'all'
-                ? 'border-b-2 border-indigo-600 text-indigo-600 font-semibold'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
+            className={`flex-1 py-3 px-4 text-center ${filter === 'all'
+              ? 'border-b-2 border-indigo-600 text-indigo-600 font-semibold'
+              : 'text-gray-600 hover:text-gray-900'
+              }`}
           >
             All Notifications
           </button>
           <button
             onClick={() => setFilter('unread')}
-            className={`flex-1 py-3 px-4 text-center ${
-              filter === 'unread'
-                ? 'border-b-2 border-indigo-600 text-indigo-600 font-semibold'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
+            className={`flex-1 py-3 px-4 text-center ${filter === 'unread'
+              ? 'border-b-2 border-indigo-600 text-indigo-600 font-semibold'
+              : 'text-gray-600 hover:text-gray-900'
+              }`}
           >
             Unread ({unreadCount})
           </button>
@@ -244,7 +242,7 @@ function Notifications() {
               {filter === 'unread' ? 'No unread notifications' : 'No notifications yet'}
             </h3>
             <p className="text-gray-600">
-              {filter === 'unread' 
+              {filter === 'unread'
                 ? 'All caught up! Check back later for new notifications.'
                 : 'When you receive notifications, they\'ll appear here.'
               }
@@ -256,16 +254,15 @@ function Notifications() {
               <button
                 key={notification.id}
                 onClick={() => handleNotificationClick(notification)}
-                className={`w-full p-6 text-left hover:bg-gray-50 transition-colors ${
-                  !notification.read ? 'bg-blue-50' : ''
-                }`}
+                className={`w-full p-6 text-left hover:bg-gray-50 transition-colors ${!notification.read ? 'bg-blue-50' : ''
+                  }`}
               >
                 <div className="flex items-start space-x-4">
                   <div className="flex-shrink-0">
                     {notification.sender?.avatar_url ? (
                       <img
                         src={notification.sender.avatar_url}
-                        alt={notification.sender.username}
+                        alt={notification.sender?.username || undefined}
                         className="w-12 h-12 rounded-full object-cover"
                       />
                     ) : (
@@ -279,7 +276,7 @@ function Notifications() {
                       {notification.content}
                     </p>
                     <p className="text-sm text-gray-500 mt-1">
-                      {format(new Date(notification.created_at), 'MMMM d, yyyy \'at\' h:mm a')}
+                      {format(new Date(notification.created_at || ''), 'MMMM d, yyyy \'at\' h:mm a')}
                     </p>
                   </div>
                   {!notification.read && (

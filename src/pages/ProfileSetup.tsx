@@ -118,7 +118,7 @@ export function ProfileSetup({ onComplete, onClose, initialData }: ProfileSetupP
         const { error: updateError } = await supabase
           .from('users')
           .update(updateData)
-          .eq('id', (await supabase.auth.getUser()).data.user?.id);
+          .eq('id', (await supabase.auth.getUser()).data.user?.id || '');
 
         if (updateError) throw updateError;
       }

@@ -184,8 +184,8 @@ function Home() {
           throw barteredError;
         }
 
-        setItems(availableItems || []);
-        setBarteredItems(recentlyBartered || []);
+        setItems((availableItems || []) as unknown as Item[]);
+        setBarteredItems((recentlyBartered || []) as unknown as Item[]);
       } catch (error) {
         console.error('Error fetching items:', error);
         setError('Failed to load items. Please try again later.');
@@ -242,9 +242,9 @@ function Home() {
     return items.filter(item => {
       const matchesSearch = searchQuery.trim() === '' ||
         item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (item.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.location.toLowerCase().includes(searchQuery.toLowerCase());
+        (item.location || '').toLowerCase().includes(searchQuery.toLowerCase());
 
       const matchesCategory = !filters.category || item.category === filters.category;
       const matchesCondition = !filters.condition || item.condition === filters.condition;

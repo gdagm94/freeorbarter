@@ -28,13 +28,12 @@ export function NotificationDropdown({ onClose, onNotificationRead, onMarkAllAsR
         const { data, error } = await supabase
           .from('notifications')
           .select(`
-            *,
-            sender:sender_id (
-              id,
-              username,
-              avatar_url
-            )
-          `)
+          *,
+          sender:users!notifications_sender_id_fkey (
+            username,
+            avatar_url
+          )
+        `)
           .eq('user_id', user.id)
           .order('created_at', { ascending: false })
           .limit(10);
@@ -182,16 +181,15 @@ export function NotificationDropdown({ onClose, onNotificationRead, onMarkAllAsR
               <button
                 key={notification.id}
                 onClick={() => handleNotificationClick(notification)}
-                className={`w-full p-4 text-left hover:bg-gray-50 transition-colors ${
-                  !notification.read ? 'bg-blue-50' : ''
-                }`}
+                className={`w-full p-4 text-left hover:bg-gray-50 transition-colors ${!notification.read ? 'bg-blue-50' : ''
+                  }`}
               >
                 <div className="flex items-start space-x-3">
                   <div className="flex-shrink-0">
                     {notification.sender?.avatar_url ? (
                       <img
                         src={notification.sender.avatar_url}
-                        alt={notification.sender.username}
+                        alt={notification.sender.username || 'User'}
                         className="w-8 h-8 rounded-full object-cover"
                       />
                     ) : (
@@ -205,7 +203,7 @@ export function NotificationDropdown({ onClose, onNotificationRead, onMarkAllAsR
                       {notification.content}
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
-                      {format(new Date(notification.created_at), 'MMM d, h:mm a')}
+                      {format(new Date(notification.created_at || ''), 'MMM d, h:mm a')}
                     </p>
                   </div>
                   {!notification.read && (

@@ -26,12 +26,12 @@ const isValidUUID = (uuid: string): boolean => {
 };
 
 // New component for conversation item
-const ConversationItem = ({ 
-  conversation, 
-  isActive, 
+const ConversationItem = ({
+  conversation,
+  isActive,
   onArchive,
   onClick
-}: { 
+}: {
   conversation: Conversation;
   isActive: boolean;
   onArchive: (id: string, archived: boolean) => void;
@@ -45,13 +45,11 @@ const ConversationItem = ({
   return (
     <div
       {...swipeableHandlers}
-      className={`rounded-lg shadow-md p-4 hover:shadow-lg transition-shadow cursor-pointer ${
-        isActive 
-          ? 'bg-indigo-50 border-2 border-indigo-500' 
-          : 'bg-white'
-      } ${
-        conversation.unread_count > 0 ? 'border-l-4 border-indigo-500' : ''
-      }`}
+      className={`rounded-lg shadow-md p-4 hover:shadow-lg transition-shadow cursor-pointer ${isActive
+        ? 'bg-indigo-50 border-2 border-indigo-500'
+        : 'bg-white'
+        } ${conversation.unread_count > 0 ? 'border-l-4 border-indigo-500' : ''
+        }`}
       onClick={onClick}
     >
       <div className="flex items-center space-x-4">
@@ -68,25 +66,23 @@ const ConversationItem = ({
         )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between">
-            <h3 className={`text-lg font-semibold ${
-              isActive 
-                ? 'text-indigo-700' 
-                : 'text-gray-900'
-            } truncate`}>
+            <h3 className={`text-lg font-semibold ${isActive
+              ? 'text-indigo-700'
+              : 'text-gray-900'
+              } truncate`}>
               {conversation.other_user_name}
             </h3>
             <span className="text-sm text-gray-500">
-              {format(new Date(conversation.last_message_time), 'MMM d, h:mm a')}
+              {format(new Date(conversation.last_message_time || ''), 'MMM d, h:mm a')}
             </span>
           </div>
-          <p className={`${
-            isActive 
-              ? 'text-indigo-600' 
-              : 'text-gray-600'
-          } truncate ${conversation.unread_count > 0 ? 'font-semibold' : ''}`}>
+          <p className={`${isActive
+            ? 'text-indigo-600'
+            : 'text-gray-600'
+            } truncate ${conversation.unread_count > 0 ? 'font-semibold' : ''}`}>
             {conversation.last_message}
           </p>
-          
+
           {/* Show recent item context if available */}
           {conversation.recent_item_title && (
             <div className="mt-2 flex items-center space-x-2">
@@ -97,25 +93,23 @@ const ConversationItem = ({
                   className="w-6 h-6 rounded object-cover"
                 />
               )}
-              <span className={`text-xs ${
-                isActive 
-                  ? 'text-indigo-500' 
-                  : 'text-gray-400'
-              } truncate`}>
+              <span className={`text-xs ${isActive
+                ? 'text-indigo-500'
+                : 'text-gray-400'
+                } truncate`}>
                 About: {conversation.recent_item_title}
               </span>
             </div>
           )}
-          
+
           {conversation.has_offer && (
             <div className="mt-2 flex items-center">
               <div className="flex-1 flex items-center">
                 <div className="w-6 h-6 flex items-center justify-center">
-                  <ArrowRight className={`w-4 h-4 ${
-                    isActive 
-                      ? 'text-indigo-400' 
-                      : 'text-gray-400'
-                  }`} />
+                  <ArrowRight className={`w-4 h-4 ${isActive
+                    ? 'text-indigo-400'
+                    : 'text-gray-400'
+                    }`} />
                 </div>
                 <div className="flex items-center ml-1">
                   {conversation.offer_item_image && (
@@ -128,7 +122,7 @@ const ConversationItem = ({
                   <span className="text-xs text-indigo-600 truncate">Barter offer</span>
                 </div>
               </div>
-              
+
               {conversation.unread_count > 0 && (
                 <span className="bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
                   {conversation.unread_count}
@@ -187,23 +181,23 @@ function Messages({ onUnreadCountChange, onUnreadOffersChange }: MessagesProps) 
           .from('messages')
           .select(`
             *,
-            items:item_id (
+            items:items!messages_item_id_fkey (
               id,
               title,
               images,
               user_id,
               type
             ),
-            offer_item:offer_item_id (
+            offer_item:items!messages_offer_item_id_fkey (
               id,
               title,
               images
             ),
-            sender:sender_id (
+            sender:users!messages_sender_id_fkey (
               username,
               avatar_url
             ),
-            receiver:receiver_id (
+            receiver:users!messages_receiver_id_fkey (
               username,
               avatar_url
             )
@@ -229,7 +223,7 @@ function Messages({ onUnreadCountChange, onUnreadOffersChange }: MessagesProps) 
 
           // Determine the other user
           const otherUserId = message.sender_id === user.id ? message.receiver_id : message.sender_id;
-          
+
           if (!isValidUUID(otherUserId)) return;
 
           // Create conversation ID based on user pair (sorted for consistency) - using underscores as delimiter
@@ -239,16 +233,16 @@ function Messages({ onUnreadCountChange, onUnreadOffersChange }: MessagesProps) 
           // Track unread counts
           if (message.receiver_id === user.id && !message.read) {
             unreadCountMap.set(
-              conversationId, 
+              conversationId,
               (unreadCountMap.get(conversationId) || 0) + 1
             );
           }
-          
+
           if (!conversationMap.has(conversationId)) {
-            const otherUserInfo = message.sender_id === otherUserId 
-              ? message.sender 
+            const otherUserInfo = message.sender_id === otherUserId
+              ? message.sender
               : message.receiver;
-            
+
             // Check if this user has any offers across all messages
             const hasOffer = messagesData.some(
               msg => {
@@ -263,8 +257,8 @@ function Messages({ onUnreadCountChange, onUnreadOffersChange }: MessagesProps) 
                 const msgOtherUserId = msg.sender_id === user.id ? msg.receiver_id : msg.sender_id;
                 return msgOtherUserId === otherUserId && msg.items;
               })
-              .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
-            
+              .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())[0];
+
             conversationMap.set(conversationId, {
               id: conversationId,
               type: 'unified', // New type for unified conversations
@@ -283,15 +277,15 @@ function Messages({ onUnreadCountChange, onUnreadOffersChange }: MessagesProps) 
               offer_item_title: message.offer_item?.title,
               offer_item_image: message.offer_item?.images?.[0],
               has_offer: hasOffer,
-              archived: message.archived
+              archived: message.archived || false
             });
           } else {
             // Update with more recent message if this one is newer
             const existing = conversationMap.get(conversationId)!;
-            if (new Date(message.created_at) > new Date(existing.last_message_time)) {
+            if (new Date(message.created_at || '') > new Date(existing.last_message_time || '')) {
               existing.last_message = message.content;
               existing.last_message_time = message.created_at;
-              
+
               // Update recent item info if this message has an item
               if (message.items) {
                 existing.recent_item_title = message.items.title;
@@ -360,11 +354,11 @@ function Messages({ onUnreadCountChange, onUnreadOffersChange }: MessagesProps) 
     }
 
     setActiveConversation(conversationId);
-    
+
     const conversation = conversations.find(c => c.id === conversationId);
     if (conversation && conversation.unread_count > 0) {
-      setConversations(prev => 
-        prev.map(conv => 
+      setConversations(prev =>
+        prev.map(conv =>
           conv.id === conversationId
             ? { ...conv, unread_count: 0 }
             : conv
@@ -450,7 +444,7 @@ function Messages({ onUnreadCountChange, onUnreadOffersChange }: MessagesProps) 
   const getOtherUserId = (conversationId: string): string | null => {
     const parts = conversationId.split('_');
     if (parts.length !== 3 || parts[0] !== 'user') return null;
-    
+
     const userId1 = parts[1];
     const userId2 = parts[2];
     return userId1 === user?.id ? userId2 : userId1;
@@ -471,7 +465,7 @@ function Messages({ onUnreadCountChange, onUnreadOffersChange }: MessagesProps) 
   return (
     <div className="max-w-6xl mx-auto">
       <h1 className="text-2xl font-bold mb-6">Messages</h1>
-      
+
       {conversations.length === 0 ? (
         <div className="bg-white rounded-lg shadow-md p-8 text-center">
           <p className="text-gray-600 mb-4">You don't have any messages yet.</p>
@@ -485,51 +479,47 @@ function Messages({ onUnreadCountChange, onUnreadOffersChange }: MessagesProps) 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <button
                   onClick={() => setFilter('all')}
-                  className={`py-2 px-3 rounded-md text-sm font-medium transition-colors ${
-                    filter === 'all'
-                      ? 'bg-indigo-100 text-indigo-700'
-                      : 'text-gray-600 hover:bg-gray-100'
-                  }`}
+                  className={`py-2 px-3 rounded-md text-sm font-medium transition-colors ${filter === 'all'
+                    ? 'bg-indigo-100 text-indigo-700'
+                    : 'text-gray-600 hover:bg-gray-100'
+                    }`}
                 >
                   <MessageCircle className="w-4 h-4 mx-auto mb-1" />
                   <span>All</span>
                 </button>
                 <button
                   onClick={() => setFilter('offers')}
-                  className={`py-2 px-3 rounded-md text-sm font-medium transition-colors ${
-                    filter === 'offers'
-                      ? 'bg-indigo-100 text-indigo-700'
-                      : 'text-gray-600 hover:bg-gray-100'
-                  }`}
+                  className={`py-2 px-3 rounded-md text-sm font-medium transition-colors ${filter === 'offers'
+                    ? 'bg-indigo-100 text-indigo-700'
+                    : 'text-gray-600 hover:bg-gray-100'
+                    }`}
                 >
                   <Bell className="w-4 h-4 mx-auto mb-1" />
                   <span>Offers</span>
                 </button>
                 <button
                   onClick={() => setFilter('unread')}
-                  className={`py-2 px-3 rounded-md text-sm font-medium transition-colors ${
-                    filter === 'unread'
-                      ? 'bg-indigo-100 text-indigo-700'
-                      : 'text-gray-600 hover:bg-gray-100'
-                  }`}
+                  className={`py-2 px-3 rounded-md text-sm font-medium transition-colors ${filter === 'unread'
+                    ? 'bg-indigo-100 text-indigo-700'
+                    : 'text-gray-600 hover:bg-gray-100'
+                    }`}
                 >
                   <MessageCircle className="w-4 h-4 mx-auto mb-1" />
                   <span>Unread</span>
                 </button>
                 <button
                   onClick={() => setFilter('archived')}
-                  className={`py-2 px-3 rounded-md text-sm font-medium transition-colors ${
-                    filter === 'archived'
-                      ? 'bg-indigo-100 text-indigo-700'
-                      : 'text-gray-600 hover:bg-gray-100'
-                  }`}
+                  className={`py-2 px-3 rounded-md text-sm font-medium transition-colors ${filter === 'archived'
+                    ? 'bg-indigo-100 text-indigo-700'
+                    : 'text-gray-600 hover:bg-gray-100'
+                    }`}
                 >
                   <Archive className="w-4 h-4 mx-auto mb-1" />
                   <span>Archived</span>
                 </button>
               </div>
             </div>
-            
+
             <div className="space-y-4">
               {filteredConversations.length > 0 ? (
                 filteredConversations.map(conversation => (
@@ -551,16 +541,15 @@ function Messages({ onUnreadCountChange, onUnreadOffersChange }: MessagesProps) 
 
           {/* Message thread */}
           {activeConversation && otherUserId ? (
-            <div 
+            <div
               {...swipeHandlers}
-              className={`md:w-2/3 bg-white rounded-lg shadow-md overflow-hidden ${
-                !activeConversation || !isMobile ? 'hidden md:block' : ''
-              }`}
+              className={`md:w-2/3 bg-white rounded-lg shadow-md overflow-hidden ${!activeConversation || !isMobile ? 'hidden md:block' : ''
+                }`}
             >
               <div className="p-4 border-b flex items-center justify-between">
                 <div className="flex items-center">
                   {isMobile && (
-                    <button 
+                    <button
                       className="mr-2 text-gray-600"
                       onClick={() => setActiveConversation(null)}
                     >
@@ -587,8 +576,8 @@ function Messages({ onUnreadCountChange, onUnreadOffersChange }: MessagesProps) 
                   )}
                 </div>
               </div>
-              
-              <MessageList 
+
+              <MessageList
                 itemId={null} // Pass null for unified conversations
                 currentUserId={user.id}
                 otherUserId={otherUserId}

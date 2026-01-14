@@ -7,13 +7,13 @@ import ItemCard from '../components/ItemCard';
 import { Item, FriendshipStatus } from '../types';
 import { UserShareDialog } from '../components/UserShareDialog';
 import { FriendMessageDialog } from '../components/FriendMessageDialog';
-import { 
-  sendFriendRequest, 
-  acceptFriendRequest, 
-  declineFriendRequest, 
-  cancelFriendRequest, 
-  unfriend, 
-  getFriendshipStatus 
+import {
+  sendFriendRequest,
+  acceptFriendRequest,
+  declineFriendRequest,
+  cancelFriendRequest,
+  unfriend,
+  getFriendshipStatus
 } from '../lib/friends';
 import { ReportContentDialog } from '../components/ReportContentDialog';
 import { useBlockStatus } from '../hooks/useBlockStatus';
@@ -21,10 +21,10 @@ import { blockUserWithCleanup, unblockUserPair } from '../lib/blocks';
 
 interface UserProfileData {
   id: string;
-  username: string;
+  username: string | null;
   avatar_url: string | null;
   rating: number | null;
-  created_at: string;
+  created_at: string | null;
 }
 
 function UserProfile() {
@@ -36,7 +36,7 @@ function UserProfile() {
   const [error, setError] = useState<string | null>(null);
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [activeTab, setActiveTab] = useState<'free' | 'barter'>('free');
-  
+
   // Friend request states
   const [friendshipStatus, setFriendshipStatus] = useState<FriendshipStatus>('none');
   const [friendActionLoading, setFriendActionLoading] = useState(false);
@@ -84,7 +84,7 @@ function UserProfile() {
           .order('created_at', { ascending: false });
 
         if (itemsError) throw itemsError;
-        setItems(itemsData || []);
+        setItems((itemsData || []) as unknown as Item[]);
 
       } catch (err) {
         console.error('Error fetching user profile:', err);
@@ -113,7 +113,7 @@ function UserProfile() {
           } else if (payload.eventType === 'DELETE') {
             setItems(prev => prev.filter(item => item.id !== payload.old.id));
           } else if (payload.eventType === 'UPDATE') {
-            setItems(prev => prev.map(item => 
+            setItems(prev => prev.map(item =>
               item.id === payload.new.id ? payload.new as Item : item
             ));
           }
@@ -198,7 +198,7 @@ function UserProfile() {
             .single();
 
           if (!sentRequest) throw new Error('No pending request found');
-          
+
           result = await cancelFriendRequest(sentRequest.id);
           if (result.error) throw result.error;
           break;
@@ -434,7 +434,7 @@ function UserProfile() {
             {profile.avatar_url ? (
               <img
                 src={profile.avatar_url}
-                alt={profile.username}
+                alt={profile?.username || 'User'}
                 className="w-20 h-20 sm:w-24 sm:h-24 rounded-full object-cover flex-shrink-0"
               />
             ) : (
@@ -449,7 +449,7 @@ function UserProfile() {
                 <span className="ml-1 text-sm sm:text-base">{profile.rating?.toFixed(1) || 'No ratings yet'}</span>
               </div>
               <div className="text-gray-500 text-xs sm:text-sm mt-1">
-                Member since {new Date(profile.created_at).toLocaleDateString()}
+                Member since {new Date(profile.created_at || '').toLocaleDateString()}
               </div>
             </div>
           </div>
@@ -524,21 +524,19 @@ function UserProfile() {
         <div className="border-b">
           <div className="flex">
             <button
-              className={`flex-1 py-2 sm:py-3 px-4 sm:px-6 text-center text-sm sm:text-base ${
-                activeTab === 'free'
-                  ? 'border-b-2 border-indigo-600 text-indigo-600 font-semibold'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
+              className={`flex-1 py-2 sm:py-3 px-4 sm:px-6 text-center text-sm sm:text-base ${activeTab === 'free'
+                ? 'border-b-2 border-indigo-600 text-indigo-600 font-semibold'
+                : 'text-gray-600 hover:text-gray-900'
+                }`}
               onClick={() => setActiveTab('free')}
             >
               Free ({freeItems.length})
             </button>
             <button
-              className={`flex-1 py-2 sm:py-3 px-4 sm:px-6 text-center text-sm sm:text-base ${
-                activeTab === 'barter'
-                  ? 'border-b-2 border-indigo-600 text-indigo-600 font-semibold'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
+              className={`flex-1 py-2 sm:py-3 px-4 sm:px-6 text-center text-sm sm:text-base ${activeTab === 'barter'
+                ? 'border-b-2 border-indigo-600 text-indigo-600 font-semibold'
+                : 'text-gray-600 hover:text-gray-900'
+                }`}
               onClick={() => setActiveTab('barter')}
             >
               Barter ({barterItems.length})
@@ -598,7 +596,7 @@ function UserProfile() {
       {showShareDialog && profile && (
         <UserShareDialog
           userId={profile.id}
-          username={profile.username}
+          username={profile.username || 'Unknown'}
           onClose={() => setShowShareDialog(false)}
         />
       )}
@@ -606,7 +604,7 @@ function UserProfile() {
       {showMessageDialog && profile && (
         <FriendMessageDialog
           friendId={profile.id}
-          friendName={profile.username}
+          friendName={profile.username || 'Unknown'}
           friendAvatar={profile.avatar_url}
           onClose={() => setShowMessageDialog(false)}
         />
@@ -617,7 +615,7 @@ function UserProfile() {
           onClose={() => setShowReportDialog(false)}
           targetId={profile.id}
           targetType="user"
-          subject={profile.username}
+          subject={`Report user: ${profile.username || 'Unknown'}`}
           metadata={{
             source: 'web_user_profile',
             profileId: profile.id,

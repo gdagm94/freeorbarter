@@ -226,13 +226,13 @@ export async function getFriendsList(userId: string): Promise<{ data: Friendship
       .from('friendships')
       .select(`
         *,
-        user1:user1_id (
+        user1:users!friendships_user1_id_fkey (
           id,
           username,
           avatar_url,
           rating
         ),
-        user2:user2_id (
+        user2:users!friendships_user2_id_fkey (
           id,
           username,
           avatar_url,
@@ -245,7 +245,7 @@ export async function getFriendsList(userId: string): Promise<{ data: Friendship
     if (error) throw error;
 
     // Transform the data to include the friend's info
-    const friendships: FriendshipWithUser[] = (data || []).map(friendship => ({
+    const friendships: FriendshipWithUser[] = ((data || []) as unknown as any[]).map(friendship => ({
       ...friendship,
       friend: friendship.user1_id === userId ? friendship.user2 : friendship.user1
     }));
@@ -259,13 +259,13 @@ export async function getFriendsList(userId: string): Promise<{ data: Friendship
 /**
  * Get pending friend requests received by a user
  */
-export async function getPendingRequests(userId: string): Promise<{ data: FriendRequestWithUser[]; error: Error | null }> {
+export async function getReceivedRequests(userId: string): Promise<{ data: FriendRequestWithUser[]; error: Error | null }> {
   try {
     const { data, error } = await supabase
       .from('friend_requests')
       .select(`
         *,
-        sender:sender_id (
+        sender:users!friend_requests_sender_id_fkey (
           id,
           username,
           avatar_url
@@ -277,7 +277,34 @@ export async function getPendingRequests(userId: string): Promise<{ data: Friend
 
     if (error) throw error;
 
-    return { data: data || [], error: null };
+    return { data: (data || []) as unknown as FriendRequestWithUser[], error: null };
+  } catch (err) {
+    return { data: [], error: err instanceof Error ? err : new Error('Failed to fetch pending requests') };
+  }
+}
+
+/**
+ * Get pending friend requests received by a user
+ */
+export async function getPendingRequests(userId: string): Promise<{ data: FriendRequestWithUser[]; error: Error | null }> {
+  try {
+    const { data, error } = await supabase
+      .from('friend_requests')
+      .select(`
+        *,
+        sender:users!friend_requests_sender_id_fkey (
+          id,
+          username,
+          avatar_url
+        )
+      `)
+      .eq('receiver_id', userId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    return { data: (data || []) as unknown as FriendRequestWithUser[], error: null };
   } catch (err) {
     return { data: [], error: err instanceof Error ? err : new Error('Failed to fetch pending requests') };
   }
@@ -292,7 +319,7 @@ export async function getSentRequests(userId: string): Promise<{ data: FriendReq
       .from('friend_requests')
       .select(`
         *,
-        receiver:receiver_id (
+        receiver:users!friend_requests_receiver_id_fkey (
           id,
           username,
           avatar_url
@@ -304,7 +331,7 @@ export async function getSentRequests(userId: string): Promise<{ data: FriendReq
 
     if (error) throw error;
 
-    return { data: data || [], error: null };
+    return { data: (data || []) as unknown as FriendRequestWithUser[], error: null };
   } catch (err) {
     return { data: [], error: err instanceof Error ? err : new Error('Failed to fetch sent requests') };
   }
@@ -342,12 +369,12 @@ export async function getFriendRequest(requestId: string): Promise<{ data: Frien
       .from('friend_requests')
       .select(`
         *,
-        sender:sender_id (
+        sender:users!friend_requests_sender_id_fkey (
           id,
           username,
           avatar_url
         ),
-        receiver:receiver_id (
+        receiver:users!friend_requests_receiver_id_fkey (
           id,
           username,
           avatar_url
@@ -358,7 +385,10 @@ export async function getFriendRequest(requestId: string): Promise<{ data: Frien
 
     if (error) throw error;
 
-    return { data, error: null };
+    // Cast the response to match the interface, assuming the relationship is correct
+    const request = data as unknown as FriendRequestWithUser;
+
+    return { data: request, error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err : new Error('Failed to fetch friend request') };
   }

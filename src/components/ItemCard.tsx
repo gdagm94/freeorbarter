@@ -5,28 +5,30 @@ import { MapPin, ChevronLeft, ChevronRight } from 'lucide-react';
 interface ItemCardProps {
   id: string;
   title: string;
-  description: string;
-  image: string;
+  price?: number;
+  description: string | null;
+  image: string | null;
   images?: string[];
   condition: string;
-  location: string;
+  location: string | null;
   type?: 'free' | 'barter';
   status?: 'available' | 'pending' | 'traded' | 'claimed';
 }
 
-function ItemCard({ 
-  id, 
-  title, 
-  description, 
-  image, 
-  images = [], 
-  condition, 
-  location, 
+function ItemCard({
+  id,
+  title,
+  description,
+  image,
+  images = [],
+  condition,
+  location,
   type = 'free',
   status = 'available'
 }: ItemCardProps) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const allImages = images.length > 0 ? images : [image];
+  const allImages = images.length > 0 ? images : (image ? [image] : []);
+  const displayImage = allImages.length > 0 ? allImages[currentImageIndex] : 'https://images.unsplash.com/photo-1577401239170-897942555fb3?auto=format&fit=crop&q=80&w=1000'; // Placeholder
 
   const nextImage = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -43,31 +45,29 @@ function ItemCard({
       <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow">
         <div className="relative">
           <img
-            src={allImages[currentImageIndex]}
+            src={displayImage}
             alt={title}
             className="w-full aspect-square object-cover"
           />
           {/* Type label */}
           <div className="absolute top-2 right-2 z-10">
-            <span className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-full text-xs font-semibold ${
-              type === 'free'
-                ? 'bg-green-100 text-green-800'
-                : 'bg-purple-100 text-purple-800'
-            }`}>
+            <span className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-full text-xs font-semibold ${type === 'free'
+              ? 'bg-green-100 text-green-800'
+              : 'bg-purple-100 text-purple-800'
+              }`}>
               {type === 'free' ? 'Free' : 'Barter'}
             </span>
           </div>
           {/* Status label */}
           {status !== 'available' && (
             <div className="absolute top-2 left-2 z-10">
-              <span className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-full text-xs font-semibold ${
-                status === 'traded' || status === 'claimed'
-                  ? 'bg-gray-100 text-gray-800'
-                  : 'bg-yellow-100 text-yellow-800'
-              }`}>
-                {status === 'traded' ? 'Traded' : 
-                 status === 'claimed' ? 'Claimed' : 
-                 status === 'pending' ? 'Pending' : ''}
+              <span className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-full text-xs font-semibold ${status === 'traded' || status === 'claimed'
+                ? 'bg-gray-100 text-gray-800'
+                : 'bg-yellow-100 text-yellow-800'
+                }`}>
+                {status === 'traded' ? 'Traded' :
+                  status === 'claimed' ? 'Claimed' :
+                    status === 'pending' ? 'Pending' : ''}
               </span>
             </div>
           )}
@@ -89,9 +89,8 @@ function ItemCard({
                 {allImages.map((_, index) => (
                   <div
                     key={index}
-                    className={`w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full ${
-                      index === currentImageIndex ? 'bg-white' : 'bg-white/50'
-                    }`}
+                    className={`w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full ${index === currentImageIndex ? 'bg-white' : 'bg-white/50'
+                      }`}
                   />
                 ))}
               </div>
@@ -100,7 +99,14 @@ function ItemCard({
         </div>
         <div className="p-2 sm:p-4">
           <h3 className="text-sm sm:text-lg font-semibold text-gray-900 mb-0.5 sm:mb-1 line-clamp-1">{title}</h3>
-          <p className="text-xs sm:text-sm text-gray-600 mb-1 sm:mb-2 line-clamp-2">{description}</p>
+          <p className="text-gray-600 text-sm mb-3">
+            {(description || '').length > 60 ? `${(description || '').substring(0, 60)}...` : (description || 'No description available')}
+          </p>
+
+          <div className="flex items-center text-xs text-gray-500 mb-3">
+            <MapPin size={12} className="mr-1" />
+            <span className="truncate max-w-[150px]">{location || 'Unknown location'}</span>
+          </div>
           <div className="flex items-center">
             <span className="inline-block px-1.5 py-0.5 sm:px-2 sm:py-1 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-800">
               {condition}

@@ -10,23 +10,23 @@ import { EditListingDialog } from '../components/EditListingDialog';
 import { DeleteListingDialog } from '../components/DeleteListingDialog';
 import { UserShareDialog } from '../components/UserShareDialog';
 import { FriendMessageDialog } from '../components/FriendMessageDialog';
-import { 
-  getFriendsList, 
-  getPendingRequests, 
-  getSentRequests, 
-  acceptFriendRequest, 
-  declineFriendRequest, 
-  cancelFriendRequest, 
-  unfriend 
+import {
+  getFriendsList,
+  getPendingRequests,
+  getSentRequests,
+  acceptFriendRequest,
+  declineFriendRequest,
+  cancelFriendRequest,
+  unfriend
 } from '../lib/friends';
 
 interface UserProfile {
-  username: string;
-  zipcode: string;
+  username: string | null;
+  zipcode: string | null;
   gender: string | null;
-  created_at: string;
+  created_at: string | null;
   avatar_url: string | null;
-  profile_completed: boolean;
+  profile_completed: boolean | null;
   rating: number | null;
 }
 
@@ -90,7 +90,7 @@ function Profile() {
         .order('created_at', { ascending: false });
 
       if (itemsError) throw itemsError;
-      setItems(itemsData || []);
+      setItems((itemsData || []) as unknown as Item[]);
 
     } catch (error) {
       console.error('Error fetching profile and items:', error);
@@ -146,7 +146,7 @@ function Profile() {
           } else if (payload.eventType === 'DELETE') {
             setItems(prev => prev.filter(item => item.id !== payload.old.id));
           } else if (payload.eventType === 'UPDATE') {
-            setItems(prev => prev.map(item => 
+            setItems(prev => prev.map(item =>
               item.id === payload.new.id ? payload.new as Item : item
             ));
           }
@@ -189,7 +189,7 @@ function Profile() {
         .eq('status', 'available')
         .order('created_at', { ascending: false })
         .then(({ data }) => {
-          if (data) setItems(data);
+          if (data) setItems(data as unknown as Item[]);
         });
     }
   };
@@ -212,10 +212,10 @@ function Profile() {
 
   const handleFriendAction = async (action: 'accept' | 'decline' | 'cancel' | 'unfriend', requestId: string, friendId?: string) => {
     setFriendActionLoading(requestId);
-    
+
     try {
       let result;
-      
+
       switch (action) {
         case 'accept':
           result = await acceptFriendRequest(requestId);
@@ -238,7 +238,7 @@ function Profile() {
 
       // Refresh friends data
       await fetchFriendsData();
-      
+
     } catch (error) {
       console.error('Error performing friend action:', error);
     } finally {
@@ -246,10 +246,10 @@ function Profile() {
     }
   };
 
-  const handleMessageFriend = (friend: { id: string; username: string; avatar_url: string | null }) => {
+  const handleMessageFriend = (friend: { id: string; username: string | null; avatar_url: string | null }) => {
     setSelectedFriend({
       id: friend.id,
-      name: friend.username,
+      name: friend.username || 'User',
       avatar: friend.avatar_url
     });
     setShowMessageDialog(true);
@@ -270,31 +270,28 @@ function Profile() {
         <div className="flex space-x-1 bg-gray-100 rounded-lg p-1">
           <button
             onClick={() => setFriendsSubTab('friends')}
-            className={`flex-1 py-2 px-2 sm:px-3 rounded-md text-xs sm:text-sm font-medium transition-colors ${
-              friendsSubTab === 'friends'
-                ? 'bg-white text-indigo-600 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
+            className={`flex-1 py-2 px-2 sm:px-3 rounded-md text-xs sm:text-sm font-medium transition-colors ${friendsSubTab === 'friends'
+              ? 'bg-white text-indigo-600 shadow-sm'
+              : 'text-gray-600 hover:text-gray-900'
+              }`}
           >
             Friends ({friends.length})
           </button>
           <button
             onClick={() => setFriendsSubTab('pending')}
-            className={`flex-1 py-2 px-2 sm:px-3 rounded-md text-xs sm:text-sm font-medium transition-colors ${
-              friendsSubTab === 'pending'
-                ? 'bg-white text-indigo-600 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
+            className={`flex-1 py-2 px-2 sm:px-3 rounded-md text-xs sm:text-sm font-medium transition-colors ${friendsSubTab === 'pending'
+              ? 'bg-white text-indigo-600 shadow-sm'
+              : 'text-gray-600 hover:text-gray-900'
+              }`}
           >
             Requests ({pendingRequests.length})
           </button>
           <button
             onClick={() => setFriendsSubTab('sent')}
-            className={`flex-1 py-2 px-2 sm:px-3 rounded-md text-xs sm:text-sm font-medium transition-colors ${
-              friendsSubTab === 'sent'
-                ? 'bg-white text-indigo-600 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
+            className={`flex-1 py-2 px-2 sm:px-3 rounded-md text-xs sm:text-sm font-medium transition-colors ${friendsSubTab === 'sent'
+              ? 'bg-white text-indigo-600 shadow-sm'
+              : 'text-gray-600 hover:text-gray-900'
+              }`}
           >
             Sent ({sentRequests.length})
           </button>
@@ -308,14 +305,14 @@ function Profile() {
                 {friends.map((friendship) => (
                   <div key={friendship.id} className="bg-gray-50 rounded-lg p-3 sm:p-4">
                     <div className="flex items-center space-x-3">
-                      <Link 
+                      <Link
                         to={`/users/${friendship.friend?.id}`}
                         className="flex items-center space-x-3 flex-1 hover:opacity-80 transition-opacity min-w-0"
                       >
                         {friendship.friend?.avatar_url ? (
                           <img
                             src={friendship.friend.avatar_url}
-                            alt={friendship.friend.username}
+                            alt={friendship.friend.username || undefined}
                             className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover flex-shrink-0"
                           />
                         ) : (
@@ -373,14 +370,14 @@ function Profile() {
                 {pendingRequests.map((request) => (
                   <div key={request.id} className="bg-gray-50 rounded-lg p-3 sm:p-4">
                     <div className="flex items-center space-x-3">
-                      <Link 
+                      <Link
                         to={`/users/${request.sender?.id}`}
                         className="flex items-center space-x-3 flex-1 hover:opacity-80 transition-opacity min-w-0"
                       >
                         {request.sender?.avatar_url ? (
                           <img
                             src={request.sender.avatar_url}
-                            alt={request.sender.username}
+                            alt={request.sender.username || undefined}
                             className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover flex-shrink-0"
                           />
                         ) : (
@@ -391,7 +388,7 @@ function Profile() {
                         <div className="min-w-0 flex-1">
                           <h3 className="font-medium text-gray-900 text-sm sm:text-base truncate">{request.sender?.username}</h3>
                           <p className="text-xs sm:text-sm text-gray-500">
-                            Sent {new Date(request.created_at).toLocaleDateString()}
+                            Sent {new Date(request.created_at || '').toLocaleDateString()}
                           </p>
                         </div>
                       </Link>
@@ -446,14 +443,14 @@ function Profile() {
                 {sentRequests.map((request) => (
                   <div key={request.id} className="bg-gray-50 rounded-lg p-3 sm:p-4">
                     <div className="flex items-center space-x-3">
-                      <Link 
+                      <Link
                         to={`/users/${request.receiver?.id}`}
                         className="flex items-center space-x-3 flex-1 hover:opacity-80 transition-opacity min-w-0"
                       >
                         {request.receiver?.avatar_url ? (
                           <img
                             src={request.receiver.avatar_url}
-                            alt={request.receiver.username}
+                            alt={request.receiver.username || undefined}
                             className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover flex-shrink-0"
                           />
                         ) : (
@@ -464,7 +461,7 @@ function Profile() {
                         <div className="min-w-0 flex-1">
                           <h3 className="font-medium text-gray-900 text-sm sm:text-base truncate">{request.receiver?.username}</h3>
                           <p className="text-xs sm:text-sm text-gray-500">
-                            Sent {new Date(request.created_at).toLocaleDateString()}
+                            Sent {new Date(request.created_at || '').toLocaleDateString()}
                           </p>
                         </div>
                       </Link>
@@ -515,13 +512,13 @@ function Profile() {
     gender?: string;
     avatar_url?: string | null;
   } | undefined = profile
-    ? {
+      ? {
         username: profile.username ?? undefined,
         zipcode: profile.zipcode ?? undefined,
         gender: profile.gender ?? undefined,
         avatar_url: profile.avatar_url ?? null,
       }
-    : undefined;
+      : undefined;
 
   return (
     <div className="max-w-4xl mx-auto px-4">
@@ -553,7 +550,7 @@ function Profile() {
       {showShareDialog && profile && (
         <UserShareDialog
           userId={user.id}
-          username={profile.username}
+          username={profile.username || 'User'}
           onClose={() => setShowShareDialog(false)}
         />
       )}
@@ -576,7 +573,7 @@ function Profile() {
             <div className="relative flex-shrink-0">
               <img
                 src={profile?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile?.username || '')}&background=random`}
-                alt={profile?.username}
+                alt={profile?.username || 'User'}
                 className="w-20 h-20 sm:w-24 sm:h-24 rounded-full object-cover"
               />
               <div className="absolute -bottom-2 -right-2 bg-white rounded-full p-1 shadow-md">
@@ -614,14 +611,14 @@ function Profile() {
               </div>
             </div>
           </div>
-        <div className="flex flex-row sm:flex-col space-x-2 sm:space-x-0 sm:space-y-2">
-          <button
-            onClick={() => setShowProfileSetup(true)}
-            className="flex-1 sm:flex-none bg-gray-100 text-gray-700 px-2 py-1 text-xs sm:px-4 sm:py-2 sm:text-sm rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center flex-shrink-0"
-          >
-            <Settings className="w-4 h-4 mr-1" />
-            <span>Edit</span>
-          </button>
+          <div className="flex flex-row sm:flex-col space-x-2 sm:space-x-0 sm:space-y-2">
+            <button
+              onClick={() => setShowProfileSetup(true)}
+              className="flex-1 sm:flex-none bg-gray-100 text-gray-700 px-2 py-1 text-xs sm:px-4 sm:py-2 sm:text-sm rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center flex-shrink-0"
+            >
+              <Settings className="w-4 h-4 mr-1" />
+              <span>Edit</span>
+            </button>
             <button
               onClick={handleHistoryClick}
               className="flex-1 sm:flex-none bg-gray-100 text-gray-700 px-2 py-1 text-xs sm:px-4 sm:py-2 sm:text-sm rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center flex-shrink-0"
@@ -639,7 +636,7 @@ function Profile() {
           </div>
         </div>
       </div>
-    
+
       <div className="bg-emerald-50 border border-emerald-100 rounded-lg shadow-md p-4 sm:p-6 mb-6">
         <h2 className="text-lg font-semibold text-emerald-900 mb-2">Safety &amp; Support</h2>
         <p className="text-sm text-emerald-800 mb-4">
@@ -663,31 +660,28 @@ function Profile() {
         <div className="border-b">
           <div className="flex">
             <button
-              className={`flex-1 py-2 sm:py-3 px-4 sm:px-6 text-center ${
-                activeTab === 'free'
-                  ? 'border-b-2 border-indigo-600 text-indigo-600 font-semibold'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
+              className={`flex-1 py-2 sm:py-3 px-4 sm:px-6 text-center ${activeTab === 'free'
+                ? 'border-b-2 border-indigo-600 text-indigo-600 font-semibold'
+                : 'text-gray-600 hover:text-gray-900'
+                }`}
               onClick={() => setActiveTab('free')}
             >
               Free ({freeItems.length})
             </button>
             <button
-              className={`flex-1 py-2 sm:py-3 px-4 sm:px-6 text-center ${
-                activeTab === 'barter'
-                  ? 'border-b-2 border-indigo-600 text-indigo-600 font-semibold'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
+              className={`flex-1 py-2 sm:py-3 px-4 sm:px-6 text-center ${activeTab === 'barter'
+                ? 'border-b-2 border-indigo-600 text-indigo-600 font-semibold'
+                : 'text-gray-600 hover:text-gray-900'
+                }`}
               onClick={() => setActiveTab('barter')}
             >
               Barter ({barterItems.length})
             </button>
             <button
-              className={`flex-1 py-2 sm:py-3 px-4 sm:px-6 text-center ${
-                activeTab === 'friends'
-                  ? 'border-b-2 border-indigo-600 text-indigo-600 font-semibold'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
+              className={`flex-1 py-2 sm:py-3 px-4 sm:px-6 text-center ${activeTab === 'friends'
+                ? 'border-b-2 border-indigo-600 text-indigo-600 font-semibold'
+                : 'text-gray-600 hover:text-gray-900'
+                }`}
               onClick={() => setActiveTab('friends')}
             >
               <div className="flex items-center justify-center space-x-1">
@@ -722,16 +716,15 @@ function Profile() {
                       type={item.type}
                     />
                     <div className="absolute top-2 left-2 z-10">
-                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                        item.status === 'available'
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-gray-100 text-gray-800'
-                      }`}>
+                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${item.status === 'available'
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-gray-100 text-gray-800'
+                        }`}>
                         {item.status === 'available' ? 'Active' : 'Completed'}
                       </span>
                     </div>
                     <div className="absolute bottom-2 right-2 z-10 flex space-x-1">
-                      <button 
+                      <button
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
@@ -741,7 +734,7 @@ function Profile() {
                       >
                         <Edit className="w-3.5 h-3.5 text-gray-600" />
                       </button>
-                      <button 
+                      <button
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
@@ -776,16 +769,15 @@ function Profile() {
                       type={item.type}
                     />
                     <div className="absolute top-2 left-2 z-10">
-                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                        item.status === 'available'
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-gray-100 text-gray-800'
-                      }`}>
+                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${item.status === 'available'
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-gray-100 text-gray-800'
+                        }`}>
                         {item.status === 'available' ? 'Active' : 'Completed'}
                       </span>
                     </div>
                     <div className="absolute bottom-2 right-2 z-10 flex space-x-1">
-                      <button 
+                      <button
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
@@ -795,7 +787,7 @@ function Profile() {
                       >
                         <Edit className="w-3.5 h-3.5 text-gray-600" />
                       </button>
-                      <button 
+                      <button
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();

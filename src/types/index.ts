@@ -11,17 +11,17 @@ export interface User {
 export interface Item {
   id: string;
   title: string;
-  description: string;
+  description: string | null;
   images: string[];
   condition: 'new' | 'like-new' | 'good' | 'fair' | 'poor';
   category: string;
   user_id: string;
-  created_at: string;
-  location: string;
+  created_at: string | null;
+  location: string | null;
   status: 'available' | 'pending' | 'traded' | 'claimed';
   type: 'free' | 'barter';
-  latitude?: number;
-  longitude?: number;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export interface Message {
@@ -51,7 +51,7 @@ export interface Conversation {
   other_user_name: string;
   other_user_avatar: string | null;
   last_message: string;
-  last_message_time: string;
+  last_message_time: string | null;
   unread_count: number;
   offer_item_id?: string | null; // Made nullable for direct messages
   offer_item_title?: string | null; // Made nullable for direct messages
@@ -66,25 +66,25 @@ export interface FriendRequest {
   sender_id: string;
   receiver_id: string;
   status: 'pending' | 'accepted' | 'declined';
-  created_at: string;
+  created_at: string | null;
 }
 
 export interface Friendship {
   id: string;
   user1_id: string;
   user2_id: string;
-  created_at: string;
+  created_at: string | null;
 }
 
 export interface FriendRequestWithUser extends FriendRequest {
   sender?: {
     id: string;
-    username: string;
+    username: string | null;
     avatar_url: string | null;
   };
   receiver?: {
     id: string;
-    username: string;
+    username: string | null;
     avatar_url: string | null;
   };
 }
@@ -92,7 +92,7 @@ export interface FriendRequestWithUser extends FriendRequest {
 export interface FriendshipWithUser extends Friendship {
   friend?: {
     id: string;
-    username: string;
+    username: string | null;
     avatar_url: string | null;
     rating: number | null;
   };
@@ -108,15 +108,15 @@ export type FriendshipStatus =
 export interface Notification {
   id: string;
   user_id: string;
-  sender_id?: string;
+  sender_id?: string | null;
   type: 'friend_request' | 'friend_request_approved' | 'new_listing' | 'direct_message' | 'watchlist_update' | 'system_alerts';
   content: string;
-  related_id?: string;
-  read: boolean;
-  created_at: string;
+  related_id?: string | null;
+  read: boolean | null;
+  created_at: string | null;
   sender?: {
-    id: string;
-    username: string;
+    id?: string;
+    username: string | null;
     avatar_url: string | null;
-  };
+  } | null;
 }
