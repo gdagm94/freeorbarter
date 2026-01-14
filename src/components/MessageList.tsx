@@ -319,14 +319,18 @@ export function MessageList({
       const effectiveThread = threadOverride || threadId;
       if (effectiveThread) {
         query = query.eq('thread_id', effectiveThread);
-      } else if (conversationType === 'direct_message') {
-        query = query.is('item_id', null);
-      } else if (conversationType === 'item' && itemId) {
-        query = query.eq('item_id', itemId);
       } else {
+        // If we don't have a thread ID yet, we MUST filter by the user pair
+        // to prevent seeing messages from other conversations.
         query = query.or(
           `and(sender_id.eq.${currentUserId},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${currentUserId})`
         );
+
+        if (conversationType === 'direct_message') {
+          query = query.is('item_id', null);
+        } else if (conversationType === 'item' && itemId) {
+          query = query.eq('item_id', itemId);
+        }
       }
 
       const { data, error } = await query;
@@ -619,7 +623,9 @@ export function MessageList({
       if (messagesContainerRef.current) {
         messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
       }
-      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+      // messagesEndRef.current?.scrollIntoView({ behavior: 'auto' }); 
+      // Using scrollIntoView causes the whole page to scroll if the container is not fully in view.
+      // Setting scrollTop above is sufficient for the container.
       initialScrollDoneRef.current = true;
     };
 
@@ -1025,9 +1031,9 @@ export function MessageList({
                     onReply={handleReplyToMessage}
                   >
                     <div
-                      className={`max-w-[80%] rounded-lg px-4 py-2 cursor-pointer ${message.sender_id === currentUserId
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-gray-100'
+                      className={`relative max-w-[75%] sm:max-w-[60%] px-4 py-2 cursor-pointer shadow-sm ${message.sender_id === currentUserId
+                        ? 'bg-gradient-to-br from-indigo-500 to-indigo-600 text-white rounded-2xl rounded-tr-sm'
+                        : 'bg-white border border-gray-100 text-gray-800 rounded-2xl rounded-tl-sm'
                         }`}
                       onDoubleClick={() => handleMessageDoubleClick(message.id)}
                       onContextMenu={(e) => handleMessageRightClick(e, message.id)}
@@ -1341,9 +1347,9 @@ export function MessageList({
                         currentUserId={currentUserId}
                       />
 
-                      <div className="flex items-center justify-between mt-1">
-                        <p className="text-xs opacity-70">
-                          {format(new Date(message.created_at), 'MMM d, h:mm a')}
+                      <div className="flex items-center justify-end mt-1 gap-1">
+                        <p className={`text-[10px] ${message.sender_id === currentUserId ? 'text-indigo-100' : 'text-gray-400'}`}>
+                          {format(new Date(message.created_at), 'h:mm a')}
                         </p>
 
                         <ReadReceipt
