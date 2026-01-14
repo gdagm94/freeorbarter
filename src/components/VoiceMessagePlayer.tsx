@@ -14,8 +14,10 @@ export function VoiceMessagePlayer({ audioUrl, duration, isOwnMessage = false }:
   const [volume, setVolume] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
-  
+
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const [localDuration, setLocalDuration] = useState(duration);
 
   useEffect(() => {
     if (audioRef.current) {
@@ -25,44 +27,70 @@ export function VoiceMessagePlayer({ audioUrl, duration, isOwnMessage = false }:
 
   // Preload audio when component mounts
   useEffect(() => {
+    // Reset duration when url changes
+    setLocalDuration(duration);
+
     const audio = new Audio(audioUrl);
     audioRef.current = audio;
-    
+
     const handleCanPlay = () => {
       setIsLoading(false);
       setHasError(false);
     };
-    
+
     const handleError = () => {
       setIsLoading(false);
       setHasError(true);
     };
-    
+
     const handleLoadStart = () => {
       setIsLoading(true);
     };
-    
+
+    const handleLoadedMetadata = () => {
+      // If prop duration is 0, use the actual audio duration
+      if (duration === 0) {
+        setLocalDuration(audio.duration);
+      }
+    };
+
+    const handleTimeUpdate = () => {
+      setCurrentTime(audio.currentTime);
+    };
+
+    const handleEnded = () => {
+      setIsPlaying(false);
+      setCurrentTime(0);
+    };
+
     audio.addEventListener('canplay', handleCanPlay);
     audio.addEventListener('error', handleError);
     audio.addEventListener('loadstart', handleLoadStart);
-    
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('timeupdate', handleTimeUpdate);
+    audio.addEventListener('ended', handleEnded);
+
     // Preload the audio
     audio.load();
-    
+
     return () => {
       audio.removeEventListener('canplay', handleCanPlay);
       audio.removeEventListener('error', handleError);
       audio.removeEventListener('loadstart', handleLoadStart);
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.removeEventListener('timeupdate', handleTimeUpdate);
+      audio.removeEventListener('ended', handleEnded);
+
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current = null;
       }
     };
-  }, [audioUrl]);
+  }, [audioUrl, duration]);
 
   const playPause = () => {
     if (!audioRef.current || hasError) return;
-    
+
     if (isLoading) {
       // Wait for audio to load
       return;
@@ -70,22 +98,24 @@ export function VoiceMessagePlayer({ audioUrl, duration, isOwnMessage = false }:
 
     if (isPlaying) {
       audioRef.current.pause();
+      setIsPlaying(false);
     } else {
       audioRef.current.play().catch((error) => {
         console.error('Error playing audio:', error);
         setHasError(true);
       });
+      setIsPlaying(true);
     }
   };
 
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!audioRef.current) return;
-    
+
     const rect = e.currentTarget.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const percentage = clickX / rect.width;
-    const newTime = percentage * duration;
-    
+    const newTime = percentage * localDuration;
+
     audioRef.current.currentTime = newTime;
     setCurrentTime(newTime);
   };
@@ -95,30 +125,29 @@ export function VoiceMessagePlayer({ audioUrl, duration, isOwnMessage = false }:
   };
 
   const formatTime = (seconds: number) => {
+    if (!seconds || isNaN(seconds)) return '0:00';
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   const getProgressPercentage = () => {
-    return duration > 0 ? (currentTime / duration) * 100 : 0;
+    return localDuration > 0 ? (currentTime / localDuration) * 100 : 0;
   };
 
   return (
-    <div className={`flex items-center space-x-3 p-3 rounded-lg ${
-      isOwnMessage 
-        ? 'bg-indigo-100 border border-indigo-200' 
-        : 'bg-gray-100 border border-gray-200'
-    }`}>
+    <div className={`flex items-center space-x-3 p-3 rounded-lg ${isOwnMessage
+      ? 'bg-indigo-100 border border-indigo-200'
+      : 'bg-gray-100 border border-gray-200'
+      }`}>
       {/* Play/Pause Button */}
       <button
         onClick={playPause}
         disabled={isLoading || hasError}
-        className={`p-2 rounded-full transition-colors ${
-          isOwnMessage
-            ? 'bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-indigo-400'
-            : 'bg-gray-600 text-white hover:bg-gray-700 disabled:bg-gray-400'
-        }`}
+        className={`p-2 rounded-full transition-colors ${isOwnMessage
+          ? 'bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-indigo-400'
+          : 'bg-gray-600 text-white hover:bg-gray-700 disabled:bg-gray-400'
+          }`}
         title={hasError ? 'Error loading audio' : isLoading ? 'Loading...' : isPlaying ? 'Pause' : 'Play'}
       >
         {hasError ? (
@@ -135,19 +164,18 @@ export function VoiceMessagePlayer({ audioUrl, duration, isOwnMessage = false }:
       {/* Progress Bar */}
       <div className="flex-1">
         <div
-          className="w-full bg-gray-300 rounded-full h-2 cursor-pointer"
+          className="w-full bg-gray-300 rounded-full h-2 cursor-pointer overflow-hidden"
           onClick={handleSeek}
         >
           <div
-            className={`h-2 rounded-full transition-all duration-100 ${
-              isOwnMessage ? 'bg-indigo-600' : 'bg-gray-600'
-            }`}
+            className={`h-2 rounded-full transition-all duration-100 ${isOwnMessage ? 'bg-indigo-600' : 'bg-gray-600'
+              }`}
             style={{ width: `${getProgressPercentage()}%` }}
           />
         </div>
         <div className="flex justify-between text-xs text-gray-500 mt-1">
           <span>{formatTime(currentTime)}</span>
-          <span>{formatTime(duration)}</span>
+          <span>{formatTime(localDuration)}</span>
         </div>
       </div>
 
@@ -176,11 +204,9 @@ export function VoiceMessagePlayer({ audioUrl, duration, isOwnMessage = false }:
             onChange={(e) => setVolume(parseFloat(e.target.value))}
             className="w-full h-1 bg-gray-300 rounded-lg appearance-none cursor-pointer"
             style={{
-              background: `linear-gradient(to right, ${
-                isOwnMessage ? '#4F46E5' : '#4B5563'
-              } 0%, ${
-                isOwnMessage ? '#4F46E5' : '#4B5563'
-              } ${volume * 100}%, #D1D5DB ${volume * 100}%, #D1D5DB 100%)`
+              background: `linear-gradient(to right, ${isOwnMessage ? '#4F46E5' : '#4B5563'
+                } 0%, ${isOwnMessage ? '#4F46E5' : '#4B5563'
+                } ${volume * 100}%, #D1D5DB ${volume * 100}%, #D1D5DB 100%)`
             }}
           />
         </div>

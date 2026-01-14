@@ -37,7 +37,7 @@ export function ImageUpload({ onImagesUploaded, maxImages = 5, initialImages = [
         const fileName = `${Math.random()}.${fileExt}`;
         const filePath = `${fileName}`;
 
-        const { error: uploadError, data } = await supabase.storage
+        const { error: uploadError } = await supabase.storage
           .from('item-images')
           .upload(filePath, file);
 
@@ -85,9 +85,8 @@ export function ImageUpload({ onImagesUploaded, maxImages = 5, initialImages = [
       )}
       {previewUrls.length < maxImages && (
         <div
-          className={`border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-indigo-500 transition-colors ${
-            uploading ? 'opacity-50 cursor-not-allowed' : ''
-          }`}
+          className={`border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-indigo-500 transition-colors ${uploading ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
         >
           <input
             type="file"

@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function validateLocationData(location: any): { isValid: boolean; error?: string } {
   if (!location) {
     return { isValid: false, error: 'Location is required' };

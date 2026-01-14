@@ -1,0 +1,27 @@
+﻿
+> freeorbarter@0.0.0 lint
+> eslint .
+
+node.exe : 
+At C:\Program Files\nodejs\npm.ps1:16 char:5
++     & "$basedir/node$exe"  "$basedir/node_modules/npm/bin/npm-cli.js" ...
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Oops! Something went wrong! :(
+
+ESLint: 9.39.1
+
+TypeError: Error while loading rule '@typescript-eslint/no-unused-expressions': Cannot read properties of undefined (reading 'allowShortCircuit')
+Occurred while linting C:\Users\Surface\Documents\Google AntiGravity\freeorbarter\src\App.tsx
+    at Object.create (C:\Users\Surface\Documents\Google AntiGravity\freeorbarter\node_modules\eslint\lib\rules\no-unused-expressions.js:85:5)
+    at create (C:\Users\Surface\Documents\Google AntiGravity\freeorbarter\node_modules\@typescript-eslint\eslint-plugin\dist\rules\no-unused-expressions.js:28:32)
+    at Object.create (C:\Users\Surface\Documents\Google AntiGravity\freeorbarter\node_modules\@typescript-eslint\utils\dist\eslint-utils\RuleCreator.js:31:20)
+    at createRuleListeners (C:\Users\Surface\Documents\Google AntiGravity\freeorbarter\node_modules\eslint\lib\linter\linter.js:1019:15)
+    at C:\Users\Surface\Documents\Google AntiGravity\freeorbarter\node_modules\eslint\lib\linter\linter.js:1151:7
+    at Array.forEach (<anonymous>)
+    at runRules (C:\Users\Surface\Documents\Google AntiGravity\freeorbarter\node_modules\eslint\lib\linter\linter.js:1085:31)
+    at #flatVerifyWithoutProcessors (C:\Users\Surface\Documents\Google AntiGravity\freeorbarter\node_modules\eslint\lib\linter\linter.js:2101:4)
+    at Linter._verifyWithFlatConfigArrayAndWithoutProcessors (C:\Users\Surface\Documents\Google AntiGravity\freeorbarter\node_modules\eslint\lib\linter\linter.js:2189:43)
+    at Linter._verifyWithFlatConfigArray (C:\Users\Surface\Documents\Google AntiGravity\freeorbarter\node_modules\eslint\lib\linter\linter.js:2292:15)

@@ -833,6 +833,8 @@ export default function ChatScreen() {
           receiver_id: otherUserId,
           content: `🎤 Voice message (${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')})`,
           file_url: urlData.publicUrl,
+          file_name: fileName,
+          file_type: 'audio/m4a',
           item_id: itemId || null,
           read: false,
           is_offer: false,

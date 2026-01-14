@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Download, ExternalLink, FileText, File, Image as ImageIcon, FileVideo, FileAudio, Archive } from 'lucide-react';
 import { Document, Page, pdfjs } from 'react-pdf';
 
@@ -14,13 +14,13 @@ interface FileViewerProps {
   onClose: () => void;
 }
 
-export function FileViewer({ 
-  visible, 
-  fileUrl, 
-  fileName, 
-  fileType, 
-  fileSize, 
-  onClose 
+export function FileViewer({
+  visible,
+  fileUrl,
+  fileName,
+  fileType,
+  fileSize,
+  onClose
 }: FileViewerProps) {
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
@@ -100,7 +100,7 @@ export function FileViewer({
 
   const isPdf = fileType === 'application/pdf';
   const isImage = fileType.startsWith('image/');
-  const isText = fileType.startsWith('text/');
+
 
   if (!visible) return null;
 
@@ -144,13 +144,13 @@ export function FileViewer({
                 onLoadError={onDocumentLoadError}
                 loading={<div className="text-center py-8">Loading PDF...</div>}
               >
-                <Page 
-                  pageNumber={pageNumber} 
+                <Page
+                  pageNumber={pageNumber}
                   className="shadow-lg"
                   width={Math.min(800, window.innerWidth - 100)}
                 />
               </Document>
-              
+
               {numPages && numPages > 1 && (
                 <div className="flex items-center justify-center space-x-4 mt-4">
                   <button
@@ -213,7 +213,7 @@ export function FileViewer({
             <ExternalLink className="w-4 h-4" />
             <span>Open in New Tab</span>
           </button>
-          
+
           <button
             onClick={handleDownload}
             disabled={loading}

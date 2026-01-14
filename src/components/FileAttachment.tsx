@@ -20,15 +20,7 @@ export function FileAttachment({ onFileUpload, onClose, uploading, setUploading 
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const getFileIcon = (fileType: string) => {
-    if (fileType.startsWith('image/')) {
-      return <ImageIcon className="w-8 h-8 text-blue-500" />;
-    } else if (fileType === 'application/pdf') {
-      return <FileText className="w-8 h-8 text-red-500" />;
-    } else {
-      return <File className="w-8 h-8 text-gray-500" />;
-    }
-  };
+
 
   const validateFile = (file: File): string | null => {
     const allAllowedTypes = [
@@ -51,10 +43,10 @@ export function FileAttachment({ onFileUpload, onClose, uploading, setUploading 
   const uploadFile = async (file: File): Promise<string | null> => {
     try {
       setUploading(true);
-      
+
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-      
+
       const { error: uploadError } = await supabase.storage
         .from('message-files')
         .upload(fileName, file);
@@ -79,7 +71,7 @@ export function FileAttachment({ onFileUpload, onClose, uploading, setUploading 
 
     const file = files[0];
     const validationError = validateFile(file);
-    
+
     if (validationError) {
       alert(validationError);
       return;
@@ -125,11 +117,10 @@ export function FileAttachment({ onFileUpload, onClose, uploading, setUploading 
 
         {/* Drag and Drop Area */}
         <div
-          className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-            dragOver
+          className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${dragOver
               ? 'border-indigo-500 bg-indigo-50'
               : 'border-gray-300 hover:border-gray-400'
-          }`}
+            }`}
           onDrop={handleDrop}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
@@ -220,7 +211,7 @@ export function FileDisplay({ fileUrl, fileName, fileType, fileSize, onPress }: 
       onPress();
       return;
     }
-    
+
     // Fallback to direct download
     const link = document.createElement('a');
     link.href = fileUrl;

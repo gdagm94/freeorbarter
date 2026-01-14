@@ -1,10 +1,10 @@
-// @ts-nocheck
+
 import React, { useState, useEffect, useRef } from 'react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { Message } from '../types';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Image as ImageIcon, Send, Shield, Flag, Ban, Unlock } from 'lucide-react';
+import { ArrowRight, Image as ImageIcon, Send, Shield, Flag, Ban, Unlock, FileText, X } from 'lucide-react';
 import { debounce } from 'throttle-debounce';
 import { MessageReactions } from './MessageReactions';
 import { ReadReceipt } from './ReadReceipt';
@@ -75,7 +75,7 @@ export function MessageList({
   const [threadId, setThreadId] = useState<string | null>(null);
   const [newMessage, setNewMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [otherUserTyping, setOtherUserTyping] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
@@ -94,6 +94,7 @@ export function MessageList({
   const [selectedImageUrl, setSelectedImageUrl] = useState('');
   const [showFileViewer, setShowFileViewer] = useState(false);
   const [selectedFile, setSelectedFile] = useState<{ url: string; name: string; type: string; size?: number } | null>(null);
+  const [pendingAttachment, setPendingAttachment] = useState<{ file: File; previewUrl: string } | null>(null);
   const [lastClickTime, setLastClickTime] = useState(0);
   const [showReactionPicker, setShowReactionPicker] = useState<string | null>(null);
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
@@ -120,10 +121,11 @@ export function MessageList({
 
   // Message drafts hook
   const { saveDraft, clearDrafts } = useMessageDrafts(currentUserId, otherUserId, conversationType, itemId);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const threadChannelRef = useRef<any>(null);
 
   // Debounced function to emit typing status
-  const emitTypingStatus = debounce(1000, async (isTyping: boolean) => {
+  const emitTypingStatus = debounce(1000, async (_isTyping?: boolean) => {
     // Typing events not wired to room channel yet; skip for now.
   });
 
@@ -213,7 +215,7 @@ export function MessageList({
 
     try {
       // 1. Try to find a valid shared thread (strict 2 users)
-      const { data: candidates, error: candidateError } = await supabase
+      const { data: candidates } = await supabase
         .from('thread_members')
         .select(`
           thread_id,
@@ -227,7 +229,8 @@ export function MessageList({
 
       if (candidates && candidates.length > 0) {
         const validCandidates = candidates.filter(c => {
-          const tItemId = c.message_threads.item_id;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const tItemId = (c.message_threads as any).item_id;
           if (conversationType === 'direct_message') return tItemId === null;
           if (conversationType === 'item') return tItemId === itemId;
           if (conversationType === 'unified') return tItemId === null;
@@ -414,8 +417,9 @@ export function MessageList({
         return;
       }
 
-      setMessages(data || []);
+      setMessages((data || []) as unknown as MessageWithOfferItem[]);
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const foundThread = (data || []).find((m: any) => m.thread_id)?.thread_id || null;
       if (foundThread && threadId !== foundThread) {
         setThreadId(foundThread);
@@ -493,34 +497,9 @@ export function MessageList({
     }
   };
 
-  const uploadImage = async (file: File): Promise<string | null> => {
-    try {
-      setUploading(true);
 
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('message-images')
-        .upload(fileName, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('message-images')
-        .getPublicUrl(fileName);
-
-      return publicUrl;
-    } catch (error) {
-      console.error('Error uploading image:', error);
-      setError('Failed to upload image');
-      return null;
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!ensureMessagingAllowed()) {
@@ -528,75 +507,28 @@ export function MessageList({
       return;
     }
 
-    const imageUrl = await uploadImage(file);
-    if (imageUrl) {
-      await sendMessageWithImage('', imageUrl);
+    // Create preview URL
+    const previewUrl = URL.createObjectURL(file);
+    setPendingAttachment({ file, previewUrl });
+
+    // Reset file input so same file can be selected again if needed
+    e.target.value = '';
+
+    setShowAttachmentMenu(false);
+  };
+
+  const removePendingAttachment = () => {
+    if (pendingAttachment) {
+      URL.revokeObjectURL(pendingAttachment.previewUrl);
+      setPendingAttachment(null);
     }
   };
 
-  const sendMessageWithImage = async (content: string, imageUrl: string) => {
-    if (!ensureMessagingAllowed()) return;
-    try {
-      setSending(true);
-      setIsTyping(false);
-      emitTypingStatus(false);
 
-      const activeThread = await getActiveThreadId();
-      if (!activeThread) {
-        setSending(false);
-        return;
-      }
-
-      const { data, error } = await supabase.from('messages').insert([
-        {
-          content: content,
-          image_url: imageUrl,
-          item_id: conversationType === 'unified' ? null : itemId,
-          sender_id: currentUserId,
-          receiver_id: otherUserId,
-          thread_id: activeThread,
-          read: false,
-          is_offer: false
-        },
-      ]).select(`
-        *,
-        offer_item:offer_item_id (
-          id,
-          title,
-          images,
-          condition,
-          description
-        ),
-        sender:sender_id (
-          username,
-          avatar_url
-        ),
-        items:item_id (
-          id,
-          title,
-          images
-        )
-      `).single();
-
-      if (error) {
-        console.error('Error sending message:', error);
-        return;
-      }
-
-      if (data) {
-        setMessages(prev => [...prev, data]);
-      }
-    } catch (err) {
-      console.error('Error sending message:', err);
-    } finally {
-      setSending(false);
-    }
-  };
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim()) {
-
+    if (!newMessage.trim() && !pendingAttachment) {
       return;
     }
     if (!ensureMessagingAllowed()) {
@@ -607,7 +539,39 @@ export function MessageList({
     }
 
     try {
+      setSending(true);
       const messageContent = newMessage.trim();
+
+      // Handle file upload if present
+      let fileData = null;
+      if (pendingAttachment) {
+        setIsTyping(false);
+        emitTypingStatus(false);
+
+        const fileExt = pendingAttachment.file.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const bucket = pendingAttachment.file.type.startsWith('image/') ? 'message-images' : 'message-files';
+
+        const { error: uploadError } = await supabase.storage
+          .from(bucket)
+          .upload(fileName, pendingAttachment.file);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from(bucket)
+          .getPublicUrl(fileName);
+
+        fileData = {
+          url: publicUrl,
+          name: pendingAttachment.file.name,
+          type: pendingAttachment.file.type
+        };
+      } else if (!messageContent) {
+        // If no file and no text, don't send
+        setSending(false);
+        return;
+      }
 
 
       // Check content filtering
@@ -650,7 +614,15 @@ export function MessageList({
           receiver_id: otherUserId,
           thread_id: activeThread,
           read: false,
-          is_offer: false
+          is_offer: false,
+          // Add file fields if present
+          ...(fileData ? {
+            file_url: fileData.url,
+            file_name: fileData.name,
+            file_type: fileData.type,
+            // Set image_url specifically for images to maintain backward compat or UI logic
+            ...(fileData.type.startsWith('image/') ? { image_url: fileData.url } : {})
+          } : {})
         },
       ]).select(`
         *,
@@ -682,8 +654,9 @@ export function MessageList({
         // #region agent log
         fetch('http://10.0.0.207:7243/ingest/e915d2c6-5cbb-488d-ad0b-a0a2cff148e2', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'debug-session', runId: 'run1', hypothesisId: 'H4', location: 'MessageList.tsx:sendMessage:success', message: 'insert ok', data: { id: data.id, thread_id: data.thread_id }, timestamp: Date.now() }) }).catch(() => { });
         // #endregion
-        setMessages(prev => [...prev, data]);
+        setMessages(prev => [...prev, data as unknown as MessageWithOfferItem]);
         clearDrafts();
+        removePendingAttachment(); // Clear file after sending
       }
     } catch (err) {
       // #region agent log
@@ -849,7 +822,7 @@ export function MessageList({
       }
 
       if (data) {
-        setMessages(prev => [...prev, data]);
+        setMessages(prev => [...prev, data as unknown as MessageWithOfferItem]);
 
         // Clear drafts after successful send
         clearDrafts();
@@ -886,14 +859,18 @@ export function MessageList({
       const activeThread = await getActiveThreadId();
       if (!activeThread) {
         setSending(false);
-        setShowVoiceMessage(false);
-        return;
+        // Don't close modal here, let user try again if transient error
+        // But if no thread found, it's a critical error.
+        // We'll throw to let VoiceMessage show error.
+        throw new Error('Could not find or create conversation thread');
       }
 
       const { data, error } = await supabase.from('messages').insert([
         {
-          content: `🎤 Voice message (${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')})`,
+          content: `🎤 Voice message (${Math.floor(duration / 60)}:${(duration % 60).toFixed(0).padStart(2, '0')})`,
           file_url: publicUrl,
+          file_name: fileName,
+          file_type: 'audio/webm',
           item_id: conversationType === 'unified' ? null : itemId,
           sender_id: currentUserId,
           receiver_id: otherUserId,
@@ -923,20 +900,22 @@ export function MessageList({
 
       if (error) {
         console.error('Error sending voice message:', error);
-        return;
+        throw error;
       }
 
       if (data) {
-        setMessages(prev => [...prev, data]);
+        setMessages(prev => [...prev, data as unknown as MessageWithOfferItem]);
 
         // Clear drafts after successful send
         clearDrafts();
+        setShowVoiceMessage(false); // Close modal only on success
       }
     } catch (err) {
       console.error('Error sending voice message:', err);
+      // Re-throw so VoiceMessage component can show error state
+      throw err;
     } finally {
       setSending(false);
-      setShowVoiceMessage(false);
     }
   };
 
@@ -1341,7 +1320,7 @@ export function MessageList({
                                         .from('barter_offers')
                                         .select('id')
                                         .eq('offered_item_id', message.offer_item_id!)
-                                        .eq('requested_item_id', message.item_id)
+                                        .eq('requested_item_id', message.item_id!)
                                         .eq('sender_id', message.sender_id)
                                         .eq('status', 'pending')
                                         .limit(1);
@@ -1389,7 +1368,7 @@ export function MessageList({
                                         .from('barter_offers')
                                         .select('id')
                                         .eq('offered_item_id', message.offer_item_id!)
-                                        .eq('requested_item_id', message.item_id)
+                                        .eq('requested_item_id', message.item_id!)
                                         .eq('sender_id', message.sender_id)
                                         .eq('status', 'pending')
                                         .limit(1);
@@ -1460,17 +1439,7 @@ export function MessageList({
                   </div>
                 </div>
               ))}
-              {otherUserTyping && (
-                <div className="flex justify-start">
-                  <div className="bg-gray-100 rounded-lg px-4 py-2">
-                    <div className="flex space-x-1">
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
-                    </div>
-                  </div>
-                </div>
-              )}
+
               <div ref={messagesEndRef} />
             </>
           )}
@@ -1492,14 +1461,42 @@ export function MessageList({
           </div>
         )}
         <form onSubmit={sendMessage} className="p-4 border-t">
-          <div className="flex space-x-2">
+          <div className="flex space-x-2 relative">
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
-              onChange={handleImageUpload}
+              // Remove accept restriction to allow all files
+              onChange={handleFileSelect}
               className="hidden"
             />
+
+            {/* File Preview */}
+            {/* File Preview */}
+            {pendingAttachment && (
+              <div className="absolute bottom-full left-0 right-0 p-2 bg-gray-50 border-t border-gray-200">
+                <div className="relative inline-block">
+                  {pendingAttachment.file.type.startsWith('image/') ? (
+                    <img
+                      src={pendingAttachment.previewUrl}
+                      alt="Preview"
+                      className="h-20 w-20 object-cover rounded-lg border border-gray-300"
+                    />
+                  ) : (
+                    <div className="h-20 w-20 flex items-center justify-center bg-gray-200 rounded-lg border border-gray-300">
+                      <FileText className="w-8 h-8 text-gray-500" />
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={removePendingAttachment}
+                    className="absolute -top-2 -right-2 bg-gray-900 text-white rounded-full p-1 shadow-md hover:bg-gray-700"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+                <div className="text-xs text-gray-500 mt-1 truncate max-w-xs">{pendingAttachment.file.name}</div>
+              </div>
+            )}
             <button
               type="button"
               onClick={() => {
@@ -1523,7 +1520,7 @@ export function MessageList({
             />
             <button
               type="submit"
-              disabled={!newMessage.trim() || sending || uploading || !canSendMessages}
+              disabled={(!newMessage.trim() && !pendingAttachment) || sending || uploading || !canSendMessages}
               className="btn-primary flex items-center"
             >
               {uploading ? (
@@ -1660,19 +1657,12 @@ export function MessageList({
       <AttachmentMenu
         visible={showAttachmentMenu}
         onClose={() => setShowAttachmentMenu(false)}
-        onCamera={() => {
+        onAttach={() => {
           if (!ensureMessagingAllowed()) {
             setShowAttachmentMenu(false);
             return;
           }
           fileInputRef.current?.click();
-        }}
-        onDocument={() => {
-          if (!ensureMessagingAllowed()) {
-            setShowAttachmentMenu(false);
-            return;
-          }
-          setShowFileAttachment(true);
         }}
         onVoice={() => {
           if (!ensureMessagingAllowed()) {

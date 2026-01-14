@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { X, AlertTriangle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -19,7 +19,7 @@ export function DeleteListingDialog({ itemId, itemTitle, onClose, onDelete }: De
 
     try {
       // First, check if the item exists
-      const { data: item, error: fetchError } = await supabase
+      const { error: fetchError } = await supabase
         .from('items')
         .select('id')
         .eq('id', itemId)
@@ -34,7 +34,7 @@ export function DeleteListingDialog({ itemId, itemTitle, onClose, onDelete }: De
         .from('messages')
         .delete()
         .eq('item_id', itemId);
-        
+
       if (messagesError) {
         console.error('Error deleting messages:', messagesError);
         // Continue with item deletion even if message deletion fails

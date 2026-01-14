@@ -187,7 +187,7 @@ function UserProfile() {
           if (result.error) throw result.error;
           break;
 
-        case 'cancel':
+        case 'cancel': {
           // For cancel, we need to find the request ID
           const { data: sentRequest } = await supabase
             .from('friend_requests')
@@ -202,6 +202,7 @@ function UserProfile() {
           result = await cancelFriendRequest(sentRequest.id);
           if (result.error) throw result.error;
           break;
+        }
 
         case 'unfriend':
           result = await unfriend(user.id, id);

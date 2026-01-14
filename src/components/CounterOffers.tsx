@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { ArrowLeftRight, Clock, Check, X, AlertCircle } from 'lucide-react';
 
@@ -50,15 +50,13 @@ interface CounterOffersProps {
   onCounterOfferResponse: (counterOfferId: string, status: 'accepted' | 'declined') => void;
 }
 
-export function CounterOffers({ currentUserId, offerId, onCounterOfferResponse }: CounterOffersProps) {
+export function CounterOffers({ offerId, onCounterOfferResponse }: CounterOffersProps) {
   const [counterOffers, setCounterOffers] = useState<CounterOffer[]>([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    fetchCounterOffers();
-  }, [offerId]);
 
-  const fetchCounterOffers = async () => {
+
+  const fetchCounterOffers = useCallback(async () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
@@ -112,16 +110,20 @@ export function CounterOffers({ currentUserId, offerId, onCounterOfferResponse }
     } finally {
       setLoading(false);
     }
-  };
+  }, [offerId]);
+
+  useEffect(() => {
+    fetchCounterOffers();
+  }, [fetchCounterOffers]);
 
   const handleCounterOfferResponse = async (counterOfferId: string, status: 'accepted' | 'declined') => {
     try {
       setLoading(true);
-      
+
       // Update counter offer status
       const { error: updateError } = await supabase
         .from('counter_offers')
-        .update({ 
+        .update({
           status,
           updated_at: new Date().toISOString()
         })

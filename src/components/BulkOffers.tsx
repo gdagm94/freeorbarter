@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+// ... (I need to be careful with replace_file_content for non-contiguous lines. I should do it in two steps or use multi_replace)
 import { supabase } from '../lib/supabase';
-import { Package, Plus, X, Check, AlertCircle } from 'lucide-react';
+import { Package, X, Check, AlertCircle } from 'lucide-react';
 
 interface Item {
   id: string;
@@ -27,14 +28,9 @@ export function BulkOffers({ currentUserId, targetUserId, onOffersSent, onClose,
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<'select-items' | 'select-target' | 'review'>('select-items');
 
-  useEffect(() => {
-    if (isVisible) {
-      fetchAvailableItems();
-      fetchTargetItems();
-    }
-  }, [isVisible, currentUserId, targetUserId]);
 
-  const fetchAvailableItems = async () => {
+
+  const fetchAvailableItems = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('items')
@@ -52,9 +48,9 @@ export function BulkOffers({ currentUserId, targetUserId, onOffersSent, onClose,
     } catch (err) {
       console.error('Error in fetchAvailableItems:', err);
     }
-  };
+  }, [currentUserId]);
 
-  const fetchTargetItems = async () => {
+  const fetchTargetItems = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('items')
@@ -72,7 +68,14 @@ export function BulkOffers({ currentUserId, targetUserId, onOffersSent, onClose,
     } catch (err) {
       console.error('Error in fetchTargetItems:', err);
     }
-  };
+  }, [targetUserId]);
+
+  useEffect(() => {
+    if (isVisible) {
+      fetchAvailableItems();
+      fetchTargetItems();
+    }
+  }, [isVisible, fetchAvailableItems, fetchTargetItems]);
 
   const toggleItemSelection = (itemId: string) => {
     const newSelection = new Set(selectedItems);
@@ -103,7 +106,7 @@ export function BulkOffers({ currentUserId, targetUserId, onOffersSent, onClose,
         receiver_id: targetUserId,
         offered_item_id: itemId,
         requested_item_id: selectedTargetItem,
-        message: offerMessage.trim() || null,
+        message: offerMessage.trim() || '',
         status: 'pending',
         created_at: new Date().toISOString()
       }));
@@ -180,27 +183,24 @@ export function BulkOffers({ currentUserId, targetUserId, onOffersSent, onClose,
               const Icon = stepItem.icon;
               const isActive = step === stepItem.key;
               const isCompleted = ['select-items', 'select-target', 'review'].indexOf(step) > index;
-              
+
               return (
                 <div key={stepItem.key} className="flex items-center">
-                  <div className={`flex items-center justify-center w-8 h-8 rounded-full ${
-                    isActive ? 'bg-indigo-600 text-white' : 
-                    isCompleted ? 'bg-green-600 text-white' : 
-                    'bg-gray-200 text-gray-600'
-                  }`}>
+                  <div className={`flex items-center justify-center w-8 h-8 rounded-full ${isActive ? 'bg-indigo-600 text-white' :
+                    isCompleted ? 'bg-green-600 text-white' :
+                      'bg-gray-200 text-gray-600'
+                    }`}>
                     <Icon className="w-4 h-4" />
                   </div>
-                  <span className={`ml-2 text-sm font-medium ${
-                    isActive ? 'text-indigo-600' : 
-                    isCompleted ? 'text-green-600' : 
-                    'text-gray-500'
-                  }`}>
+                  <span className={`ml-2 text-sm font-medium ${isActive ? 'text-indigo-600' :
+                    isCompleted ? 'text-green-600' :
+                      'text-gray-500'
+                    }`}>
                     {stepItem.label}
                   </span>
                   {index < 2 && (
-                    <div className={`w-8 h-0.5 ml-4 ${
-                      isCompleted ? 'bg-green-600' : 'bg-gray-200'
-                    }`} />
+                    <div className={`w-8 h-0.5 ml-4 ${isCompleted ? 'bg-green-600' : 'bg-gray-200'
+                      }`} />
                   )}
                 </div>
               );
@@ -221,17 +221,16 @@ export function BulkOffers({ currentUserId, targetUserId, onOffersSent, onClose,
                   {selectedItems.size === availableItems.length ? 'Deselect All' : 'Select All'}
                 </button>
               </div>
-              
+
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 max-h-96 overflow-y-auto">
                 {availableItems.map((item) => (
                   <div
                     key={item.id}
                     onClick={() => toggleItemSelection(item.id)}
-                    className={`relative cursor-pointer rounded-lg border-2 transition-all ${
-                      selectedItems.has(item.id)
-                        ? 'border-indigo-500 bg-indigo-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
+                    className={`relative cursor-pointer rounded-lg border-2 transition-all ${selectedItems.has(item.id)
+                      ? 'border-indigo-500 bg-indigo-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                      }`}
                   >
                     <img
                       src={item.images[0]}
@@ -265,11 +264,10 @@ export function BulkOffers({ currentUserId, targetUserId, onOffersSent, onClose,
                   <div
                     key={item.id}
                     onClick={() => setSelectedTargetItem(item.id)}
-                    className={`relative cursor-pointer rounded-lg border-2 transition-all ${
-                      selectedTargetItem === item.id
-                        ? 'border-indigo-500 bg-indigo-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
+                    className={`relative cursor-pointer rounded-lg border-2 transition-all ${selectedTargetItem === item.id
+                      ? 'border-indigo-500 bg-indigo-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                      }`}
                   >
                     <img
                       src={item.images[0]}
@@ -298,7 +296,7 @@ export function BulkOffers({ currentUserId, targetUserId, onOffersSent, onClose,
           {step === 'review' && (
             <div className="p-6">
               <h4 className="text-md font-medium text-gray-900 mb-4">Review Your Offers</h4>
-              
+
               <div className="space-y-4">
                 <div>
                   <p className="text-sm font-medium text-gray-700 mb-2">Your Items ({selectedItems.size})</p>
@@ -359,7 +357,7 @@ export function BulkOffers({ currentUserId, targetUserId, onOffersSent, onClose,
           >
             Previous
           </button>
-          
+
           <div className="flex gap-3">
             <button
               onClick={onClose}

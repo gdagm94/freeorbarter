@@ -1,8 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Mic, MicOff, Play, Pause, Square, Send, X } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Mic, Play, Pause, Square, Send, X, Loader2 } from 'lucide-react';
 
 interface VoiceMessageProps {
-  onSend: (audioBlob: Blob, duration: number) => void;
+  onSend: (audioBlob: Blob, duration: number) => Promise<void>;
   onCancel: () => void;
   isVisible: boolean;
 }
@@ -14,7 +14,8 @@ export function VoiceMessage({ onSend, onCancel, isVisible }: VoiceMessageProps)
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [recordingTime, setRecordingTime] = useState(0);
-  
+  const [isSending, setIsSending] = useState(false);
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -39,6 +40,7 @@ export function VoiceMessage({ onSend, onCancel, isVisible }: VoiceMessageProps)
         streamRef.current.getTracks().forEach(track => track.stop());
         streamRef.current = null;
       }
+      setIsSending(false);
     }
 
     return () => {
@@ -47,6 +49,8 @@ export function VoiceMessage({ onSend, onCancel, isVisible }: VoiceMessageProps)
       }
     };
   }, [isVisible]);
+
+  const startTimeRef = useRef<number>(0);
 
   const startRecording = async () => {
     if (!streamRef.current) {
@@ -57,28 +61,33 @@ export function VoiceMessage({ onSend, onCancel, isVisible }: VoiceMessageProps)
     try {
       const mediaRecorder = new MediaRecorder(streamRef.current);
       mediaRecorderRef.current = mediaRecorder;
-      
+      startTimeRef.current = Date.now();
+
       const audioChunks: BlobPart[] = [];
-      
+
       mediaRecorder.ondataavailable = (event) => {
         audioChunks.push(event.data);
       };
-      
+
       mediaRecorder.onstop = () => {
         const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
         setRecordedAudio(audioBlob);
-        setDuration(recordingTime);
+        const finalDuration = (Date.now() - startTimeRef.current) / 1000;
+        setDuration(finalDuration);
+        setRecordingTime(Math.floor(finalDuration));
       };
-      
+
       mediaRecorder.start();
       setIsRecording(true);
+      setRecordedAudio(null); // Clear previous recording
+      setDuration(0); // Reset duration
       setRecordingTime(0);
-      
+
       // Start recording timer
       recordingIntervalRef.current = setInterval(() => {
-        setRecordingTime(prev => prev + 1);
+        setRecordingTime(Math.floor((Date.now() - startTimeRef.current) / 1000));
       }, 1000);
-      
+
     } catch (error) {
       console.error('Error starting recording:', error);
       alert('Failed to start recording');
@@ -89,7 +98,7 @@ export function VoiceMessage({ onSend, onCancel, isVisible }: VoiceMessageProps)
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
-      
+
       if (recordingIntervalRef.current) {
         clearInterval(recordingIntervalRef.current);
         recordingIntervalRef.current = null;
@@ -99,7 +108,7 @@ export function VoiceMessage({ onSend, onCancel, isVisible }: VoiceMessageProps)
 
   const playRecording = () => {
     if (!recordedAudio) return;
-    
+
     if (audioRef.current) {
       if (isPlaying) {
         audioRef.current.pause();
@@ -112,18 +121,18 @@ export function VoiceMessage({ onSend, onCancel, isVisible }: VoiceMessageProps)
       const audio = new Audio();
       audioRef.current = audio;
       audio.src = URL.createObjectURL(recordedAudio);
-      
+
       audio.onplay = () => setIsPlaying(true);
       audio.onpause = () => setIsPlaying(false);
       audio.onended = () => {
         setIsPlaying(false);
         setCurrentTime(0);
       };
-      
+
       audio.ontimeupdate = () => {
         setCurrentTime(audio.currentTime);
       };
-      
+
       audio.play();
       setIsPlaying(true);
     }
@@ -138,19 +147,29 @@ export function VoiceMessage({ onSend, onCancel, isVisible }: VoiceMessageProps)
     }
   };
 
-  const sendVoiceMessage = () => {
+  const sendVoiceMessage = async () => {
     if (recordedAudio && duration > 0) {
-      onSend(recordedAudio, duration);
-      // Reset state
-      setRecordedAudio(null);
-      setDuration(0);
-      setCurrentTime(0);
-      setRecordingTime(0);
-      stopPlayback();
+      try {
+        setIsSending(true);
+        stopPlayback();
+        await onSend(recordedAudio, duration);
+
+        // Reset state only after successful send
+        setRecordedAudio(null);
+        setDuration(0);
+        setCurrentTime(0);
+        setRecordingTime(0);
+      } catch (error) {
+        console.error('Failed to send voice message:', error);
+        alert('Failed to send voice message. Please try again.');
+      } finally {
+        setIsSending(false);
+      }
     }
   };
 
   const cancelRecording = () => {
+    if (isSending) return;
     stopRecording();
     stopPlayback();
     setRecordedAudio(null);
@@ -175,7 +194,8 @@ export function VoiceMessage({ onSend, onCancel, isVisible }: VoiceMessageProps)
           <h3 className="text-lg font-semibold text-gray-900">Voice Message</h3>
           <button
             onClick={cancelRecording}
-            className="p-1 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+            disabled={isSending}
+            className="p-1 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 disabled:opacity-50"
           >
             <X className="w-5 h-5" />
           </button>
@@ -216,7 +236,7 @@ export function VoiceMessage({ onSend, onCancel, isVisible }: VoiceMessageProps)
         {/* Audio Waveform Visualization */}
         {isRecording && (
           <div className="mb-6">
-            <div className="flex items-center justify-center space-x-1">
+            <div className="flex items-center justify-center space-x-1 h-16">
               {Array.from({ length: 20 }).map((_, i) => (
                 <div
                   key={i}
@@ -238,12 +258,13 @@ export function VoiceMessage({ onSend, onCancel, isVisible }: VoiceMessageProps)
             <div className="flex items-center justify-center space-x-4">
               <button
                 onClick={playRecording}
-                className="p-3 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 transition-colors"
+                disabled={isSending}
+                className="p-3 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 transition-colors disabled:opacity-50"
               >
                 {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}
               </button>
-              <div className="flex-1">
-                <div className="w-full bg-gray-200 rounded-full h-2">
+              <div className="flex-1 min-w-0">
+                <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
                   <div
                     className="bg-indigo-600 h-2 rounded-full transition-all duration-100"
                     style={{ width: `${(currentTime / duration) * 100}%` }}
@@ -264,11 +285,10 @@ export function VoiceMessage({ onSend, onCancel, isVisible }: VoiceMessageProps)
             <>
               <button
                 onClick={isRecording ? stopRecording : startRecording}
-                className={`p-4 rounded-full text-white transition-colors ${
-                  isRecording
-                    ? 'bg-red-600 hover:bg-red-700'
-                    : 'bg-indigo-600 hover:bg-indigo-700'
-                }`}
+                className={`p-4 rounded-full text-white transition-colors ${isRecording
+                  ? 'bg-red-600 hover:bg-red-700'
+                  : 'bg-indigo-600 hover:bg-indigo-700'
+                  }`}
               >
                 {isRecording ? <Square className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
               </button>
@@ -277,15 +297,17 @@ export function VoiceMessage({ onSend, onCancel, isVisible }: VoiceMessageProps)
             <>
               <button
                 onClick={startRecording}
-                className="p-4 bg-gray-600 text-white rounded-full hover:bg-gray-700 transition-colors"
+                disabled={isSending}
+                className="p-4 bg-gray-600 text-white rounded-full hover:bg-gray-700 transition-colors disabled:opacity-50"
               >
                 <Mic className="w-6 h-6" />
               </button>
               <button
                 onClick={sendVoiceMessage}
-                className="p-4 bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors"
+                disabled={isSending}
+                className="p-4 bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center justify-center"
               >
-                <Send className="w-6 h-6" />
+                {isSending ? <Loader2 className="w-6 h-6 animate-spin" /> : <Send className="w-6 h-6" />}
               </button>
             </>
           )}
@@ -297,8 +319,10 @@ export function VoiceMessage({ onSend, onCancel, isVisible }: VoiceMessageProps)
             {isRecording
               ? 'Tap the square to stop recording'
               : recordedAudio
-              ? 'Tap play to listen, or record a new message'
-              : 'Tap the microphone to start recording'
+                ? isSending
+                  ? 'Sending voice message...'
+                  : 'Tap play to listen, or record a new message'
+                : 'Tap the microphone to start recording'
             }
           </p>
         </div>
@@ -306,3 +330,4 @@ export function VoiceMessage({ onSend, onCancel, isVisible }: VoiceMessageProps)
     </div>
   );
 }
+

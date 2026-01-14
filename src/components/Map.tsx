@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { MapContainer, TileLayer, Circle, useMap, Marker, Popup } from 'react-leaflet';
-import { OpenStreetMapProvider } from 'leaflet-geosearch';
+
 import { Link } from 'react-router-dom';
 import { MapPin } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
@@ -8,6 +8,7 @@ import L from 'leaflet';
 import { Item } from '../types';
 
 // Fix Leaflet default icon issue
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 
 // Create custom marker icon for items
@@ -62,23 +63,22 @@ function ItemMarker({ item }: { item: Item }) {
   return (
     <Marker position={[item.latitude, item.longitude]} icon={itemIcon}>
       <Popup>
-        <Link 
+        <Link
           to={`/items/${item.id}`}
           className="block hover:opacity-90 transition-opacity"
         >
           <div className="w-64">
             <div className="relative">
-              <img 
-                src={item.images[0]} 
+              <img
+                src={item.images[0]}
                 alt={item.title}
                 className="w-full h-48 object-cover rounded-t-lg"
               />
               <div className="absolute top-2 right-2">
-                <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                  item.type === 'free' 
-                    ? 'bg-green-100 text-green-800' 
-                    : 'bg-purple-100 text-purple-800'
-                }`}>
+                <span className={`px-2 py-1 rounded-full text-xs font-semibold ${item.type === 'free'
+                  ? 'bg-green-100 text-green-800'
+                  : 'bg-purple-100 text-purple-800'
+                  }`}>
                   {item.type === 'free' ? 'Free' : 'Barter'}
                 </span>
               </div>
@@ -103,7 +103,7 @@ function ItemMarker({ item }: { item: Item }) {
   );
 }
 
-export function Map({ onRadiusChange, onLocationSelect, selectedLocation, onMarkerDrag, items = [] }: MapProps) {
+export function Map({ onRadiusChange, onLocationSelect, selectedLocation, items = [] }: MapProps) {
   const [radius, setRadius] = useState(5); // Changed default from 10 to 5 miles
   const [center, setCenter] = useState<[number, number]>([39.8283, -98.5795]); // Default to center of USA
   const [zoom, setZoom] = useState(13);
@@ -126,21 +126,21 @@ export function Map({ onRadiusChange, onLocationSelect, selectedLocation, onMark
           const { latitude, longitude } = position.coords;
           setCenter([latitude, longitude]);
           setZoom(13); // Reset zoom when changing location
-          
+
           // Reverse geocode to get address details
           const response = await fetch(
             `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
           );
-          
+
           if (!response.ok) throw new Error('Failed to get location details');
-          
+
           const data = await response.json();
           const address = data.address || {};
-          
+
           const city = address.city || address.town || address.village || '';
           const state = address.state || '';
           const zipcode = address.postcode || '';
-          
+
           if (!city || !state) {
             throw new Error('Could not determine your location');
           }
@@ -208,11 +208,10 @@ export function Map({ onRadiusChange, onLocationSelect, selectedLocation, onMark
         <button
           onClick={handleLocateMe}
           disabled={isLocating}
-          className={`ml-4 flex items-center px-3 py-2 rounded-lg ${
-            isLocating 
-              ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-              : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
-          }`}
+          className={`ml-4 flex items-center px-3 py-2 rounded-lg ${isLocating
+            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+            : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
+            }`}
         >
           <MapPin className="w-4 h-4 mr-1" />
           {isLocating ? 'Locating...' : 'Use my location'}

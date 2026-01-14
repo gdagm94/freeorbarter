@@ -9,6 +9,7 @@ interface ImageViewerProps {
 }
 
 export function ImageViewer({ visible, imageUrl, onClose }: ImageViewerProps) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const transformRef = useRef<any>(null);
 
   useEffect(() => {
@@ -118,7 +119,7 @@ export function ImageViewer({ visible, imageUrl, onClose }: ImageViewerProps) {
               <RotateCw className="w-5 h-5" />
             </button>
           </div>
-          
+
           <div className="flex items-center space-x-2">
             <button
               onClick={handleDownload}

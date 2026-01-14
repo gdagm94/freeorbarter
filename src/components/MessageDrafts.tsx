@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { FileText, X, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -18,13 +18,13 @@ interface MessageDraftsProps {
   onDraftDelete?: (draftId: string) => void;
 }
 
-export function MessageDrafts({ 
-  currentUserId, 
-  otherUserId, 
-  conversationType, 
-  itemId, 
+export function MessageDrafts({
+  currentUserId,
+  otherUserId,
+  conversationType,
+  itemId,
   onDraftSelect,
-  onDraftDelete 
+  onDraftDelete
 }: MessageDraftsProps) {
   const [drafts, setDrafts] = useState<MessageDraft[]>([]);
   const [isOpen, setIsOpen] = useState(false);
@@ -39,12 +39,12 @@ export function MessageDrafts({
   const fetchDrafts = async () => {
     try {
       setLoading(true);
-      
+
       // For now, we'll use localStorage to store drafts
       // In a real implementation, you might want to store these in the database
       const draftKey = `draft_${currentUserId}_${otherUserId}_${conversationType}_${itemId || 'unified'}`;
       const savedDrafts = localStorage.getItem(draftKey);
-      
+
       if (savedDrafts) {
         const parsedDrafts = JSON.parse(savedDrafts);
         setDrafts(parsedDrafts);
@@ -59,25 +59,7 @@ export function MessageDrafts({
     }
   };
 
-  const saveDraft = (content: string) => {
-    if (!content.trim()) return;
 
-    try {
-      const draftKey = `draft_${currentUserId}_${otherUserId}_${conversationType}_${itemId || 'unified'}`;
-      const newDraft: MessageDraft = {
-        id: Date.now().toString(),
-        content: content.trim(),
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-
-      const updatedDrafts = [newDraft, ...drafts].slice(0, 5); // Keep only 5 most recent drafts
-      localStorage.setItem(draftKey, JSON.stringify(updatedDrafts));
-      setDrafts(updatedDrafts);
-    } catch (err) {
-      console.error('Error saving draft:', err);
-    }
-  };
 
   const deleteDraft = (draftId: string) => {
     try {
@@ -85,7 +67,7 @@ export function MessageDrafts({
       const updatedDrafts = drafts.filter(draft => draft.id !== draftId);
       localStorage.setItem(draftKey, JSON.stringify(updatedDrafts));
       setDrafts(updatedDrafts);
-      
+
       if (onDraftDelete) {
         onDraftDelete(draftId);
       }
@@ -227,7 +209,7 @@ export function useMessageDrafts(
       const existingDrafts = localStorage.getItem(draftKey);
       const drafts = existingDrafts ? JSON.parse(existingDrafts) : [];
       const updatedDrafts = [newDraft, ...drafts].slice(0, 5);
-      
+
       localStorage.setItem(draftKey, JSON.stringify(updatedDrafts));
     } catch (err) {
       console.error('Error saving draft:', err);

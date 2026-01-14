@@ -39,10 +39,10 @@ const stateAbbreviations: { [key: string]: string } = {
   'WI': 'Wisconsin', 'WY': 'Wyoming'
 };
 
-export function LocationSearch({ 
-  onLocationSelect, 
-  initialValue = '', 
-  placeholder = 'Enter city, state or ZIP code...' 
+export function LocationSearch({
+  onLocationSelect,
+  initialValue = '',
+  placeholder = 'Enter city, state or ZIP code...'
 }: LocationSearchProps) {
   const [searchQuery, setSearchQuery] = useState(initialValue);
   const [suggestions, setSuggestions] = useState<LocationData[]>([]);
@@ -52,7 +52,7 @@ export function LocationSearch({
   const [loading, setLoading] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<LocationData | null>(null);
   const [showManualEntry, setShowManualEntry] = useState(false);
-  const [retryCount, setRetryCount] = useState(0);
+
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const [manualFormData, setManualFormData] = useState({
     city: '',
@@ -109,6 +109,7 @@ export function LocationSearch({
     return normalized;
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const searchWithRetry = async (input: string, retryCount = 0): Promise<any> => {
     try {
       const response = await fetch(
@@ -166,7 +167,7 @@ export function LocationSearch({
 
       const normalizedInput = normalizeInput(input);
       const isZipCode = /^\d{5}(-\d{4})?$/.test(normalizedInput);
-      
+
       const params = new URLSearchParams({
         format: 'json',
         addressdetails: '1',
@@ -190,20 +191,22 @@ export function LocationSearch({
         return;
       }
 
-      const formattedResults = results
-        .map((result: any) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const formattedResults = (results as any[])
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .map((result: any): LocationData | null => {
           const address = result.address || {};
-          const city = address.city || address.town || address.village || 
-                      address.municipality || address.suburb || '';
+          const city = address.city || address.town || address.village ||
+            address.municipality || address.suburb || '';
           const state = address.state || '';
           const zipcode = address.postcode || '';
-          
+
           if ((!city && !state) || !zipcode) {
             return null;
           }
 
           const confidence = parseFloat(result.importance || 0);
-          
+
           return {
             label: `${city}, ${state}`,
             city,
@@ -215,13 +218,13 @@ export function LocationSearch({
           };
         })
         .filter((result): result is LocationData => result !== null)
-        .sort((a, b) => b.confidence - a.confidence)
+        .sort((a, b) => (b.confidence || 0) - (a.confidence || 0))
         .slice(0, 5);
 
       setCachedResults(input, formattedResults);
       setSuggestions(formattedResults);
       setShowSuggestions(formattedResults.length > 0);
-      
+
       if (formattedResults.length === 0) {
         setError('No locations found. Try searching for just the city name');
       }
@@ -237,9 +240,9 @@ export function LocationSearch({
 
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     const { city, state, zipcode } = manualFormData;
-    
+
     if (!city || !state || !zipcode) {
       setError('All fields are required for manual entry');
       return;
@@ -281,7 +284,6 @@ export function LocationSearch({
 
   const handleRetry = () => {
     if (searchQuery.trim()) {
-      setRetryCount(prev => prev + 1);
       debouncedSearch(searchQuery);
     }
   };
@@ -302,11 +304,10 @@ export function LocationSearch({
             }
           }}
           placeholder={placeholder}
-          className={`w-full rounded-lg border ${
-            error ? 'border-red-300' : 
-            warning ? 'border-yellow-300' : 
-            'border-gray-300'
-          } pl-10 pr-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent`}
+          className={`w-full rounded-lg border ${error ? 'border-red-300' :
+            warning ? 'border-yellow-300' :
+              'border-gray-300'
+            } pl-10 pr-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent`}
           aria-invalid={!!error}
         />
         <Search className="absolute left-3 top-2.5 text-gray-400 w-5 h-5" />

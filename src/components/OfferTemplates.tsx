@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { FileText, Plus, Edit, Trash2, Copy, X } from 'lucide-react';
 
@@ -47,7 +47,7 @@ export function OfferTemplates({ currentUserId, onTemplateSelect, onClose, isVis
         return;
       }
 
-      setTemplates(data || []);
+      setTemplates((data || []) as unknown as OfferTemplate[]);
     } catch (err) {
       console.error('Error in fetchTemplates:', err);
     } finally {
@@ -129,30 +129,6 @@ export function OfferTemplates({ currentUserId, onTemplateSelect, onClose, isVis
       fetchTemplates();
     } catch (err) {
       console.error('Error in deleteTemplate:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const duplicateTemplate = async (template: OfferTemplate) => {
-    try {
-      setLoading(true);
-      const { error } = await supabase
-        .from('offer_templates')
-        .insert([{
-          user_id: currentUserId,
-          title: `${template.title} (Copy)`,
-          content: template.content,
-        }]);
-
-      if (error) {
-        console.error('Error duplicating template:', error);
-        return;
-      }
-
-      fetchTemplates();
-    } catch (err) {
-      console.error('Error in duplicateTemplate:', err);
     } finally {
       setLoading(false);
     }
