@@ -29,7 +29,7 @@ const CONDITIONS = ['new', 'like-new', 'good', 'fair', 'poor'] as const;
 const TYPES = ['free', 'barter'] as const;
 const CATEGORIES = [
   'Electronics',
-  'Furniture', 
+  'Furniture',
   'Clothing',
   'Sports & Outdoors',
   'Books & Media',
@@ -75,13 +75,13 @@ export default function NewListingScreen() {
   const [imageUris, setImageUris] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Success/Error modal states
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [createdItemId, setCreatedItemId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  
+
   // Location states
   const [selectedLocation, setSelectedLocation] = useState<LocationData | null>(null);
   const [useCurrentLocation, setUseCurrentLocation] = useState(false);
@@ -154,20 +154,20 @@ export default function NewListingScreen() {
       });
 
       const { latitude, longitude } = location.coords;
-      
+
       const response = await fetch(
         `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
       );
-      
+
       if (!response.ok) throw new Error('Failed to get location details');
-      
+
       const data = await response.json();
       const address = data.address || {};
-      
+
       const city = address.city || address.town || address.village || '';
       const state = address.state || '';
       const zipcode = address.postcode || '';
-      
+
       if (!city || !state) {
         throw new Error('Could not determine your location');
       }
@@ -194,7 +194,7 @@ export default function NewListingScreen() {
 
   const handleManualLocationSubmit = () => {
     const { city, state, zipcode } = manualFormData;
-    
+
     if (!city || !state || !zipcode) {
       setError('All fields are required for manual entry');
       return;
@@ -405,20 +405,24 @@ export default function NewListingScreen() {
   const handleViewListing = () => {
     if (createdItemId) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      // Navigate to ItemDetails and then to Home tab to ensure proper navigation stack
-      navigation.navigate('ItemDetails', { itemId: createdItemId });
-      // Navigate to Home tab after a brief delay to ensure ItemDetails loads
-      setTimeout(() => {
-        navigation.navigate('Tabs', { screen: 'Home' });
-      }, 100);
+
+      // Reset the navigation stack so that "Back" from ItemDetails goes to Home
+      navigation.reset({
+        index: 1,
+        routes: [
+          { name: 'Tabs', params: { screen: 'Home' } },
+          { name: 'ItemDetails', params: { itemId: createdItemId } },
+        ],
+      });
+
+      setShowSuccessModal(false);
     }
   };
 
   const handleUploadAnother = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     resetForm();
-    // Navigate back to Home tab so user can access all tabs
-    navigation.navigate('Tabs', { screen: 'Home' });
+    // No navigation needed, staying on NewListing screen allows immediately adding another
   };
 
   const handleTryAgain = () => {
@@ -448,8 +452,8 @@ export default function NewListingScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      
-      <KeyboardAvoidingView 
+
+      <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
@@ -461,7 +465,7 @@ export default function NewListingScreen() {
           </View>
         </View>
 
-        <ScrollView 
+        <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
@@ -483,8 +487,8 @@ export default function NewListingScreen() {
               {imageUris.map((uri, index) => (
                 <View key={uri} style={styles.photoWrapper}>
                   <Image source={{ uri }} style={styles.photo} />
-                  <TouchableOpacity 
-                    style={styles.removePhoto} 
+                  <TouchableOpacity
+                    style={styles.removePhoto}
                     onPress={() => removeImageAt(index)}
                   >
                     <Text style={styles.removePhotoText}>✕</Text>
@@ -492,8 +496,8 @@ export default function NewListingScreen() {
                 </View>
               ))}
               {imageUris.length < 5 && (
-                <TouchableOpacity 
-                  style={styles.addPhoto} 
+                <TouchableOpacity
+                  style={styles.addPhoto}
                   onPress={showImageOptions}
                   activeOpacity={0.8}
                 >
@@ -525,7 +529,7 @@ export default function NewListingScreen() {
                     {t === 'free' ? '🎁' : '🔄'}
                   </Text>
                   <Text style={[
-                    styles.typeText, 
+                    styles.typeText,
                     type === t && styles.typeTextSelected
                   ]}>
                     {t === 'free' ? 'Free' : 'Barter'}
@@ -547,7 +551,7 @@ export default function NewListingScreen() {
               <Text style={styles.sectionTitle}>📝 Basic Information</Text>
               <Text style={styles.sectionSubtitle}>Tell us about your item</Text>
             </View>
-            
+
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Title *</Text>
               <View style={styles.inputContainer}>
@@ -594,11 +598,11 @@ export default function NewListingScreen() {
               <Text style={styles.sectionTitle}>🏷️ Item Details</Text>
               <Text style={styles.sectionSubtitle}>Help others find your item</Text>
             </View>
-            
+
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Category *</Text>
-              <ScrollView 
-                horizontal 
+              <ScrollView
+                horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.categoryScroll}
               >
@@ -628,8 +632,8 @@ export default function NewListingScreen() {
 
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Condition</Text>
-              <ScrollView 
-                horizontal 
+              <ScrollView
+                horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.conditionScroll}
               >
@@ -664,7 +668,7 @@ export default function NewListingScreen() {
               <Text style={styles.sectionTitle}>📍 Location</Text>
               <Text style={styles.sectionSubtitle}>Where is this item located?</Text>
             </View>
-            
+
             {selectedLocation ? (
               <View style={styles.locationCard}>
                 <Text style={styles.locationIcon}>📍</Text>
@@ -672,7 +676,7 @@ export default function NewListingScreen() {
                   <Text style={styles.locationLabel}>Selected Location</Text>
                   <Text style={styles.locationText}>{selectedLocation.label}</Text>
                 </View>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.locationChangeButton}
                   onPress={() => setSelectedLocation(null)}
                 >
@@ -681,7 +685,7 @@ export default function NewListingScreen() {
               </View>
             ) : (
               <View style={styles.locationOptions}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.locationOption}
                   onPress={getCurrentLocation}
                   disabled={isLocating}
@@ -692,8 +696,8 @@ export default function NewListingScreen() {
                     {isLocating ? 'Getting location...' : 'Use my current location'}
                   </Text>
                 </TouchableOpacity>
-                
-                <TouchableOpacity 
+
+                <TouchableOpacity
                   style={styles.locationOption}
                   onPress={() => setShowManualEntry(true)}
                   activeOpacity={0.8}
@@ -732,14 +736,14 @@ export default function NewListingScreen() {
             <View style={styles.modalContainer}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Enter Location</Text>
-                <TouchableOpacity 
+                <TouchableOpacity
                   onPress={() => setShowManualEntry(false)}
                   style={styles.modalCloseButton}
                 >
                   <Text style={styles.modalCloseText}>✕</Text>
                 </TouchableOpacity>
               </View>
-              
+
               <ScrollView style={styles.modalContent}>
                 <View style={styles.modalField}>
                   <Text style={styles.modalFieldLabel}>City *</Text>
@@ -751,11 +755,11 @@ export default function NewListingScreen() {
                     placeholderTextColor="#9CA3AF"
                   />
                 </View>
-                
+
                 <View style={styles.modalField}>
                   <Text style={styles.modalFieldLabel}>State *</Text>
-                  <ScrollView 
-                    horizontal 
+                  <ScrollView
+                    horizontal
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.stateContainer}
                   >
@@ -779,7 +783,7 @@ export default function NewListingScreen() {
                     ))}
                   </ScrollView>
                 </View>
-                
+
                 <View style={styles.modalField}>
                   <Text style={styles.modalFieldLabel}>ZIP Code *</Text>
                   <TextInput
@@ -793,15 +797,15 @@ export default function NewListingScreen() {
                   />
                 </View>
               </ScrollView>
-              
+
               <View style={styles.modalActions}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.modalCancelButton}
                   onPress={() => setShowManualEntry(false)}
                 >
                   <Text style={styles.modalCancelText}>Cancel</Text>
                 </TouchableOpacity>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.modalSaveButton}
                   onPress={handleManualLocationSubmit}
                 >
@@ -827,7 +831,7 @@ export default function NewListingScreen() {
             <TouchableOpacity
               style={styles.successModal}
               activeOpacity={1}
-              onPress={() => {}} // Prevent modal from closing when tapping inside
+              onPress={() => { }} // Prevent modal from closing when tapping inside
             >
               <View style={styles.successIconContainer}>
                 <Text style={styles.successIcon}>🎉</Text>
@@ -871,7 +875,7 @@ export default function NewListingScreen() {
             <TouchableOpacity
               style={styles.errorModal}
               activeOpacity={1}
-              onPress={() => {}} // Prevent modal from closing when tapping inside
+              onPress={() => { }} // Prevent modal from closing when tapping inside
             >
               <View style={styles.errorIconContainer}>
                 <Text style={styles.errorIcon}>⚠️</Text>

@@ -234,7 +234,8 @@ export function MessageList({
           const tItemId = (c.message_threads as any).item_id;
           if (conversationType === 'direct_message') return tItemId === null;
           if (conversationType === 'item') return tItemId === itemId;
-          if (conversationType === 'unified') return tItemId === null;
+          // For unified, we accept ANY thread as a valid candidate to send messages to
+          if (conversationType === 'unified') return true;
           return true;
         });
 
@@ -267,9 +268,10 @@ export function MessageList({
       } else if (conversationType === 'item' && itemId) {
         threadQuery = threadQuery.eq('item_id', itemId);
       }
+      // For unified, we don't filter by item_id here either
 
       const { data: myRecentThreads } = await threadQuery;
-
+      // ... (rest of function) ...
       if (myRecentThreads && myRecentThreads.length > 0) {
         for (const thread of myRecentThreads) {
           // Check if this thread has the OTHER user
@@ -292,6 +294,7 @@ export function MessageList({
 
       // 3. Create new thread if no valid or repairable thread found
       const title = conversationType === 'item' ? 'Item conversation' : 'Direct conversation';
+      // For unified, if we create a new thread, treat it as direct (null item)
       const threadItemId = conversationType === 'item' ? itemId : null;
 
       const { data: created, error: createError } = await supabase
@@ -393,11 +396,14 @@ export function MessageList({
         .order('created_at', { ascending: true });
 
       const effectiveThread = threadOverride || threadId;
-      if (effectiveThread) {
+
+      // For unified conversations, we ALWAYS query by user pair to show full history,
+      // ignoring specific thread limits. For strict types (item/direct), we stick to thread/filters.
+      if (effectiveThread && conversationType !== 'unified') {
         query = query.eq('thread_id', effectiveThread);
       } else {
-        // If we don't have a thread ID yet, we MUST filter by the user pair
-        // to prevent seeing messages from other conversations.
+        // If we don't have a thread ID yet, OR if we are in 'unified' mode,
+        // we query by the user pair to see ALL messages.
         query = query.or(
           `and(sender_id.eq.${currentUserId},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${currentUserId})`
         );
@@ -1434,6 +1440,7 @@ export function MessageList({
                         <MessageReactions
                           messageId={message.id}
                           currentUserId={currentUserId}
+                          alignment={message.sender_id === currentUserId ? 'right' : 'left'}
                         />
 
                         <div className="flex items-center justify-end mt-1 gap-2 whitespace-nowrap">

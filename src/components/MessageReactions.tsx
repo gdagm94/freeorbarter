@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { Smile, X } from 'lucide-react';
 
@@ -13,18 +13,35 @@ interface MessageReactionsProps {
   messageId: string;
   currentUserId: string;
   onReactionChange?: () => void;
+  alignment?: 'left' | 'right';
 }
 
 const COMMON_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '😡', '🎉', '👏'];
 
-export function MessageReactions({ messageId, currentUserId, onReactionChange }: MessageReactionsProps) {
+export function MessageReactions({ messageId, currentUserId, onReactionChange, alignment = 'left' }: MessageReactionsProps) {
   const [reactions, setReactions] = useState<MessageReaction[]>([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [loading, setLoading] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchReactions();
   }, [messageId]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
+        setShowEmojiPicker(false);
+      }
+    }
+
+    if (showEmojiPicker) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showEmojiPicker]);
 
   const fetchReactions = async () => {
     try {
@@ -39,7 +56,7 @@ export function MessageReactions({ messageId, currentUserId, onReactionChange }:
         return;
       }
 
-      setReactions(data || []);
+      setReactions((data as any) || []);
     } catch (err) {
       console.error('Error in fetchReactions:', err);
     }
@@ -48,7 +65,7 @@ export function MessageReactions({ messageId, currentUserId, onReactionChange }:
   const addReaction = async (emoji: string) => {
     try {
       setLoading(true);
-      
+
       // Check if user already has this reaction
       const existingReaction = reactions.find(
         r => r.user_id === currentUserId && r.emoji === emoji
@@ -84,7 +101,7 @@ export function MessageReactions({ messageId, currentUserId, onReactionChange }:
       // Refresh reactions
       await fetchReactions();
       setShowEmojiPicker(false);
-      
+
       if (onReactionChange) {
         onReactionChange();
       }
@@ -121,18 +138,17 @@ export function MessageReactions({ messageId, currentUserId, onReactionChange }:
   }
 
   return (
-    <div className="flex items-center gap-1 mt-1">
+    <div className="flex items-center gap-1 mt-1 relative">
       {/* Display reactions */}
       {Object.entries(groupedReactions).map(([emoji, emojiReactions]) => (
         <button
           key={emoji}
           onClick={() => addReaction(emoji)}
           disabled={loading}
-          className={`flex items-center gap-1 px-2 py-1 rounded-full text-sm border transition-colors ${
-            emojiReactions.some(r => r.user_id === currentUserId)
-              ? 'bg-blue-100 border-blue-300 text-blue-700'
-              : 'bg-gray-100 border-gray-200 text-gray-600 hover:bg-gray-200'
-          }`}
+          className={`flex items-center gap-1 px-2 py-1 rounded-full text-sm border transition-colors ${emojiReactions.some(r => r.user_id === currentUserId)
+            ? 'bg-blue-100 border-blue-300 text-blue-700'
+            : 'bg-gray-100 border-gray-200 text-gray-600 hover:bg-gray-200'
+            }`}
         >
           <span>{emoji}</span>
           <span className="text-xs">{emojiReactions.length}</span>
@@ -151,7 +167,10 @@ export function MessageReactions({ messageId, currentUserId, onReactionChange }:
 
       {/* Emoji picker */}
       {showEmojiPicker && (
-        <div className="absolute bottom-full left-0 mb-2 bg-white border border-gray-200 rounded-lg shadow-lg p-2 z-10">
+        <div
+          ref={pickerRef}
+          className={`absolute bottom-full mb-2 bg-white border border-gray-200 rounded-lg shadow-lg p-3 z-10 w-64 ${alignment === 'right' ? 'right-0' : 'left-0'
+            }`}>
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-gray-600">Add reaction</span>
             <button
@@ -161,13 +180,13 @@ export function MessageReactions({ messageId, currentUserId, onReactionChange }:
               <X className="w-3 h-3" />
             </button>
           </div>
-          <div className="grid grid-cols-4 gap-1">
+          <div className="grid grid-cols-4 gap-2">
             {COMMON_EMOJIS.map((emoji) => (
               <button
                 key={emoji}
                 onClick={() => addReaction(emoji)}
                 disabled={loading}
-                className="p-2 rounded-full hover:bg-gray-100 text-lg transition-colors"
+                className="p-2 rounded-full hover:bg-gray-100 text-xl transition-colors flex items-center justify-center aspect-square"
                 title={emoji}
               >
                 {emoji}
