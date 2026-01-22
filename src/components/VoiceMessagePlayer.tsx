@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Play, Pause, Volume2, VolumeX } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, SkipBack, SkipForward } from 'lucide-react';
 
 interface VoiceMessagePlayerProps {
   audioUrl: string;
@@ -14,6 +14,7 @@ export function VoiceMessagePlayer({ audioUrl, duration, isOwnMessage = false }:
   const [volume, setVolume] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -124,6 +125,27 @@ export function VoiceMessagePlayer({ audioUrl, duration, isOwnMessage = false }:
     setIsMuted(!isMuted);
   };
 
+  const skipBackward = () => {
+    if (!audioRef.current) return;
+    audioRef.current.currentTime = Math.max(0, audioRef.current.currentTime - 15);
+    setCurrentTime(audioRef.current.currentTime);
+  };
+
+  const skipForward = () => {
+    if (!audioRef.current) return;
+    audioRef.current.currentTime = Math.min(localDuration, audioRef.current.currentTime + 15);
+    setCurrentTime(audioRef.current.currentTime);
+  };
+
+  const togglePlaybackSpeed = () => {
+    if (!audioRef.current) return;
+    const speeds = [1, 1.5, 2];
+    const currentIndex = speeds.indexOf(playbackSpeed);
+    const nextSpeed = speeds[(currentIndex + 1) % speeds.length];
+    setPlaybackSpeed(nextSpeed);
+    audioRef.current.playbackRate = nextSpeed;
+  };
+
   const formatTime = (seconds: number) => {
     if (!seconds || isNaN(seconds)) return '0:00';
     const mins = Math.floor(seconds / 60);
@@ -161,8 +183,28 @@ export function VoiceMessagePlayer({ audioUrl, duration, isOwnMessage = false }:
         )}
       </button>
 
+      {/* Skip Backward Button */}
+      <button
+        onClick={skipBackward}
+        disabled={isLoading || hasError}
+        className="p-1.5 rounded-full text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50"
+        title="Skip backward 15s"
+      >
+        <SkipBack className="w-3.5 h-3.5" />
+      </button>
+
+      {/* Skip Forward Button */}
+      <button
+        onClick={skipForward}
+        disabled={isLoading || hasError}
+        className="p-1.5 rounded-full text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50"
+        title="Skip forward 15s"
+      >
+        <SkipForward className="w-3.5 h-3.5" />
+      </button>
+
       {/* Progress Bar */}
-      <div className="flex-1">
+      <div className="flex-1 min-w-0">
         <div
           className="w-full bg-gray-300 rounded-full h-2 cursor-pointer overflow-hidden"
           onClick={handleSeek}
@@ -178,6 +220,16 @@ export function VoiceMessagePlayer({ audioUrl, duration, isOwnMessage = false }:
           <span>{formatTime(localDuration)}</span>
         </div>
       </div>
+
+      {/* Playback Speed Button */}
+      <button
+        onClick={togglePlaybackSpeed}
+        disabled={isLoading || hasError}
+        className="px-2 py-1 rounded text-xs font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 transition-colors disabled:opacity-50"
+        title="Playback speed"
+      >
+        {playbackSpeed}x
+      </button>
 
       {/* Volume Control */}
       <button

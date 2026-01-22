@@ -835,6 +835,7 @@ export default function ChatScreen() {
           file_url: urlData.publicUrl,
           file_name: fileName,
           file_type: 'audio/m4a',
+          voice_duration: duration,
           item_id: itemId || null,
           read: false,
           is_offer: false,
@@ -1028,7 +1029,7 @@ export default function ChatScreen() {
           {(item as any).file_url && item.content?.includes('🎤') && (
             <VoiceMessagePlayer
               audioUrl={(item as any).file_url}
-              duration={0} // TODO: Store duration in DB
+              duration={(item as any).voice_duration || 0}
               isOwnMessage={isOwnMessage}
             />
           )}

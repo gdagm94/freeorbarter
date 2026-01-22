@@ -58,6 +58,7 @@ interface MessageWithOfferItem extends Message {
   file_name?: string;
   file_type?: string;
   file_size?: number;
+  voice_duration?: number;
 }
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -836,41 +837,56 @@ export function MessageList({
 
   const handleVoiceMessageUpload = async (audioBlob: Blob, duration: number) => {
     if (!ensureMessagingAllowed()) return;
+
+    console.log('[VoiceMessage] Starting upload...', {
+      blobSize: audioBlob.size,
+      duration,
+      conversationType,
+      itemId,
+      otherUserId
+    });
+
     try {
       setSending(true);
       setIsTyping(false);
       emitTypingStatus(false);
 
+      // Verify thread exists BEFORE uploading to avoid orphaned files
+      const activeThread = await getActiveThreadId();
+      if (!activeThread) {
+        console.error('[VoiceMessage] Failed to get thread ID');
+        throw new Error('Could not find or create conversation thread. Please try again.');
+      }
+      console.log('[VoiceMessage] Thread ID obtained:', activeThread);
+
       // Upload audio file
       const fileExt = 'webm';
       const fileName = `voice-${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
 
+      console.log('[VoiceMessage] Uploading to Storage...', fileName);
       const { error: uploadError } = await supabase.storage
         .from('message-files')
         .upload(fileName, audioBlob);
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error('[VoiceMessage] Upload failed:', uploadError);
+        throw new Error(`Upload failed: ${uploadError.message}`);
+      }
 
       const { data: { publicUrl } } = supabase.storage
         .from('message-files')
         .getPublicUrl(fileName);
 
-      // Send message with voice attachment
-      const activeThread = await getActiveThreadId();
-      if (!activeThread) {
-        setSending(false);
-        // Don't close modal here, let user try again if transient error
-        // But if no thread found, it's a critical error.
-        // We'll throw to let VoiceMessage show error.
-        throw new Error('Could not find or create conversation thread');
-      }
+      console.log('[VoiceMessage] Upload successful, inserting message...', publicUrl);
 
+      // Send message with voice attachment
       const { data, error } = await supabase.from('messages').insert([
         {
           content: `🎤 Voice message (${Math.floor(duration / 60)}:${(duration % 60).toFixed(0).padStart(2, '0')})`,
           file_url: publicUrl,
           file_name: fileName,
           file_type: 'audio/webm',
+          voice_duration: duration,
           item_id: conversationType === 'unified' ? null : itemId,
           sender_id: currentUserId,
           receiver_id: otherUserId,
@@ -899,11 +915,12 @@ export function MessageList({
       `).single();
 
       if (error) {
-        console.error('Error sending voice message:', error);
-        throw error;
+        console.error('[VoiceMessage] Message insert failed:', error);
+        throw new Error(`Failed to send message: ${error.message}`);
       }
 
       if (data) {
+        console.log('[VoiceMessage] Message sent successfully:', data.id);
         setMessages(prev => [...prev, data as unknown as MessageWithOfferItem]);
 
         // Clear drafts after successful send
@@ -911,7 +928,7 @@ export function MessageList({
         setShowVoiceMessage(false); // Close modal only on success
       }
     } catch (err) {
-      console.error('Error sending voice message:', err);
+      console.error('[VoiceMessage] Error in upload flow:', err);
       // Re-throw so VoiceMessage component can show error state
       throw err;
     } finally {
@@ -1173,7 +1190,7 @@ export function MessageList({
                           <div className="mt-2">
                             <VoiceMessagePlayer
                               audioUrl={message.file_url}
-                              duration={0}
+                              duration={message.voice_duration || 0}
                               isOwnMessage={message.sender_id === currentUserId}
                             />
                           </div>
