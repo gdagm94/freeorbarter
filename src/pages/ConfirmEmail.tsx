@@ -15,11 +15,22 @@ function ConfirmEmail() {
     const verifyEmail = async () => {
       try {
         setVerifying(true);
-        
+
+        // First check if we already have a session
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          setSuccess(true);
+          setVerifying(false);
+          setTimeout(() => {
+            navigate('/');
+          }, 2000);
+          return;
+        }
+
         // Check for error parameters in the URL
         const errorCode = searchParams.get('error_code');
         const errorDescription = searchParams.get('error_description');
-        
+
         if (errorCode) {
           // Handle known error cases
           if (errorCode === 'otp_expired') {
@@ -36,6 +47,7 @@ function ConfirmEmail() {
         const type = searchParams.get('type');
 
         if (!token || type !== 'signup') {
+          // If we're here without a token, and without a session (checked above), it's invalid
           throw new Error('Invalid confirmation link');
         }
 

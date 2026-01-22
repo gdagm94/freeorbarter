@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Confirm Your Registration</title>
+    <style>
+        /* Base styles */
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            background-color: #f7f7f7;
+        }
+        
+        .email-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+        }
+        
+        .email-header {
+            background-color: #2c5282;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .email-logo {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 0;
+        }
+        
+        .email-content {
+            padding: 30px;
+        }
+        
+        .email-footer {
+            background-color: #f2f2f2;
+            padding: 20px;
+            text-align: center;
+            font-size: 12px;
+            color: #666;
+        }
+        
+        h1 {
+            color: #2c5282;
+            margin-top: 0;
+            font-size: 22px;
+        }
+        
+        p {
+            margin: 0 0 16px;
+        }
+        
+        .button {
+            display: inline-block;
+            background-color: #2c5282;
+            color: white !important;
+            text-decoration: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            font-weight: bold;
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        .divider {
+            height: 1px;
+            background-color: #e6e6e6;
+            margin: 25px 0;
+        }
+        
+        .welcome-box {
+            background-color: #edf2f7;
+            border-left: 4px solid #2c5282;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 0 4px 4px 0;
+        }
+        
+        .benefits-list {
+            padding-left: 20px;
+        }
+        
+        .benefits-list li {
+            margin-bottom: 10px;
+        }
+        
+        .help-text {
+            font-size: 14px;
+            color: #666;
+        }
+        
+        /* Responsive styles */
+        @media screen and (max-width: 600px) {
+            .email-container {
+                width: 100%;
+                border-radius: 0;
+            }
+            
+            .email-content {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="email-header">
+            <h1 class="email-logo">FreeOrBarter</h1>
+        </div>
+        
+        <div class="email-content">
+            <h1>Welcome to the Party! 🎉</h1>
+            <p>What's up,</p>
+            <p>Awesome job signing up with FreeOrBarter! Just one tiny step left - click this cool button to verify your email and start trading cool stuff:</p>
+            
+            <div style="text-align: center;">
+                <a href="{{ .SiteURL }}/confirm-email?token_hash={{ .TokenHash }}&type=signup" class="button">Let's Do This!</a>
+            </div>
+            
+            <p>Button being weird? No worries - here's the link you can copy-paste:</p>
+            <p style="word-break: break-all; font-size: 14px;">
+                <a href="{{ .SiteURL }}/confirm-email?token_hash={{ .TokenHash }}&type=signup">Confirm Link</a>
+            </p>
+            
+            <div class="welcome-box">
+                <p><strong>Why FreeOrBarter is Actually Pretty Sweet:</strong></p>
+                <ul class="benefits-list">
+                    <li>Trade your random stuff for things you actually want</li>
+                    <li>Browse what other people are offering (some pretty cool finds in there)</li>
+                    <li>Skip the whole cash thing and trade directly</li>
+                    <li>Meet some chill people who are into trading too</li>
+                </ul>
+            </div>
+            
+            <p class="help-text">This link expires in 48 hours (because internet security and all that). If you didn't sign up, just ignore us - no hard feelings!</p>
+        </div>
+        
+        <div class="email-footer">
+            <p>&copy; 2025 FreeOrBarter. All rights reserved.</p>
+            <p>If you need assistance, please contact <a href="mailto:support@freeorbarter.com">support@freeorbarter.com</a></p>
+        </div>
+    </div>
+</body>
+</html>
