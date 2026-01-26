@@ -79,7 +79,7 @@ export default function ProfileScreen() {
 
     try {
       if (!refreshing) setLoading(true);
-      
+
       // Fetch user profile
       const { data: profileData, error: profileError } = await supabase
         .from('users')
@@ -144,13 +144,13 @@ export default function ProfileScreen() {
     const itemWidth: `${number}%` = `${100 / numColumns}%`;
     return (
       <View style={[
-        styles.itemWrapper, 
+        styles.itemWrapper,
         isRightColumn && styles.itemWrapperRight,
         { width: itemWidth }
       ]}>
-        <ItemCard 
-          item={item} 
-          onPress={() => navigation.navigate('ItemDetails', { itemId: item.id })} 
+        <ItemCard
+          item={item}
+          onPress={() => navigation.navigate('ItemDetails', { itemId: item.id })}
         />
       </View>
     );
@@ -169,9 +169,9 @@ export default function ProfileScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      
-      <ScrollView 
-        style={styles.scrollView} 
+
+      <ScrollView
+        style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[responsiveStyles.contentContainer, { paddingHorizontal: padding }]}
         refreshControl={
@@ -192,8 +192,8 @@ export default function ProfileScreen() {
         <View style={[styles.profileCard, responsiveStyles.cardContainer]}>
           <View style={styles.profileHeader}>
             {profile?.avatar_url ? (
-              <Image 
-                source={{ uri: profile.avatar_url }} 
+              <Image
+                source={{ uri: profile.avatar_url }}
                 style={styles.profileAvatar}
               />
             ) : (
@@ -221,7 +221,7 @@ export default function ProfileScreen() {
 
           {/* Quick Actions */}
           <View style={styles.quickActions}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.quickAction}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -231,8 +231,8 @@ export default function ProfileScreen() {
               <Text style={styles.quickActionEmoji}>👥</Text>
               <Text style={styles.quickActionText}>Friends</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.quickAction}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -242,8 +242,8 @@ export default function ProfileScreen() {
               <Text style={styles.quickActionEmoji}>⭐</Text>
               <Text style={styles.quickActionText}>Watchlist</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.quickAction}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -253,8 +253,8 @@ export default function ProfileScreen() {
               <Text style={styles.quickActionEmoji}>📜</Text>
               <Text style={styles.quickActionText}>History</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.quickAction}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -264,9 +264,9 @@ export default function ProfileScreen() {
               <Text style={styles.quickActionEmoji}>✏️</Text>
               <Text style={styles.quickActionText}>Edit</Text>
             </TouchableOpacity>
-            
+
             {userIsModerator && (
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.quickAction}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -283,7 +283,7 @@ export default function ProfileScreen() {
         {/* Listings Section */}
         <View style={styles.listingsSection}>
           <Text style={styles.sectionTitle}>My Listings</Text>
-          
+
           {/* Tab Selector */}
           <View style={styles.tabContainer}>
             <TouchableOpacity
@@ -298,7 +298,7 @@ export default function ProfileScreen() {
                 Free ({freeItems.length})
               </Text>
             </TouchableOpacity>
-            
+
             <TouchableOpacity
               style={[styles.tab, activeTab === 'barter' && styles.activeTab]}
               onPress={() => {
@@ -340,8 +340,8 @@ export default function ProfileScreen() {
 
         {/* Sign Out Button */}
         <View style={styles.signOutSection}>
-          <TouchableOpacity 
-            style={styles.signOutButton} 
+          <TouchableOpacity
+            style={styles.signOutButton}
             onPress={handleSignOut}
             activeOpacity={0.8}
           >
@@ -476,7 +476,7 @@ const styles = StyleSheet.create({
     color: '#475569',
   },
   listingsSection: {
-    margin: 16,
+    marginVertical: 16,
   },
   sectionTitle: {
     fontSize: 20,

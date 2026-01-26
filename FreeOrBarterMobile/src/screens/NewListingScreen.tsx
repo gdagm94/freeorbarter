@@ -15,7 +15,7 @@ import {
   Dimensions,
   Modal,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 // No FileSystem import needed for this approach
@@ -66,6 +66,8 @@ interface LocationData {
 export default function NewListingScreen() {
   const { user } = useAuth();
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
+  const { returnScreen, returnParams } = route.params || {};
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -449,6 +451,48 @@ export default function NewListingScreen() {
     );
   };
 
+  const hasEdits = () => {
+    return (
+      title.trim() !== '' ||
+      description.trim() !== '' ||
+      category !== '' ||
+      condition !== 'good' ||
+      type !== 'free' ||
+      imageUris.length > 0 ||
+      selectedLocation !== null
+    );
+  };
+
+  const handleBack = () => {
+    if (hasEdits()) {
+      Alert.alert(
+        'Discard Changes?',
+        'You have unsaved changes. Are you sure you want to discard them and leave?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Discard',
+            style: 'destructive',
+            onPress: () => {
+              resetForm();
+              if (returnScreen) {
+                navigation.navigate(returnScreen, returnParams);
+              } else {
+                navigation.navigate('Home');
+              }
+            },
+          },
+        ]
+      );
+    } else {
+      if (returnScreen) {
+        navigation.navigate(returnScreen, returnParams);
+      } else {
+        navigation.navigate('Home');
+      }
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
@@ -459,10 +503,18 @@ export default function NewListingScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={handleBack}
+            activeOpacity={0.6}
+          >
+            <Text style={styles.backButtonText}>✕</Text>
+          </TouchableOpacity>
           <View style={styles.headerContent}>
             <Text style={styles.title}>Create Listing</Text>
             <Text style={styles.subtitle}>Share something amazing with your community</Text>
           </View>
+          <View style={styles.placeholderButton} />
         </View>
 
         <ScrollView
@@ -921,7 +973,7 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 24,
-    paddingVertical: 20,
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
     shadowColor: '#000',
@@ -929,9 +981,30 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+  },
+  backButtonText: {
+    fontSize: 20,
+    color: '#6B7280',
+    fontWeight: '600',
+    lineHeight: 24,
+  },
+  placeholderButton: {
+    width: 40,
   },
   headerContent: {
     alignItems: 'center',
+    flex: 1,
   },
   title: {
     fontSize: 28,

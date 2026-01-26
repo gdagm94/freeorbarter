@@ -37,6 +37,7 @@ export interface Message {
   is_offer: boolean;
   archived: boolean;
   image_url?: string;
+  topic?: string;
 }
 
 export interface Conversation {

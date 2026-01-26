@@ -24,6 +24,7 @@ export default function ManageListingScreen() {
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [updating, setUpdating] = useState(false);
 
   const handleEdit = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -75,6 +76,56 @@ export default function ManageListingScreen() {
     setShowDeleteModal(false);
   };
 
+  const handleStatusUpdate = async () => {
+    if (!user || !item) return;
+
+    const newStatus = item.type === 'free' ? 'claimed' : 'traded';
+    const actionText = item.type === 'free' ? 'Mark as Claimed' : 'Mark as Traded';
+
+    Alert.alert(
+      actionText,
+      `Are you sure you want to mark this item as ${newStatus}? This will archive it to your history.`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Confirm',
+          onPress: async () => {
+            setUpdating(true);
+            try {
+              const { error } = await supabase
+                .from('items')
+                .update({ status: newStatus })
+                .eq('id', item.id);
+
+              if (error) throw error;
+
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              Alert.alert(
+                'Success',
+                `Item marked as ${newStatus}`,
+                [
+                  {
+                    text: 'OK',
+                    onPress: () => navigation.navigate('Tabs', { screen: 'History' })
+                  }
+                ]
+              );
+            } catch (err) {
+              console.error('Error updating status:', err);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+              Alert.alert('Error', 'Failed to update item status');
+            } finally {
+              setUpdating(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   if (!item) {
     return (
       <SafeAreaView style={styles.container}>
@@ -89,7 +140,7 @@ export default function ManageListingScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      
+
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -118,6 +169,27 @@ export default function ManageListingScreen() {
 
         {/* Action Buttons */}
         <View style={styles.actionsContainer}>
+          <TouchableOpacity
+            style={styles.statusButton}
+            onPress={handleStatusUpdate}
+            disabled={updating}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.statusIcon}>
+              {item.type === 'free' ? '🎁' : '🤝'}
+            </Text>
+            <View style={styles.buttonContent}>
+              <Text style={styles.buttonTitle}>
+                {item.type === 'free' ? 'Mark as Claimed' : 'Mark as Traded'}
+              </Text>
+              <Text style={styles.buttonSubtitle}>
+                {item.type === 'free'
+                  ? 'Item has been given away'
+                  : 'Item has been traded'}
+              </Text>
+            </View>
+            <Text style={styles.arrowIcon}>›</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             style={styles.editButton}
             onPress={handleEdit}
@@ -149,7 +221,7 @@ export default function ManageListingScreen() {
         <View style={styles.infoSection}>
           <Text style={styles.infoTitle}>About History Tracking</Text>
           <Text style={styles.infoText}>
-            All changes to your listings are automatically tracked in your history. 
+            All changes to your listings are automatically tracked in your history.
             You can view your listing history in the History tab.
           </Text>
         </View>
@@ -170,7 +242,7 @@ export default function ManageListingScreen() {
           <TouchableOpacity
             style={styles.deleteModal}
             activeOpacity={1}
-            onPress={() => {}} // Prevent modal from closing when tapping inside
+            onPress={() => { }} // Prevent modal from closing when tapping inside
           >
             <View style={styles.deleteIconContainer}>
               <Text style={styles.deleteModalIcon}>⚠️</Text>
@@ -309,6 +381,18 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
+  statusButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
   deleteButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -322,6 +406,10 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   editIcon: {
+    fontSize: 24,
+    marginRight: 16,
+  },
+  statusIcon: {
     fontSize: 24,
     marginRight: 16,
   },

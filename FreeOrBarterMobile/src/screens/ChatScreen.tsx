@@ -77,8 +77,9 @@ export default function ChatScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { user } = useAuth();
-  const { otherUserId, itemId } = route.params || {};
+  const { otherUserId, itemId, autoSendInterest } = route.params || {};
   const [threadId, setThreadId] = useState<string | null>(null);
+  const autoSentRef = useRef(false);
   const threadChannelRef = useRef<any>(null);
   // refs removed
   const initialScrollDoneRef = useRef(false);
@@ -152,6 +153,36 @@ export default function ChatScreen() {
       }
     };
   }, [otherUserId, user?.id]);
+
+  // Handle auto-send interest
+  useEffect(() => {
+    if (loading || !autoSendInterest || autoSentRef.current || !itemId) return;
+
+    const checkAndSend = async () => {
+      // Check if we already have messages in this thread
+      if (messages.length === 0) {
+        autoSentRef.current = true; // Mark as sent immediately to prevent race conditions
+        await sendMessage("Hi, I'm interested in this item!");
+      } else {
+        // Even if there are messages, if the last one wasn't from me, maybe I should send it?
+        // For now, let's only auto-send if it's a fresh conversation or empty.
+        // Or simpler: if I requested the item, I probably want to send the message. 
+        // But let's avoid spamming if I click back and forth. 
+        // We'll rely on the ref to prevent double sending in one session.
+        // If messages exist, we might not want to auto-send to avoid duplicates if they already said it.
+        // Let's check if the generic message exists?
+        const alreadySentInterest = messages.some(
+          m => m.sender_id === user?.id && m.content === "Hi, I'm interested in this item!"
+        );
+        if (!alreadySentInterest) {
+          autoSentRef.current = true;
+          await sendMessage("Hi, I'm interested in this item!");
+        }
+      }
+    };
+
+    checkAndSend();
+  }, [loading, autoSendInterest, itemId, messages, user?.id]);
 
   // Refresh data when screen comes into focus
   useEffect(() => {
@@ -270,16 +301,29 @@ export default function ChatScreen() {
     try {
       let query = supabase
         .from('messages')
-        .select('*')
+        .select(`
+          *,
+          offer_item:items!messages_offer_item_id_fkey (
+            id,
+            title,
+            images
+          ),
+          sender:users!messages_sender_id_fkey (
+            username,
+            avatar_url
+          ),
+          items:items!messages_item_id_fkey (
+            id,
+            title,
+            images
+          )
+        `)
         .order('created_at', { ascending: true });
 
-      if (existingThreadId || threadId) {
-        query = query.eq('thread_id', existingThreadId || threadId);
-      } else {
-        query = query.or(
-          `and(sender_id.eq.${user.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${user.id})`
-        );
-      }
+      // Always fetch by user pair to ensure we see ALL messages (unified view like Web)
+      query = query.or(
+        `and(sender_id.eq.${user.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${user.id})`
+      );
 
       const { data, error } = await query;
 
@@ -949,6 +993,72 @@ export default function ChatScreen() {
             />
           )}
 
+          {/* Item Context Card (e.g. for Free Item requests or Barter context) */}
+          {(item as any).items && (
+            <TouchableOpacity
+              style={[styles.offerCard, { borderColor: isOwnMessage ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.05)' }]}
+              onPress={() => {
+                navigation.navigate('ItemDetails', {
+                  itemId: (item as any).items.id,
+                  type: 'free' // Context for item details
+                });
+              }}
+              activeOpacity={0.9}
+            >
+              {(item as any).items.images?.[0] ? (
+                <Image
+                  source={{ uri: (item as any).items.images[0] }}
+                  style={styles.offerImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={[styles.offerImage, styles.offerImagePlaceholder]}>
+                  <Text style={styles.offerImagePlaceholderText}>📦</Text>
+                </View>
+              )}
+              <View style={styles.offerDetails}>
+                <Text style={styles.offerTitleLabel}>About Item:</Text>
+                <Text style={styles.offerTitle} numberOfLines={2}>
+                  {(item as any).items.title}
+                </Text>
+                <Text style={styles.offerSubtitle}>Tap to view details</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+
+          {/* Offer Item Card */}
+          {isOffer && (item as any).offer_item && (
+            <TouchableOpacity
+              style={styles.offerCard}
+              onPress={() => {
+                navigation.navigate('ItemDetails', {
+                  itemId: (item as any).offer_item.id,
+                  type: 'barter' // Context for the item details
+                });
+              }}
+              activeOpacity={0.9}
+            >
+              {(item as any).offer_item.images?.[0] ? (
+                <Image
+                  source={{ uri: (item as any).offer_item.images[0] }}
+                  style={styles.offerImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={[styles.offerImage, styles.offerImagePlaceholder]}>
+                  <Text style={styles.offerImagePlaceholderText}>📦</Text>
+                </View>
+              )}
+              <View style={styles.offerDetails}>
+                <Text style={styles.offerTitleLabel}>Offered Item:</Text>
+                <Text style={styles.offerTitle} numberOfLines={2}>
+                  {(item as any).offer_item.title}
+                </Text>
+                <Text style={styles.offerSubtitle}>Tap to view details</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+
           {/* Barter Offer Actions - Only show for received offers */}
           {isOffer && !isOwnMessage && (
             <View style={styles.offerActions}>
@@ -1184,18 +1294,13 @@ export default function ChatScreen() {
 
         <FlatList
           ref={flatListRef}
-          data={messages}
+          data={[...messages].reverse()}
+          inverted
           renderItem={renderMessage}
           keyExtractor={(item: Message) => item.id}
           contentContainerStyle={styles.messagesContainer}
-          onContentSizeChange={() => {
-            if (!initialScrollDoneRef.current) {
-              flatListRef.current?.scrollToEnd({ animated: false });
-              initialScrollDoneRef.current = true;
-            }
-          }}
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
+            <View style={[styles.emptyContainer, { transform: [{ scaleY: -1 }] }]}>
               <Text style={styles.emptyText}>No messages yet</Text>
               <Text style={styles.emptySubtext}>
                 Start the conversation by sending a message
@@ -1857,6 +1962,51 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#0F172A',
     marginBottom: 12,
+  },
+  offerCard: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginTop: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+  },
+  offerImage: {
+    width: 70,
+    height: 70,
+  },
+  offerImagePlaceholder: {
+    backgroundColor: '#E2E8F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  offerImagePlaceholderText: {
+    fontSize: 24,
+  },
+  offerDetails: {
+    flex: 1,
+    padding: 8,
+    justifyContent: 'center',
+  },
+  offerTitleLabel: {
+    fontSize: 10,
+    color: '#64748B',
+    textTransform: 'uppercase',
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  offerTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 2,
+  },
+  offerSubtitle: {
+    fontSize: 10,
+    color: '#3B82F6',
+    fontWeight: '500',
   },
   safetyMenuOption: {
     flexDirection: 'row',

@@ -24,7 +24,7 @@ type ReportDialogPayload = {
 
 interface ItemUser {
   id: string;
-  username: string;
+  username: string | null;
   avatar_url: string | null;
   rating: number | null;
 }
@@ -79,15 +79,17 @@ function ItemDetails() {
         if (error) throw error;
         if (!data) throw new Error('Item not found');
 
-        setItem(data);
-        
+        setItem({ ...data, status: (data.status || 'available') as ItemWithUser['status'] } as ItemWithUser);
+
         // If the current user is not the item owner, set the other user ID to the item owner
         if (user && user.id !== data.user_id) {
           setOtherUserId(data.user_id);
         }
-      } catch (err) {
-        console.error('Error fetching item:', err);
-        setError('Item not found');
+      } catch (err: any) {
+        if (err.code !== 'PGRST116') {
+          console.error('Error fetching item:', err);
+        }
+        setError('This item has been removed or deleted');
       } finally {
         setLoading(false);
       }
@@ -126,7 +128,7 @@ function ItemDetails() {
 
   const handleStatusUpdate = async () => {
     if (!item || !user || user.id !== item.user_id) return;
-    
+
     setUpdatingStatus(true);
     try {
       const newStatus = item.type === 'free' ? 'claimed' : 'traded';
@@ -167,7 +169,7 @@ function ItemDetails() {
       <div className="max-w-4xl mx-auto">
         <div className="bg-white rounded-lg shadow-md p-8 mt-8 text-center">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">
-            {error || 'Item not found'}
+            {error || 'This item has been removed or deleted'}
           </h2>
           <button
             onClick={() => navigate('/')}
@@ -208,14 +210,40 @@ function ItemDetails() {
     return item.type === 'free' ? 'Request Item' : 'Make an Offer';
   };
 
-  const handleActionButtonClick = () => {
-    if (item.status === 'traded' || item.status === 'claimed') {
-      return; // Do nothing if item is already traded/claimed
+  const handleActionButtonClick = async () => {
+    if (!item || item.status === 'traded' || item.status === 'claimed') {
+      return; // Do nothing if item is null or already traded/claimed
     }
-    
+
     if (item.type === 'free') {
-      // For free items, just show the message interface
-      setShowMessages(!showMessages);
+      // For free items, auto-send interest message if not already sent
+      if (!showMessages && user && otherUserId) {
+        try {
+          // Check if we already sent this specific message to avoid duplicates
+          const { data: existingMessages } = await supabase
+            .from('messages')
+            .select('id')
+            .eq('item_id', item.id)
+            .eq('sender_id', user.id)
+            .eq('content', "Hi, I'm interested in this item!")
+            .limit(1);
+
+          if (!existingMessages || existingMessages.length === 0) {
+            await supabase.from('messages').insert([{
+              sender_id: user.id,
+              receiver_id: otherUserId,
+              content: "Hi, I'm interested in this item!",
+              item_id: item.id,
+              read: false,
+              is_offer: false,
+              topic: 'item'
+            }]);
+          }
+        } catch (err) {
+          console.error('Error auto-sending interest:', err);
+        }
+      }
+      setShowMessages(true);
     } else {
       // For barter items, show the barter dialog
       setShowBarterDialog(true);
@@ -225,7 +253,7 @@ function ItemDetails() {
   const handleItemSelected = async (offerItemId: string) => {
     // When an item is selected for bartering, create a message with the offer
     if (!user || !id) return;
-    
+
     try {
       // Get the selected item details
       const { data: offerItem } = await supabase
@@ -233,7 +261,7 @@ function ItemDetails() {
         .select('title')
         .eq('id', offerItemId)
         .single();
-      
+
       // Create a message with the offer
       await supabase.from('messages').insert([
         {
@@ -246,11 +274,11 @@ function ItemDetails() {
           is_offer: true
         },
       ]);
-      
+
       // Close the barter dialog and show the messages
       setShowBarterDialog(false);
       setShowMessages(true);
-      
+
       // Set the other user ID to the item owner
       setOtherUserId(item.user_id);
     } catch (err) {
@@ -268,7 +296,7 @@ function ItemDetails() {
 
   const handleItemUpdated = async () => {
     if (!id) return;
-    
+
     try {
       const { data, error } = await supabase
         .from('items')
@@ -285,7 +313,7 @@ function ItemDetails() {
         .single();
 
       if (!error && data) {
-        setItem(data);
+        setItem({ ...data, status: (data.status || 'available') as ItemWithUser['status'] } as ItemWithUser);
       }
     } catch (err) {
       console.error('Error refreshing item data:', err);
@@ -332,25 +360,23 @@ function ItemDetails() {
               />
               {/* Type label */}
               <div className="absolute top-4 right-4 z-10">
-                <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                  item.type === 'free'
-                    ? 'bg-green-100 text-green-800'
-                    : 'bg-purple-100 text-purple-800'
-                }`}>
+                <span className={`px-3 py-1 rounded-full text-sm font-semibold ${item.type === 'free'
+                  ? 'bg-green-100 text-green-800'
+                  : 'bg-purple-100 text-purple-800'
+                  }`}>
                   {item.type === 'free' ? 'Free' : 'Barter'}
                 </span>
               </div>
               {/* Status label */}
               {item.status !== 'available' && (
                 <div className="absolute top-4 left-4 z-10">
-                  <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                    item.status === 'traded' || item.status === 'claimed'
-                      ? 'bg-gray-100 text-gray-800'
-                      : 'bg-yellow-100 text-yellow-800'
-                  }`}>
-                    {item.status === 'traded' ? 'Traded' : 
-                     item.status === 'claimed' ? 'Claimed' : 
-                     item.status === 'pending' ? 'Pending' : ''}
+                  <span className={`px-3 py-1 rounded-full text-sm font-semibold ${item.status === 'traded' || item.status === 'claimed'
+                    ? 'bg-gray-100 text-gray-800'
+                    : 'bg-yellow-100 text-yellow-800'
+                    }`}>
+                    {item.status === 'traded' ? 'Traded' :
+                      item.status === 'claimed' ? 'Claimed' :
+                        item.status === 'pending' ? 'Pending' : ''}
                   </span>
                 </div>
               )}
@@ -373,9 +399,8 @@ function ItemDetails() {
                       <button
                         key={index}
                         onClick={() => setCurrentImageIndex(index)}
-                        className={`w-2 h-2 rounded-full ${
-                          index === currentImageIndex ? 'bg-white' : 'bg-white/50'
-                        }`}
+                        className={`w-2 h-2 rounded-full ${index === currentImageIndex ? 'bg-white' : 'bg-white/50'
+                          }`}
                       />
                     ))}
                   </div>
@@ -386,7 +411,7 @@ function ItemDetails() {
           <div className="p-6 md:flex-1">
             <div className="flex items-center justify-between mb-2">
               <h1 className="text-2xl font-bold text-gray-900">{item.title}</h1>
-              
+
               <div className="flex items-center space-x-2">
                 {!isOwnItem && (
                   <WatchButton
@@ -409,16 +434,16 @@ function ItemDetails() {
                         setShowAuth(true);
                         return;
                       }
-                    setReportDialog({
-                      targetType: 'item',
-                      targetId: item.id,
-                      subject: `"${item.title}"`,
-                      metadata: {
-                        source: 'web_item_details',
-                        itemOwnerId: item.user_id,
-                        itemOwnerUsername: item.users?.username,
-                      },
-                    });
+                      setReportDialog({
+                        targetType: 'item',
+                        targetId: item.id,
+                        subject: `"${item.title}"`,
+                        metadata: {
+                          source: 'web_item_details',
+                          itemOwnerId: item.user_id,
+                          itemOwnerUsername: item.users?.username || 'Unknown User',
+                        },
+                      });
                     }}
                     className="bg-gray-100 p-2 rounded-full shadow-sm hover:bg-gray-200 transition-colors"
                     title="Report Item"
@@ -437,7 +462,7 @@ function ItemDetails() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
                       </svg>
                     </button>
-                    
+
                     {/* Dropdown Menu */}
                     <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
                       <div className="py-1">
@@ -461,7 +486,7 @@ function ItemDetails() {
                 )}
               </div>
             </div>
-            
+
             <button
               onClick={handleUserProfileClick}
               className="flex items-center space-x-3 mb-4 hover:bg-gray-50 p-2 rounded-lg transition-colors"
@@ -469,7 +494,7 @@ function ItemDetails() {
               {item.users.avatar_url ? (
                 <img
                   src={item.users.avatar_url}
-                  alt={item.users.username}
+                  alt={item.users.username || 'User'}
                   className="w-10 h-10 rounded-full object-cover"
                 />
               ) : (
@@ -478,7 +503,7 @@ function ItemDetails() {
                 </div>
               )}
               <div className="flex-1">
-                <div className="font-medium text-gray-900">{item.users.username}</div>
+                <div className="font-medium text-gray-900">{item.users.username || 'Unknown User'}</div>
                 <div className="flex items-center text-sm text-gray-500">
                   <Star className="w-4 h-4 text-yellow-400 fill-current" />
                   <span className="ml-1">{item.users.rating?.toFixed(1) || 'No ratings'}</span>
@@ -498,16 +523,15 @@ function ItemDetails() {
                 <span>{getCategoryDisplayName(item.category)}</span>
               </div>
             </div>
-            
+
             <p className="text-gray-600 mb-6">{item.description}</p>
 
             <div className="flex items-center justify-between">
               {user ? (
                 user.id !== item.user_id ? (
                   <button
-                    className={`btn-primary flex items-center ${
-                      item.status !== 'available' ? 'opacity-50 cursor-not-allowed' : ''
-                    }`}
+                    className={`btn-primary flex items-center ${item.status !== 'available' ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
                     onClick={handleActionButtonClick}
                     disabled={item.status !== 'available'}
                   >
@@ -567,7 +591,7 @@ function ItemDetails() {
                 setReportDialog({
                   targetType: 'user',
                   targetId: otherUserId,
-                  subject: item.users.username,
+                  subject: item.users.username || 'User',
                   metadata: {
                     source: 'web_item_chat',
                     itemId: item.id,
@@ -580,8 +604,8 @@ function ItemDetails() {
       </div>
       {showAuth && <Auth onClose={() => setShowAuth(false)} />}
       {showBarterDialog && user && (
-        <BarterOfferDialog 
-          onClose={() => setShowBarterDialog(false)} 
+        <BarterOfferDialog
+          onClose={() => setShowBarterDialog(false)}
           onItemSelected={handleItemSelected}
           currentUserId={user.id}
         />

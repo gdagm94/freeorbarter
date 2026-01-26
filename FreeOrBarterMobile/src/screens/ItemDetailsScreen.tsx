@@ -89,8 +89,10 @@ export default function ItemDetailsScreen() {
         .single();
 
       if (error) {
-        console.error('Error fetching item:', error);
-        Alert.alert('Error', 'Failed to load item details');
+        if (error.code !== 'PGRST116') {
+          console.error('Error fetching item:', error);
+          Alert.alert('Error', 'Failed to load item details');
+        }
         return;
       }
 
@@ -134,9 +136,10 @@ export default function ItemDetailsScreen() {
     }
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    navigation.navigate('Chat', { 
+    navigation.navigate('Chat', {
       itemId: item.id,
       otherUserId: item.user_id,
+      autoSendInterest: true,
     });
   };
 
@@ -290,8 +293,8 @@ export default function ItemDetailsScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
           <Text style={styles.errorEmoji}>😕</Text>
-          <Text style={styles.errorText}>Item not found</Text>
-          <TouchableOpacity 
+          <Text style={styles.errorText}>This item has been removed or deleted</Text>
+          <TouchableOpacity
             style={styles.backButton}
             onPress={() => navigation.goBack()}
           >
@@ -336,9 +339,9 @@ export default function ItemDetailsScreen() {
           )}
         </View>
       </View>
-      
-      <ScrollView 
-        style={styles.scrollView} 
+
+      <ScrollView
+        style={styles.scrollView}
         contentContainerStyle={[
           responsiveStyles.contentContainer as ViewStyle,
           { paddingHorizontal: padding },
@@ -347,14 +350,14 @@ export default function ItemDetailsScreen() {
       >
         {/* Image Gallery */}
         <View style={[styles.imageContainer, { aspectRatio: imageAspectRatio }]}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.imageWrapper}
             onPress={() => openImageViewer(currentImageIndex)}
             activeOpacity={0.9}
           >
             {item.images && item.images.length > 0 ? (
-              <Image 
-                source={{ uri: item.images[currentImageIndex] }} 
+              <Image
+                source={{ uri: item.images[currentImageIndex] }}
                 style={styles.image}
                 resizeMode="contain"
               />
@@ -388,8 +391,8 @@ export default function ItemDetailsScreen() {
 
           {/* Type and Status Badges */}
           <View style={styles.badgeContainer}>
-            <View style={[styles.typeBadge, { 
-              backgroundColor: item.type === 'free' ? '#10B981' : '#8B5CF6' 
+            <View style={[styles.typeBadge, {
+              backgroundColor: item.type === 'free' ? '#10B981' : '#8B5CF6'
             }]}>
               <Text style={styles.badgeText}>
                 {item.type === 'free' ? '🎁 FREE' : '🔄 BARTER'}
@@ -398,8 +401,8 @@ export default function ItemDetailsScreen() {
             {!isAvailable && (
               <View style={styles.statusBadge}>
                 <Text style={styles.statusText}>
-                  {item.status === 'claimed' ? '✅ CLAIMED' : 
-                   item.status === 'traded' ? '🤝 TRADED' : '⏳ PENDING'}
+                  {item.status === 'claimed' ? '✅ CLAIMED' :
+                    item.status === 'traded' ? '🤝 TRADED' : '⏳ PENDING'}
                 </Text>
               </View>
             )}
@@ -428,10 +431,10 @@ export default function ItemDetailsScreen() {
         {/* Content */}
         <View style={styles.content}>
           <Text style={styles.title}>{item.title}</Text>
-          
+
           {/* User Info */}
           {item.users && !isOwnItem && (
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.userInfo}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -440,8 +443,8 @@ export default function ItemDetailsScreen() {
               activeOpacity={0.7}
             >
               {item.users.avatar_url ? (
-                <Image 
-                  source={{ uri: item.users.avatar_url }} 
+                <Image
+                  source={{ uri: item.users.avatar_url }}
                   style={styles.userAvatar}
                 />
               ) : (
@@ -462,29 +465,29 @@ export default function ItemDetailsScreen() {
           {/* Item Details */}
           <View style={styles.detailsSection}>
             <Text style={styles.description}>{item.description}</Text>
-            
+
             <View style={styles.metaInfo}>
               <View style={styles.metaRow}>
                 <Text style={styles.metaLabel}>Condition</Text>
-                <View style={[styles.conditionBadge, { 
-                  backgroundColor: getConditionColor(item.condition) 
+                <View style={[styles.conditionBadge, {
+                  backgroundColor: getConditionColor(item.condition)
                 }]}>
                   <Text style={styles.conditionText}>
                     {item.condition.replace('-', ' ').toUpperCase()}
                   </Text>
                 </View>
               </View>
-              
+
               <View style={styles.metaRow}>
                 <Text style={styles.metaLabel}>Category</Text>
                 <Text style={styles.metaValue}>{item.category}</Text>
               </View>
-              
+
               <View style={styles.metaRow}>
                 <Text style={styles.metaLabel}>Location</Text>
                 <Text style={styles.metaValue}>📍 {item.location}</Text>
               </View>
-              
+
               <View style={styles.metaRow}>
                 <Text style={styles.metaLabel}>Posted</Text>
                 <Text style={styles.metaValue}>
@@ -508,7 +511,7 @@ export default function ItemDetailsScreen() {
               {isWatched ? '⭐ Watching' : '☆ Watch'}
             </Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity
             style={styles.primaryButton}
             onPress={item.type === 'free' ? handleMessage : handleBarterOffer}

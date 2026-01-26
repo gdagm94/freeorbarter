@@ -29,14 +29,14 @@ export default function BarterOfferScreen() {
   const [submitting, setSubmitting] = useState(false);
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { itemId } = route.params || {};
 
   useEffect(() => {
-    if (itemId) {
+    if (itemId && !authLoading) {
       fetchData();
     }
-  }, [itemId]);
+  }, [itemId, user, authLoading]);
 
   // Refresh data when screen comes into focus
   useEffect(() => {
@@ -49,15 +49,15 @@ export default function BarterOfferScreen() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      
+
       console.log('Fetching data - User:', user);
       console.log('User ID:', user?.id);
       console.log('Item ID:', itemId);
-      
+
       if (!user) {
         console.log('WARNING: User is not available!');
       }
-      
+
       // Fetch both in parallel
       const [targetResult, userItemsResult] = await Promise.all([
         // Fetch target item
@@ -66,14 +66,16 @@ export default function BarterOfferScreen() {
           .select('*')
           .eq('id', itemId)
           .single(),
-        
+
         // Fetch user's barter items (only barter type items can be offered)
         user
           ? supabase
-              .from('items')
-              .select('*')
-              .eq('user_id', user.id)
-              .order('created_at', { ascending: false })
+            .from('items')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('type', 'barter')
+            .eq('status', 'available')
+            .order('created_at', { ascending: false })
           : Promise.resolve({ data: [], error: null })
       ]);
 
@@ -92,7 +94,7 @@ export default function BarterOfferScreen() {
       // Set all state at once
       setTargetItem(targetResult.data);
       setUserItems(userItemsResult.data || []);
-      
+
       console.log('Setting userItems state with:', userItemsResult.data?.length || 0, 'items');
       console.log('Items being set:', userItemsResult.data);
 
@@ -190,7 +192,7 @@ export default function BarterOfferScreen() {
 
       // Create a message in the thread about this offer
       const offerMessage = `🔄 Barter Offer: I'd like to trade my "${selectedItemData?.title}" for your "${targetItem.title}".\n\nMessage: ${messageToCheck}`;
-      
+
       const { error: messageError } = await supabase
         .from('messages')
         .insert([{
@@ -256,12 +258,12 @@ export default function BarterOfferScreen() {
     </TouchableOpacity>
   );
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
         <View style={styles.header}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.backButton}
             onPress={() => navigation.goBack()}
           >
@@ -283,10 +285,10 @@ export default function BarterOfferScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      
+
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.backButton}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -341,11 +343,14 @@ export default function BarterOfferScreen() {
               <Text style={styles.emptyEmoji}>📦</Text>
               <Text style={styles.emptyTitle}>No items to offer</Text>
               <Text style={styles.emptySubtitle}>You need to have listed items to make a barter offer</Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.addItemButton}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  navigation.navigate('NewListing');
+                  navigation.navigate('NewListing', {
+                    returnScreen: 'BarterOffer',
+                    returnParams: { itemId }
+                  });
                 }}
                 activeOpacity={0.8}
               >
@@ -397,7 +402,7 @@ export default function BarterOfferScreen() {
       {/* Submit Button - Fixed at bottom */}
       {userItems.length > 0 && (
         <View style={styles.footer}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[
               styles.submitButton,
               (!selectedItem || !message.trim() || submitting) && styles.submitButtonDisabled
