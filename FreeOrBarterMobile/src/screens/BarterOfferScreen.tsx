@@ -19,6 +19,7 @@ import { useAuth } from '../hooks/useAuth';
 import { Item } from '../types';
 import * as Haptics from 'expo-haptics';
 import { checkContent } from '../lib/contentFilter';
+import { BackButton } from '../components/BackButton';
 
 export default function BarterOfferScreen() {
   const [targetItem, setTargetItem] = useState<Item | null>(null);
@@ -263,12 +264,7 @@ export default function BarterOfferScreen() {
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
         <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.backButtonText}>←</Text>
-          </TouchableOpacity>
+          <BackButton style={styles.backButton} />
           <Text style={styles.headerTitle}>Make Offer</Text>
           <View style={styles.headerSpacer} />
         </View>
@@ -288,15 +284,7 @@ export default function BarterOfferScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            navigation.goBack();
-          }}
-        >
-          <Text style={styles.backButtonText}>←</Text>
-        </TouchableOpacity>
+        <BackButton style={styles.backButton} />
         <Text style={styles.headerTitle}>Make Offer</Text>
         <View style={styles.headerSpacer} />
       </View>

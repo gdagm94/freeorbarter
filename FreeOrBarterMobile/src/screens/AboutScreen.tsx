@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { BackButton } from '../components/BackButton';
 
 export default function AboutScreen() {
   const navigation = useNavigation();
@@ -15,12 +16,7 @@ export default function AboutScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity 
-          onPress={() => navigation.goBack()}
-          style={styles.backButton}
-        >
-          <Text style={styles.backIcon}>←</Text>
-        </TouchableOpacity>
+        <BackButton style={styles.backButton} />
         <Text style={styles.headerTitle}>About Us</Text>
         <View style={styles.placeholder} />
       </View>
@@ -37,8 +33,8 @@ export default function AboutScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Our Mission</Text>
           <Text style={styles.paragraph}>
-            FreeorBarter is a community-driven marketplace that makes it easy to give away items you no longer need 
-            or trade them with others. We believe in reducing waste, promoting sustainability, and building stronger 
+            FreeorBarter is a community-driven marketplace that makes it easy to give away items you no longer need
+            or trade them with others. We believe in reducing waste, promoting sustainability, and building stronger
             communities through sharing.
           </Text>
         </View>
@@ -46,15 +42,15 @@ export default function AboutScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>What We Do</Text>
           <Text style={styles.paragraph}>
-            Our platform connects people who want to declutter their homes with those looking for items they need. 
-            Whether you're giving something away for free or looking to barter, FreeorBarter makes the process simple, 
+            Our platform connects people who want to declutter their homes with those looking for items they need.
+            Whether you're giving something away for free or looking to barter, FreeorBarter makes the process simple,
             safe, and rewarding.
           </Text>
         </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Core Values</Text>
-          
+
           <View style={styles.valueItem}>
             <Text style={styles.valueEmoji}>🌍</Text>
             <View style={styles.valueContent}>
@@ -99,8 +95,8 @@ export default function AboutScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Join Our Community</Text>
           <Text style={styles.paragraph}>
-            Whether you're looking to declutter, find something you need, or simply want to be part of a 
-            sustainable community, FreeorBarter welcomes you. Together, we can make a positive impact on 
+            Whether you're looking to declutter, find something you need, or simply want to be part of a
+            sustainable community, FreeorBarter welcomes you. Together, we can make a positive impact on
             our environment and build a more connected world.
           </Text>
         </View>

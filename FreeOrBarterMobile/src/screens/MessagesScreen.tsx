@@ -66,7 +66,7 @@ export default function MessagesScreen() {
 
   const fetchConversations = async () => {
     if (!user) return;
-    
+
     try {
       setLoading(true);
       const { data, error } = await supabase
@@ -104,16 +104,16 @@ export default function MessagesScreen() {
         // Track unread counts
         if (message.receiver_id === user.id && !message.read) {
           unreadCountMap.set(
-            conversationId, 
+            conversationId,
             (unreadCountMap.get(conversationId) || 0) + 1
           );
         }
-        
+
         if (!conversationMap.has(conversationId)) {
-          const otherUserInfo = message.sender_id === otherUserId 
-            ? message.sender 
+          const otherUserInfo = message.sender_id === otherUserId
+            ? message.sender
             : message.receiver;
-          
+
           const hasOffer = data.some(
             (msg: any) => {
               const msgOtherUserId = msg.sender_id === user.id ? msg.receiver_id : msg.sender_id;
@@ -215,7 +215,7 @@ export default function MessagesScreen() {
   const deleteConversation = async (conversationId: string, otherUserId: string) => {
     try {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      
+
       Alert.alert(
         'Delete Conversation',
         'Are you sure you want to delete this conversation? You can retrieve it later.',
@@ -225,21 +225,20 @@ export default function MessagesScreen() {
             text: 'Delete',
             style: 'destructive',
             onPress: async () => {
+              if (!user?.id) return;
               const { error } = await supabase
                 .from('messages')
                 .update({ deleted: true })
-                .eq('sender_id', user?.id)
-                .or(`sender_id.eq.${otherUserId},receiver_id.eq.${otherUserId}`)
-                .eq('receiver_id', user?.id);
+                .or(`and(sender_id.eq.${user.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${user.id})`);
 
               if (error) throw error;
-              
-              setConversations(prev => 
-                prev.map(conv => 
+
+              setConversations(prev =>
+                prev.map(conv =>
                   conv.id === conversationId ? { ...conv, deleted: true } : conv
                 )
               );
-              
+
               handleSwipeRight(conversationId);
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             }
@@ -254,23 +253,22 @@ export default function MessagesScreen() {
 
   const retrieveConversation = async (conversationId: string, otherUserId: string) => {
     try {
+      if (!user?.id) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      
+
       const { error } = await supabase
         .from('messages')
         .update({ deleted: false })
-        .eq('sender_id', user?.id)
-        .or(`sender_id.eq.${otherUserId},receiver_id.eq.${otherUserId}`)
-        .eq('receiver_id', user?.id);
+        .or(`and(sender_id.eq.${user.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${user.id})`);
 
       if (error) throw error;
-      
-      setConversations(prev => 
-        prev.map(conv => 
+
+      setConversations(prev =>
+        prev.map(conv =>
           conv.id === conversationId ? { ...conv, deleted: false } : conv
         )
       );
-      
+
       handleSwipeRight(conversationId);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
@@ -286,7 +284,7 @@ export default function MessagesScreen() {
         return;
       }
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      
+
       const { data, error: fetchError } = await supabase
         .from('messages')
         .select('id')
@@ -308,15 +306,15 @@ export default function MessagesScreen() {
         .eq('id', latestMessage.id);
 
       if (updateError) throw updateError;
-      
-      setConversations(prev => 
+
+      setConversations(prev =>
         prev.map(conv => {
           if (conv.id !== conversationId) return conv;
           const nextCount = conv.unread_count > 0 ? conv.unread_count : 1;
           return { ...conv, unread_count: nextCount };
         })
       );
-      
+
       handleSwipeRight(conversationId);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
@@ -394,89 +392,89 @@ export default function MessagesScreen() {
           ]}
           {...panResponder.panHandlers}
         >
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.conversationTouchable}
             onPress={() => {
               if (item.deleted) return;
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               const otherUserId = item.other_user_id;
-              navigation.navigate('Chat', { 
-                otherUserId, 
-                itemId: item.item_id || null 
+              navigation.navigate('Chat', {
+                otherUserId,
+                itemId: item.item_id || null
               });
             }}
             activeOpacity={0.8}
           >
-      <View style={styles.conversationContent}>
-        {/* User Avatar */}
-        <View style={styles.avatarContainer}>
-          {item.other_user_avatar ? (
-            <Image 
-              source={{ uri: item.other_user_avatar }} 
-              style={styles.avatar}
-            />
-          ) : (
-            <View style={styles.avatarPlaceholder}>
-              <Text style={styles.avatarText}>👤</Text>
+            <View style={styles.conversationContent}>
+              {/* User Avatar */}
+              <View style={styles.avatarContainer}>
+                {item.other_user_avatar ? (
+                  <Image
+                    source={{ uri: item.other_user_avatar }}
+                    style={styles.avatar}
+                  />
+                ) : (
+                  <View style={styles.avatarPlaceholder}>
+                    <Text style={styles.avatarText}>👤</Text>
+                  </View>
+                )}
+                {item.unread_count > 0 && (
+                  <View style={styles.unreadBadge}>
+                    <Text style={styles.unreadText}>
+                      {item.unread_count > 9 ? '9+' : item.unread_count}
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Conversation Info */}
+              <View style={styles.conversationInfo}>
+                <View style={styles.conversationHeader}>
+                  <Text style={[
+                    styles.userName,
+                    item.unread_count > 0 && styles.unreadUserName
+                  ]}>
+                    {item.other_user_name}
+                  </Text>
+                  <Text style={styles.timestamp}>
+                    {formatTime(item.last_message_time)}
+                  </Text>
+                </View>
+
+                {/* Item Context */}
+                {item.item_title && (
+                  <View style={styles.itemContext}>
+                    {item.item_image && (
+                      <Image
+                        source={{ uri: item.item_image }}
+                        style={styles.itemThumbnail}
+                      />
+                    )}
+                    <Text style={styles.itemTitle} numberOfLines={1}>
+                      📦 {item.item_title}
+                    </Text>
+                  </View>
+                )}
+
+                {/* Last Message */}
+                <Text style={[
+                  styles.lastMessage,
+                  item.unread_count > 0 && styles.unreadLastMessage
+                ]} numberOfLines={2}>
+                  {item.last_message}
+                </Text>
+
+                {/* Offer Indicator */}
+                {item.has_offer && (
+                  <View style={styles.offerIndicator}>
+                    <Text style={styles.offerText}>🔄 Barter offer</Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Chevron */}
+              <Text style={styles.chevron}>›</Text>
             </View>
-          )}
-          {item.unread_count > 0 && (
-            <View style={styles.unreadBadge}>
-              <Text style={styles.unreadText}>
-                {item.unread_count > 9 ? '9+' : item.unread_count}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        {/* Conversation Info */}
-        <View style={styles.conversationInfo}>
-          <View style={styles.conversationHeader}>
-            <Text style={[
-              styles.userName,
-              item.unread_count > 0 && styles.unreadUserName
-            ]}>
-              {item.other_user_name}
-            </Text>
-            <Text style={styles.timestamp}>
-              {formatTime(item.last_message_time)}
-            </Text>
-          </View>
-
-          {/* Item Context */}
-          {item.item_title && (
-            <View style={styles.itemContext}>
-              {item.item_image && (
-                <Image 
-                  source={{ uri: item.item_image }} 
-                  style={styles.itemThumbnail}
-                />
-              )}
-              <Text style={styles.itemTitle} numberOfLines={1}>
-                📦 {item.item_title}
-              </Text>
-            </View>
-          )}
-
-          {/* Last Message */}
-          <Text style={[
-            styles.lastMessage,
-            item.unread_count > 0 && styles.unreadLastMessage
-          ]} numberOfLines={2}>
-            {item.last_message}
-          </Text>
-
-          {/* Offer Indicator */}
-          {item.has_offer && (
-            <View style={styles.offerIndicator}>
-              <Text style={styles.offerText}>🔄 Barter offer</Text>
-            </View>
-          )}
-        </View>
-
-        {/* Chevron */}
-        <Text style={styles.chevron}>›</Text>
-        </View>
           </TouchableOpacity>
         </Animated.View>
       </View>
@@ -518,7 +516,7 @@ export default function MessagesScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      
+
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>Messages</Text>
@@ -536,8 +534,8 @@ export default function MessagesScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContainer}
         refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
+          <RefreshControl
+            refreshing={refreshing}
             onRefresh={onRefresh}
             tintColor="#3B82F6"
             colors={['#3B82F6']}
@@ -547,21 +545,21 @@ export default function MessagesScreen() {
           !loading ? (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyEmoji}>
-                {filter === 'unread' ? '✅' : 
-                 filter === 'offers' ? '🔄' : 
-                 filter === 'deleted' ? '🗑️' : '💬'}
+                {filter === 'unread' ? '✅' :
+                  filter === 'offers' ? '🔄' :
+                    filter === 'deleted' ? '🗑️' : '💬'}
               </Text>
               <Text style={styles.emptyText}>
-                {filter === 'unread' ? 'All caught up!' : 
-                 filter === 'offers' ? 'No barter offers yet' : 
-                 filter === 'deleted' ? 'No deleted conversations' :
-                 'No conversations yet'}
+                {filter === 'unread' ? 'All caught up!' :
+                  filter === 'offers' ? 'No barter offers yet' :
+                    filter === 'deleted' ? 'No deleted conversations' :
+                      'No conversations yet'}
               </Text>
               <Text style={styles.emptySubtext}>
                 {filter === 'unread' ? 'Check back later for new messages' :
-                 filter === 'offers' ? 'Barter offers will appear here' :
-                 filter === 'deleted' ? 'Deleted conversations will appear here' :
-                 'Start a conversation by messaging someone about their item'}
+                  filter === 'offers' ? 'Barter offers will appear here' :
+                    filter === 'deleted' ? 'Deleted conversations will appear here' :
+                      'Start a conversation by messaging someone about their item'}
               </Text>
             </View>
           ) : null

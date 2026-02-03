@@ -24,12 +24,13 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import * as Haptics from 'expo-haptics';
 import { Item } from '../types';
 import { checkContent } from '../lib/contentFilter';
+import { BackButton } from '../components/BackButton';
 
 const CONDITIONS = ['new', 'like-new', 'good', 'fair', 'poor'] as const;
 const TYPES = ['free', 'barter'] as const;
 const CATEGORIES = [
   'Electronics',
-  'Furniture', 
+  'Furniture',
   'Clothing',
   'Sports & Outdoors',
   'Books & Media',
@@ -78,12 +79,12 @@ export default function EditListingScreen() {
   const [imageUris, setImageUris] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Success/Error modal states
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  
+
   // Location states
   const [selectedLocation, setSelectedLocation] = useState<LocationData | null>(null);
   const [useCurrentLocation, setUseCurrentLocation] = useState(false);
@@ -104,7 +105,7 @@ export default function EditListingScreen() {
       setCondition(item.condition || 'good');
       setType(item.type || 'free');
       setImageUris(item.images || []);
-      
+
       // Set location if available
       if (item.location && item.latitude && item.longitude) {
         setSelectedLocation({
@@ -174,12 +175,12 @@ export default function EditListingScreen() {
     if (!result.canceled && result.assets) {
       const newImages = result.assets.map(asset => asset.uri);
       const totalImages = imageUris.length + newImages.length;
-      
+
       if (totalImages > 5) {
         Alert.alert('Too Many Images', 'You can only upload up to 5 images total.');
         return;
       }
-      
+
       setImageUris(prev => [...prev, ...newImages]);
     }
   };
@@ -199,12 +200,12 @@ export default function EditListingScreen() {
     if (!result.canceled && result.assets) {
       const newImage = result.assets[0].uri;
       const totalImages = imageUris.length + 1;
-      
+
       if (totalImages > 5) {
         Alert.alert('Too Many Images', 'You can only upload up to 5 images total.');
         return;
       }
-      
+
       setImageUris(prev => [...prev, newImage]);
     }
   };
@@ -243,16 +244,16 @@ export default function EditListingScreen() {
       const response = await fetch(
         `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
       );
-      
+
       if (!response.ok) throw new Error('Failed to get location details');
-      
+
       const data = await response.json();
       const address = data.address || {};
-      
+
       const city = address.city || address.town || address.village || '';
       const state = address.state || '';
       const zipcode = address.postcode || '';
-      
+
       if (!city || !state) {
         throw new Error('Could not determine city and state');
       }
@@ -382,7 +383,7 @@ export default function EditListingScreen() {
       }
 
       const uploadedUrls: string[] = [];
-      
+
       // Upload new images (filter out existing URLs)
       for (const uri of imageUris) {
         if (uri.startsWith('http')) {
@@ -455,19 +456,14 @@ export default function EditListingScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      
-      <KeyboardAvoidingView 
+
+      <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.headerButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.headerButtonText}>Cancel</Text>
-          </TouchableOpacity>
+          <BackButton style={styles.headerButton} />
           <Text style={styles.title}>Edit Listing</Text>
           <TouchableOpacity
             style={[styles.headerButton, styles.saveButton]}
@@ -850,7 +846,7 @@ export default function EditListingScreen() {
             <TouchableOpacity
               style={styles.successModal}
               activeOpacity={1}
-              onPress={() => {}} // Prevent modal from closing when tapping inside
+              onPress={() => { }} // Prevent modal from closing when tapping inside
             >
               <View style={styles.successIconContainer}>
                 <Text style={styles.successIcon}>✅</Text>
@@ -887,7 +883,7 @@ export default function EditListingScreen() {
             <TouchableOpacity
               style={styles.errorModal}
               activeOpacity={1}
-              onPress={() => {}} // Prevent modal from closing when tapping inside
+              onPress={() => { }} // Prevent modal from closing when tapping inside
             >
               <View style={styles.errorIconContainer}>
                 <Text style={styles.errorIcon}>⚠️</Text>

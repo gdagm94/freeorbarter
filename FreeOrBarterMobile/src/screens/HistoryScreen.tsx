@@ -17,6 +17,7 @@ import { useAuth } from '../hooks/useAuth';
 import { Item } from '../types';
 import ItemCard from '../components/ItemCard';
 import * as Haptics from 'expo-haptics';
+import { BackButton } from '../components/BackButton';
 
 interface HistoryEntry {
   id: string;
@@ -60,7 +61,7 @@ export default function HistoryScreen() {
 
     try {
       setLoading(true);
-      
+
       // Fetch archived items (completed trades)
       const { data: archivedData, error: archivedError } = await supabase
         .from('items')
@@ -114,7 +115,7 @@ export default function HistoryScreen() {
   };
 
   const renderHistoryItem = ({ item }: { item: HistoryEntry }) => (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={styles.historyItem}
       onPress={() => item.item_id && navigation.navigate('ItemDetails', { itemId: item.item_id })}
       activeOpacity={0.8}
@@ -129,11 +130,11 @@ export default function HistoryScreen() {
             </Text>
           </View>
         </View>
-        
+
         <View style={styles.itemInfo}>
           {item.item_images && item.item_images.length > 0 ? (
-            <Image 
-              source={{ uri: item.item_images[0] }} 
+            <Image
+              source={{ uri: item.item_images[0] }}
               style={styles.itemThumbnail}
             />
           ) : (
@@ -198,21 +199,13 @@ export default function HistoryScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      
+
       <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            navigation.goBack();
-          }}
-        >
-          <Text style={styles.backButtonIcon}>←</Text>
-        </TouchableOpacity>
+        <BackButton style={styles.backButton} />
         <View style={styles.headerContent}>
           <Text style={styles.title}>History</Text>
           <Text style={styles.subtitle}>
-            {activeTab === 'archived' 
+            {activeTab === 'archived'
               ? `${archivedItems.length} completed trades`
               : `${historyEntries.length} activities`
             }
@@ -235,8 +228,8 @@ export default function HistoryScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContainer}
           refreshControl={
-            <RefreshControl 
-              refreshing={refreshing} 
+            <RefreshControl
+              refreshing={refreshing}
               onRefresh={onRefresh}
               tintColor="#3B82F6"
               colors={['#3B82F6']}
@@ -262,8 +255,8 @@ export default function HistoryScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContainer}
           refreshControl={
-            <RefreshControl 
-              refreshing={refreshing} 
+            <RefreshControl
+              refreshing={refreshing}
               onRefresh={onRefresh}
               tintColor="#3B82F6"
               colors={['#3B82F6']}

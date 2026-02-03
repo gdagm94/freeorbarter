@@ -25,6 +25,7 @@ import {
   ReportTargetPayload,
 } from '../components/ReportContentSheet';
 import { ImageViewer } from '../components/ImageViewer';
+import { BackButton } from '../components/BackButton';
 
 interface ItemWithUser extends Item {
   users?: {
@@ -294,12 +295,7 @@ export default function ItemDetailsScreen() {
         <View style={styles.errorContainer}>
           <Text style={styles.errorEmoji}>😕</Text>
           <Text style={styles.errorText}>This item has been removed or deleted</Text>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.backButtonText}>Go Back</Text>
-          </TouchableOpacity>
+          <BackButton style={styles.backButton} />
         </View>
       </SafeAreaView>
     );
@@ -313,13 +309,7 @@ export default function ItemDetailsScreen() {
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
       <View style={[styles.topBar, { paddingHorizontal: padding }]}>
-        <TouchableOpacity
-          style={styles.topBarButton}
-          onPress={() => navigation.goBack()}
-          accessibilityLabel="Go back"
-        >
-          <Text style={styles.topBarButtonText}>‹</Text>
-        </TouchableOpacity>
+        <BackButton style={styles.topBarButton} />
         <View style={styles.topBarActions}>
           <TouchableOpacity
             style={styles.topBarButton}

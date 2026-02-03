@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { BackButton } from '../components/BackButton';
 import { fetchLatestPolicy, PolicyStatus } from '../lib/policy';
 
 export default function TermsScreen() {
@@ -46,12 +47,7 @@ export default function TermsScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity 
-          onPress={() => navigation.goBack()}
-          style={styles.backButton}
-        >
-          <Text style={styles.backIcon}>←</Text>
-        </TouchableOpacity>
+        <BackButton style={styles.backButton} />
         <Text style={styles.headerTitle}>Community Guidelines</Text>
         <View style={styles.placeholder} />
       </View>

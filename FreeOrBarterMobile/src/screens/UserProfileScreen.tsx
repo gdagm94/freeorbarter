@@ -37,6 +37,7 @@ import {
 } from '../components/ReportContentSheet';
 import { useBlockStatus } from '../hooks/useBlockStatus';
 import { blockUserWithCleanup, unblockUserPair } from '../lib/blocks';
+import { BackButton } from '../components/BackButton';
 
 interface UserProfile {
   id: string;
@@ -57,7 +58,7 @@ export default function UserProfileScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute();
   const { userId } = route.params as RouteParams;
-  
+
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [items, setItems] = useState<Item[]>([]);
   const [friendshipStatus, setFriendshipStatus] = useState<FriendshipStatus>('none');
@@ -160,12 +161,12 @@ export default function UserProfileScreen() {
 
   const handleShareProfile = async () => {
     if (!profile) return;
-    
+
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    
+
     const profileUrl = `freeorbarter://user/${userId}`;
     const message = `Check out ${profile.username}'s profile on FreeorBarter!`;
-    
+
     Alert.alert(
       'Share Profile',
       'Choose an option',
@@ -205,9 +206,9 @@ export default function UserProfileScreen() {
       Alert.alert('Messaging unavailable', 'Messaging is disabled because someone in this conversation is blocked.');
       return;
     }
-    
+
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    
+
     // Check if there's an existing conversation
     try {
       const { data: messages } = await supabase
@@ -215,7 +216,7 @@ export default function UserProfileScreen() {
         .select('id')
         .or(`and(sender_id.eq.${user.id},receiver_id.eq.${userId}),and(sender_id.eq.${userId},receiver_id.eq.${user.id})`)
         .limit(1);
-      
+
       // Navigate to chat screen (will open existing thread or create new one)
       navigation.navigate('Chat', { otherUserId: userId, itemId: null });
     } catch (error) {
@@ -323,7 +324,7 @@ export default function UserProfileScreen() {
             .single();
 
           if (!sentRequest) throw new Error('No pending request found');
-          
+
           result = await cancelFriendRequest(sentRequest.id);
           if (result.error) throw result.error;
           break;
@@ -421,7 +422,7 @@ export default function UserProfileScreen() {
     };
 
     const config = buttonConfig[friendshipStatus];
-    
+
     // If already friends, show message and manage friendship buttons
     if (friendshipStatus === 'friends') {
       return (
@@ -432,7 +433,7 @@ export default function UserProfileScreen() {
           >
             <Text style={styles.friendActionButtonText}>💬 Message</Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity
             style={[styles.friendActionButton, styles.manageButton]}
             onPress={() => {
@@ -446,7 +447,7 @@ export default function UserProfileScreen() {
         </View>
       );
     }
-    
+
     if (friendshipStatus === 'pending_received') {
       return (
         <View style={styles.friendActionsContainer}>
@@ -482,7 +483,7 @@ export default function UserProfileScreen() {
         </View>
       );
     }
-    
+
     return (
       <TouchableOpacity
         style={[styles.friendButton, config.style]}
@@ -503,9 +504,9 @@ export default function UserProfileScreen() {
 
   const renderItem = ({ item, index }: { item: Item; index: number }) => (
     <View style={[styles.itemWrapper, index % 2 === 1 && styles.itemWrapperRight]}>
-      <ItemCard 
-        item={item} 
-        onPress={() => navigation.navigate('ItemDetails', { itemId: item.id })} 
+      <ItemCard
+        item={item}
+        onPress={() => navigation.navigate('ItemDetails', { itemId: item.id })}
       />
     </View>
   );
@@ -525,12 +526,7 @@ export default function UserProfileScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>User not found</Text>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.backButtonText}>Go Back</Text>
-          </TouchableOpacity>
+          <BackButton style={styles.backButton} />
         </View>
       </SafeAreaView>
     );
@@ -539,18 +535,10 @@ export default function UserProfileScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      
+
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.headerBackButton}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            navigation.goBack();
-          }}
-        >
-          <Text style={styles.headerBackButtonText}>←</Text>
-        </TouchableOpacity>
+        <BackButton style={styles.headerBackButton} />
         <Text style={styles.headerTitle}>{profile.username}</Text>
         <TouchableOpacity
           style={styles.shareButton}
@@ -560,8 +548,8 @@ export default function UserProfileScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView 
-        style={styles.scrollView} 
+      <ScrollView
+        style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -576,8 +564,8 @@ export default function UserProfileScreen() {
         <View style={styles.profileCard}>
           <View style={styles.profileHeader}>
             {profile.avatar_url ? (
-              <Image 
-                source={{ uri: profile.avatar_url }} 
+              <Image
+                source={{ uri: profile.avatar_url }}
                 style={styles.profileAvatar}
               />
             ) : (
@@ -619,7 +607,7 @@ export default function UserProfileScreen() {
           <Text style={styles.sectionTitle}>
             {items.length > 0 ? `${profile.username}'s Listings` : 'No Listings'}
           </Text>
-          
+
           {items.length > 0 ? (
             <FlatList
               data={items}
@@ -647,14 +635,14 @@ export default function UserProfileScreen() {
         animationType="fade"
         onRequestClose={() => setShowManageMenu(false)}
       >
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
           onPress={() => setShowManageMenu(false)}
         >
           <View style={styles.manageMenuContainer}>
             <Text style={styles.manageMenuTitle}>Manage Friendship</Text>
-            
+
             {!blockedByMe && friendshipStatus === 'friends' && (
               <TouchableOpacity
                 style={styles.manageMenuItem}
@@ -665,10 +653,10 @@ export default function UserProfileScreen() {
                     `Are you sure you want to unfriend ${profile?.username}?`,
                     [
                       { text: 'Cancel', style: 'cancel' },
-                      { 
-                        text: 'Unfriend', 
-                        style: 'destructive', 
-                        onPress: () => handleFriendAction('unfriend') 
+                      {
+                        text: 'Unfriend',
+                        style: 'destructive',
+                        onPress: () => handleFriendAction('unfriend')
                       }
                     ]
                   );
@@ -678,7 +666,7 @@ export default function UserProfileScreen() {
                 <Text style={styles.manageMenuItemText}>Unfriend</Text>
               </TouchableOpacity>
             )}
-            
+
             {blockedByMe ? (
               <TouchableOpacity
                 style={[styles.manageMenuItem, styles.successMenuItem]}
@@ -714,7 +702,7 @@ export default function UserProfileScreen() {
                 <Text style={styles.manageMenuItemText}>Report User</Text>
               </TouchableOpacity>
             )}
-            
+
             <TouchableOpacity
               style={styles.manageMenuCancelButton}
               onPress={() => setShowManageMenu(false)}

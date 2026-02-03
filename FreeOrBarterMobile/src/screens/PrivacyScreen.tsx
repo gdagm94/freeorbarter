@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { BackButton } from '../components/BackButton';
 
 export default function PrivacyScreen() {
   const navigation = useNavigation();
@@ -15,12 +16,7 @@ export default function PrivacyScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity 
-          onPress={() => navigation.goBack()}
-          style={styles.backButton}
-        >
-          <Text style={styles.backIcon}>←</Text>
-        </TouchableOpacity>
+        <BackButton style={styles.backButton} />
         <Text style={styles.headerTitle}>Privacy Policy</Text>
         <View style={styles.placeholder} />
       </View>
@@ -33,8 +29,8 @@ export default function PrivacyScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>1. Introduction</Text>
           <Text style={styles.paragraph}>
-            FreeorBarter ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy 
-            explains how we collect, use, disclose, and safeguard your information when you use our mobile 
+            FreeorBarter ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy
+            explains how we collect, use, disclose, and safeguard your information when you use our mobile
             application and services.
           </Text>
         </View>
@@ -87,8 +83,8 @@ export default function PrivacyScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>5. Data Security</Text>
           <Text style={styles.paragraph}>
-            We implement appropriate technical and organizational measures to protect your personal information. 
-            However, no method of transmission over the internet is 100% secure, and we cannot guarantee 
+            We implement appropriate technical and organizational measures to protect your personal information.
+            However, no method of transmission over the internet is 100% secure, and we cannot guarantee
             absolute security.
           </Text>
         </View>
@@ -129,7 +125,7 @@ export default function PrivacyScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>8. Location Data</Text>
           <Text style={styles.paragraph}>
-            We collect location data to help you find items near you and to show your items to nearby users. 
+            We collect location data to help you find items near you and to show your items to nearby users.
             You can control location permissions through your device settings.
           </Text>
         </View>
@@ -137,8 +133,8 @@ export default function PrivacyScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>9. Children's Privacy</Text>
           <Text style={styles.paragraph}>
-            Our service is not intended for children under 18. We do not knowingly collect personal 
-            information from children. If you believe we have collected information from a child, please 
+            Our service is not intended for children under 18. We do not knowingly collect personal
+            information from children. If you believe we have collected information from a child, please
             contact us immediately.
           </Text>
         </View>
@@ -146,7 +142,7 @@ export default function PrivacyScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>10. Changes to This Policy</Text>
           <Text style={styles.paragraph}>
-            We may update this Privacy Policy from time to time. We will notify you of any changes by 
+            We may update this Privacy Policy from time to time. We will notify you of any changes by
             posting the new policy on this page and updating the "Last Updated" date.
           </Text>
         </View>

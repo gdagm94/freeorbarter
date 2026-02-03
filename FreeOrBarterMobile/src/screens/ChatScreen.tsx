@@ -47,6 +47,7 @@ import {
 import { useBlockStatus } from '../hooks/useBlockStatus';
 import { blockUserWithCleanup, unblockUserPair } from '../lib/blocks';
 import { sendPushNotification } from '../lib/push';
+import { BackButton } from '../components/BackButton';
 
 export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -1241,15 +1242,7 @@ export default function ChatScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButtonContainer}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              navigation.goBack();
-            }}
-          >
-            <Text style={styles.backButton}>←</Text>
-          </TouchableOpacity>
+          <BackButton style={styles.backButtonContainer} />
           <TouchableOpacity
             style={styles.headerUserContainer}
             onPress={() => {

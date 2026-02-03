@@ -26,6 +26,7 @@ import {
   unfriend,
 } from '../lib/friends';
 import { FriendshipWithUser, FriendRequestWithUser } from '../types';
+import { BackButton } from '../components/BackButton';
 
 interface UserProfile {
   id: string;
@@ -77,7 +78,7 @@ export default function FriendsScreen() {
 
     try {
       setLoading(true);
-      
+
       // Fetch friends list
       const { data: friendsData, error: friendsError } = await getFriendsList(user.id);
       if (friendsError) throw friendsError;
@@ -138,10 +139,10 @@ export default function FriendsScreen() {
 
   const handleFriendAction = async (action: 'accept' | 'decline' | 'cancel' | 'unfriend', requestId: string, friendId?: string) => {
     setActionLoading(requestId);
-    
+
     try {
       let result;
-      
+
       switch (action) {
         case 'accept':
           result = await acceptFriendRequest(requestId);
@@ -164,7 +165,7 @@ export default function FriendsScreen() {
 
       // Refresh friends data
       await fetchFriendsData();
-      
+
     } catch (error) {
       console.error('Error performing friend action:', error);
       Alert.alert('Error', 'Failed to perform action');
@@ -208,7 +209,7 @@ export default function FriendsScreen() {
 
   const renderFriendItem = ({ item }: { item: FriendshipWithUser }) => (
     <View style={styles.friendItem}>
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.friendInfo}
         onPress={() => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -217,8 +218,8 @@ export default function FriendsScreen() {
         activeOpacity={0.7}
       >
         {item.friend?.avatar_url ? (
-          <Image 
-            source={{ uri: item.friend.avatar_url }} 
+          <Image
+            source={{ uri: item.friend.avatar_url }}
             style={styles.friendAvatar}
           />
         ) : (
@@ -235,7 +236,7 @@ export default function FriendsScreen() {
           )}
         </View>
       </TouchableOpacity>
-      
+
       <TouchableOpacity
         style={styles.unfriendButton}
         onPress={() => {
@@ -262,7 +263,7 @@ export default function FriendsScreen() {
 
   const renderRequestItem = ({ item }: { item: FriendRequestWithUser }) => (
     <View style={styles.requestItem}>
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.requestInfo}
         onPress={() => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -271,8 +272,8 @@ export default function FriendsScreen() {
         activeOpacity={0.7}
       >
         {item.sender?.avatar_url ? (
-          <Image 
-            source={{ uri: item.sender.avatar_url }} 
+          <Image
+            source={{ uri: item.sender.avatar_url }}
             style={styles.requestAvatar}
           />
         ) : (
@@ -287,7 +288,7 @@ export default function FriendsScreen() {
           </Text>
         </View>
       </TouchableOpacity>
-      
+
       {activeTab === 'requests' ? (
         <View style={styles.requestActions}>
           <TouchableOpacity
@@ -300,7 +301,7 @@ export default function FriendsScreen() {
           >
             <Text style={styles.acceptButtonText}>Accept</Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity
             style={[styles.requestButton, styles.declineButton]}
             onPress={() => {
@@ -329,7 +330,7 @@ export default function FriendsScreen() {
 
   const renderBlockedUser = ({ item }: { item: BlockedUser }) => (
     <View style={styles.friendItem}>
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.friendInfo}
         onPress={() => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -338,8 +339,8 @@ export default function FriendsScreen() {
         activeOpacity={0.7}
       >
         {item.blocked_user?.avatar_url ? (
-          <Image 
-            source={{ uri: item.blocked_user.avatar_url }} 
+          <Image
+            source={{ uri: item.blocked_user.avatar_url }}
             style={styles.friendAvatar}
           />
         ) : (
@@ -357,7 +358,7 @@ export default function FriendsScreen() {
           </Text>
         </View>
       </TouchableOpacity>
-      
+
       <TouchableOpacity
         style={[styles.friendButton, styles.unblockButton]}
         onPress={() => {
@@ -429,18 +430,10 @@ export default function FriendsScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      
+
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            navigation.goBack();
-          }}
-        >
-          <Text style={styles.backButtonText}>←</Text>
-        </TouchableOpacity>
+        <BackButton style={styles.backButton} />
         <Text style={styles.title}>Friends</Text>
         <TouchableOpacity
           style={styles.searchButton}
@@ -467,7 +460,7 @@ export default function FriendsScreen() {
             {friends.length}
           </Text>
         </TouchableOpacity>
-        
+
         <TouchableOpacity
           style={[styles.tab, activeTab === 'requests' && styles.activeTab]}
           onPress={() => {
@@ -480,7 +473,7 @@ export default function FriendsScreen() {
             {pendingRequests.length}
           </Text>
         </TouchableOpacity>
-        
+
         <TouchableOpacity
           style={[styles.tab, activeTab === 'blocked' && styles.activeTab]}
           onPress={() => {
@@ -523,7 +516,7 @@ export default function FriendsScreen() {
             </View>
           )
         )}
-        
+
         {activeTab === 'requests' && (
           pendingRequests.length > 0 ? (
             <FlatList
@@ -541,7 +534,7 @@ export default function FriendsScreen() {
             </View>
           )
         )}
-        
+
         {activeTab === 'blocked' && (
           blockedUsers.length > 0 ? (
             <FlatList

@@ -17,18 +17,19 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import * as Haptics from 'expo-haptics';
 import { acceptFriendRequest, declineFriendRequest } from '../lib/friends';
+import { BackButton } from '../components/BackButton';
 
 interface NotificationRow {
   id: string;
   user_id: string;
   sender_id: string | null;
   type:
-    | 'friend_request'
-    | 'friend_request_approved'
-    | 'friend_request_declined'
-    | 'new_listing'
-    | 'direct_message'
-    | 'watchlist_update';
+  | 'friend_request'
+  | 'friend_request_approved'
+  | 'friend_request_declined'
+  | 'new_listing'
+  | 'direct_message'
+  | 'watchlist_update';
   content: string;
   related_id: string | null;
   read: boolean;
@@ -51,14 +52,14 @@ export default function NotificationsScreen() {
   const fetchNotifications = useCallback(
     async (options?: { skipSkeleton?: boolean }) => {
       if (!user?.id) return;
-    try {
+      try {
         if (!options?.skipSkeleton) {
           setLoading(true);
         }
-      const { data, error } = await supabase
-        .from('notifications')
-        .select(
-          `
+        const { data, error } = await supabase
+          .from('notifications')
+          .select(
+            `
           *,
           sender:sender_id (
             id,
@@ -66,20 +67,20 @@ export default function NotificationsScreen() {
             avatar_url
           )
         `,
-        )
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+          )
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setNotifications((data as NotificationRow[]) || []);
-    } catch (err) {
-      console.error('Error fetching notifications:', err);
-    } finally {
+        if (error) throw error;
+        setNotifications((data as NotificationRow[]) || []);
+      } catch (err) {
+        console.error('Error fetching notifications:', err);
+      } finally {
         if (!options?.skipSkeleton) {
           setLoading(false);
         }
         setRefreshing(false);
-    }
+      }
     },
     [user?.id],
   );
@@ -285,9 +286,9 @@ export default function NotificationsScreen() {
       onViewProfile={
         item.type === 'friend_request' && item.sender_id
           ? () => {
-              markAsRead(item.id);
-              handleOpenProfile(item);
-            }
+            markAsRead(item.id);
+            handleOpenProfile(item);
+          }
           : undefined
       }
       actionState={friendRequestActions[item.id] ?? 'idle'}
@@ -298,16 +299,7 @@ export default function NotificationsScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButtonContainer}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            navigation.goBack();
-          }}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.backButton}>←</Text>
-        </TouchableOpacity>
+        <BackButton style={styles.backButtonContainer} />
         <Text style={styles.title}>Notifications</Text>
         <View style={styles.placeholder} />
       </View>
@@ -318,8 +310,8 @@ export default function NotificationsScreen() {
         keyExtractor={(n) => n.id}
         contentContainerStyle={styles.listContainer}
         refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
+          <RefreshControl
+            refreshing={refreshing}
             onRefresh={onRefresh}
             tintColor="#3B82F6"
             colors={['#3B82F6']}

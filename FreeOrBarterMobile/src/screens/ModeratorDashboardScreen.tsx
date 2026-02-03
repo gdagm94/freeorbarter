@@ -22,6 +22,7 @@ import { removeContent, banUser, dismissReport, resolveReport } from '../lib/mod
 import * as Haptics from 'expo-haptics';
 import { useDeviceInfo } from '../hooks/useDeviceInfo';
 import { useResponsiveStyles, getResponsivePadding } from '../utils/responsive';
+import { BackButton } from '../components/BackButton';
 
 type ReportStatus = 'pending' | 'in_review' | 'resolved' | 'dismissed' | 'all';
 
@@ -47,7 +48,7 @@ export default function ModeratorDashboardScreen() {
     const checkAccess = async () => {
       const moderator = await isModerator();
       setUserIsModerator(moderator);
-      
+
       if (!moderator) {
         Alert.alert('Access Denied', 'You do not have moderator permissions.');
         navigation.goBack();
@@ -145,7 +146,7 @@ export default function ModeratorDashboardScreen() {
 
   const handleBanUser = async (report: Report) => {
     let userId: string;
-    
+
     if (report.target_type === 'user') {
       userId = report.target_id;
     } else {
@@ -252,7 +253,7 @@ export default function ModeratorDashboardScreen() {
     const date = new Date(dateString);
     const now = new Date();
     const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-    
+
     if (seconds < 60) return 'just now';
     const minutes = Math.floor(seconds / 60);
     if (minutes < 60) return `${minutes}m ago`;
@@ -264,11 +265,11 @@ export default function ModeratorDashboardScreen() {
 
   const renderReportItem = ({ item: report }: { item: Report }) => {
     const slaStatus = getSlaStatus(report);
-    const borderColor = 
+    const borderColor =
       report.status === 'pending' ? '#EAB308' :
-      report.status === 'in_review' ? '#3B82F6' :
-      report.status === 'resolved' ? '#10B981' :
-      '#6B7280';
+        report.status === 'in_review' ? '#3B82F6' :
+          report.status === 'resolved' ? '#10B981' :
+            '#6B7280';
 
     return (
       <TouchableOpacity
@@ -365,12 +366,7 @@ export default function ModeratorDashboardScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.backButton}
-        >
-          <Text style={styles.backButtonText}>← Back</Text>
-        </TouchableOpacity>
+        <BackButton style={styles.backButton} />
         <Text style={styles.title}>Moderator Dashboard</Text>
         <TouchableOpacity
           onPress={onRefresh}

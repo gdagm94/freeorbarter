@@ -21,6 +21,7 @@ import {
   sendFriendRequest,
   FriendshipStatus,
 } from '../lib/friends';
+import { BackButton } from '../components/BackButton';
 
 interface User {
   id: string;
@@ -73,7 +74,7 @@ export default function SearchUsersScreen() {
     try {
       const result = await sendFriendRequest(user.id, userId);
       if (result.error) throw result.error;
-      
+
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert('Success', 'Friend request sent!');
     } catch (error) {
@@ -95,8 +96,8 @@ export default function SearchUsersScreen() {
     >
       <View style={styles.userInfo}>
         {item.avatar_url ? (
-          <Image 
-            source={{ uri: item.avatar_url }} 
+          <Image
+            source={{ uri: item.avatar_url }}
             style={styles.userAvatar}
           />
         ) : (
@@ -113,7 +114,7 @@ export default function SearchUsersScreen() {
           )}
         </View>
       </View>
-      
+
       <TouchableOpacity
         style={styles.addButton}
         onPress={() => handleAddFriend(item.id)}
@@ -131,18 +132,10 @@ export default function SearchUsersScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      
+
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            navigation.goBack();
-          }}
-        >
-          <Text style={styles.backButtonText}>←</Text>
-        </TouchableOpacity>
+        <BackButton style={styles.backButton} />
         <Text style={styles.title}>Find Friends</Text>
         <View style={styles.placeholder} />
       </View>

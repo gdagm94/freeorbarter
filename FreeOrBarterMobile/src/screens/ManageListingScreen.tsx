@@ -15,6 +15,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { Item } from '../types';
 import * as Haptics from 'expo-haptics';
+import { BackButton } from '../components/BackButton';
 
 export default function ManageListingScreen() {
   const { user } = useAuth();
@@ -143,12 +144,7 @@ export default function ManageListingScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.headerButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={styles.headerButtonText}>‹ Back</Text>
-        </TouchableOpacity>
+        <BackButton />
         <Text style={styles.title}>Manage Listing</Text>
         <View style={styles.headerSpacer} />
       </View>

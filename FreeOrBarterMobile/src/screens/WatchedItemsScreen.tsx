@@ -19,6 +19,7 @@ import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabase';
 import { useNavigation } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
+import { BackButton } from '../components/BackButton';
 
 interface WatchedItem {
   id: string;
@@ -278,13 +279,13 @@ const WatchedItemsScreen: React.FC = () => {
             </View>
           </View>
         )}
-        
+
         <Image
           source={{ uri: item.item.images?.[0] || 'https://via.placeholder.com/150' }}
           style={styles.itemImage}
           resizeMode="cover"
         />
-        
+
         <View style={styles.itemContent}>
           <View style={styles.itemHeader}>
             <Text style={styles.itemTitle} numberOfLines={2}>
@@ -295,16 +296,16 @@ const WatchedItemsScreen: React.FC = () => {
               <Text style={styles.statusText}>{item.item.status}</Text>
             </View>
           </View>
-          
+
           <Text style={styles.itemCategory}>{item.item.category}</Text>
-          
+
           <View style={styles.itemMeta}>
             <Text style={styles.itemCondition}>{item.item.condition}</Text>
             <Text style={styles.itemLocation}>
               📍 {item.item.location}
             </Text>
           </View>
-          
+
           <View style={styles.itemFooter}>
             <View style={styles.userInfo}>
               <Image
@@ -339,18 +340,10 @@ const WatchedItemsScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
-      
+
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            navigation.goBack();
-          }}
-        >
-          <Text style={styles.backButtonText}>←</Text>
-        </TouchableOpacity>
+        <BackButton style={styles.backButton} />
         <View style={styles.headerContent}>
           <Text style={styles.title}>Watchlist</Text>
           <Text style={styles.subtitle}>
@@ -372,7 +365,7 @@ const WatchedItemsScreen: React.FC = () => {
             placeholderTextColor="#9CA3AF"
           />
         </View>
-        
+
         <View style={styles.controlButtons}>
           <TouchableOpacity
             style={styles.controlButton}
@@ -381,7 +374,7 @@ const WatchedItemsScreen: React.FC = () => {
             <Text style={styles.controlButtonIcon}>{getSortIcon(sortBy)}</Text>
             <Text style={styles.controlButtonText}>Sort</Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity
             style={styles.controlButton}
             onPress={() => setShowFilterModal(true)}
@@ -417,11 +410,11 @@ const WatchedItemsScreen: React.FC = () => {
       {sortedAndFilteredItems.length === 0 ? (
         renderEmptyState()
       ) : (
-      <FlatList
+        <FlatList
           data={sortedAndFilteredItems}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContainer}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContainer}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -509,7 +502,7 @@ const WatchedItemsScreen: React.FC = () => {
               <Text style={styles.modalCloseButtonText}>Close</Text>
             </TouchableOpacity>
           </View>
-    </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );

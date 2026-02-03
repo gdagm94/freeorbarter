@@ -28,6 +28,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import * as Application from 'expo-application';
 import { isModerator } from '../lib/moderator';
+import { BackButton } from '../components/BackButton';
 
 interface UserProfile {
   id: string;
@@ -86,7 +87,7 @@ export default function SettingsScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Form data
   const [formData, setFormData] = useState({
     username: '',
@@ -96,7 +97,7 @@ export default function SettingsScreen() {
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [avatarFile, setAvatarFile] = useState<any>(null);
   const [userIsModerator, setUserIsModerator] = useState(false);
-  
+
   // Location states
   const [useCurrentLocation, setUseCurrentLocation] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
@@ -189,16 +190,16 @@ export default function SettingsScreen() {
       const response = await fetch(
         `https://nominatim.openstreetmap.org/search?postalcode=${zipcode}&country=usa&format=json&limit=1`
       );
-      
+
       if (!response.ok) return;
-      
+
       const data = await response.json();
-      
+
       if (data && data[0]) {
         const address = data[0].address || {};
         const city = address.city || address.town || address.village || '';
         const state = address.state || '';
-        
+
         if (city && state) {
           const location: LocationData = {
             label: `${city}, ${state}`,
@@ -208,7 +209,7 @@ export default function SettingsScreen() {
             latitude: parseFloat(data[0].lat),
             longitude: parseFloat(data[0].lon)
           };
-          
+
           setSelectedLocation(location);
         }
       }
@@ -397,20 +398,20 @@ export default function SettingsScreen() {
       });
 
       const { latitude, longitude } = location.coords;
-      
+
       const response = await fetch(
         `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
       );
-      
+
       if (!response.ok) throw new Error('Failed to get location details');
-      
+
       const data = await response.json();
       const address = data.address || {};
-      
+
       const city = address.city || address.town || address.village || '';
       const state = address.state || '';
       const zipcode = address.postcode || '';
-      
+
       if (!city || !state) {
         throw new Error('Could not determine your location');
       }
@@ -436,7 +437,7 @@ export default function SettingsScreen() {
 
   const handleManualLocationSubmit = async () => {
     const { city, state, zipcode } = manualFormData;
-    
+
     if (!city || !state || !zipcode) {
       setError('All fields are required for manual entry');
       return;
@@ -451,9 +452,9 @@ export default function SettingsScreen() {
       const response = await fetch(
         `https://nominatim.openstreetmap.org/search?city=${encodeURIComponent(city)}&state=${encodeURIComponent(state)}&postalcode=${zipcode}&country=usa&format=json`
       );
-      
+
       const data = await response.json();
-      
+
       const location: LocationData = {
         label: `${city}, ${state}`,
         city,
@@ -563,20 +564,12 @@ export default function SettingsScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      
+
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.headerButton}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            navigation.goBack();
-          }}
-        >
-          <Text style={styles.headerButtonText}>←</Text>
-        </TouchableOpacity>
+        <BackButton style={styles.headerButton} />
         <Text style={styles.title}>Edit Profile</Text>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[styles.headerButton, styles.saveButton, saving && styles.saveButtonDisabled]}
           onPress={handleSave}
           disabled={saving}
@@ -587,12 +580,12 @@ export default function SettingsScreen() {
         </TouchableOpacity>
       </View>
 
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <ScrollView 
-          style={styles.scrollView} 
+        <ScrollView
+          style={styles.scrollView}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
@@ -642,7 +635,7 @@ export default function SettingsScreen() {
                 <View style={styles.locationDisplay}>
                   <Text style={styles.locationIcon}>📍</Text>
                   <Text style={styles.locationText}>{selectedLocation.label}</Text>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={styles.locationChangeButton}
                     onPress={() => setSelectedLocation(null)}
                   >
@@ -651,7 +644,7 @@ export default function SettingsScreen() {
                 </View>
               ) : (
                 <View style={styles.locationOptions}>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={[styles.locationOption, isLocating && styles.locationOptionDisabled]}
                     onPress={handleCurrentLocation}
                     disabled={isLocating}
@@ -661,8 +654,8 @@ export default function SettingsScreen() {
                       {isLocating ? 'Getting location...' : 'Use current location'}
                     </Text>
                   </TouchableOpacity>
-                  
-                  <TouchableOpacity 
+
+                  <TouchableOpacity
                     style={styles.locationOption}
                     onPress={() => setShowManualEntry(true)}
                   >
@@ -805,14 +798,14 @@ export default function SettingsScreen() {
       >
         <SafeAreaView style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => setShowManualEntry(false)}
               style={styles.modalButton}
             >
               <Text style={styles.modalButtonText}>Cancel</Text>
             </TouchableOpacity>
             <Text style={styles.modalTitle}>Enter Location</Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={handleManualLocationSubmit}
               style={[styles.modalButton, styles.modalSaveButton]}
             >
