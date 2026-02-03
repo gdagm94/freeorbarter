@@ -228,14 +228,14 @@ export default function MessagesScreen() {
               if (!user?.id) return;
               const { error } = await supabase
                 .from('messages')
-                .update({ deleted: true })
+                .update({ archived: true })
                 .or(`and(sender_id.eq.${user.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${user.id})`);
 
               if (error) throw error;
 
               setConversations(prev =>
                 prev.map(conv =>
-                  conv.id === conversationId ? { ...conv, deleted: true } : conv
+                  conv.id === conversationId ? { ...conv, archived: true } : conv
                 )
               );
 
@@ -258,14 +258,14 @@ export default function MessagesScreen() {
 
       const { error } = await supabase
         .from('messages')
-        .update({ deleted: false })
+        .update({ archived: false })
         .or(`and(sender_id.eq.${user.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${user.id})`);
 
       if (error) throw error;
 
       setConversations(prev =>
         prev.map(conv =>
-          conv.id === conversationId ? { ...conv, deleted: false } : conv
+          conv.id === conversationId ? { ...conv, archived: false } : conv
         )
       );
 
@@ -277,56 +277,106 @@ export default function MessagesScreen() {
     }
   };
 
-  const markConversationUnread = async (conversationId: string, otherUserId: string) => {
+  const permanentlyDeleteConversation = async (conversationId: string, otherUserId: string) => {
+    Alert.alert(
+      'Delete Forever',
+      'Are you sure you want to permanently delete this conversation? This action cannot be undone and will remove the history for both users.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Forever',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              if (!user?.id) return;
+
+              const { error } = await supabase
+                .from('messages')
+                .delete()
+                .or(`and(sender_id.eq.${user.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${user.id})`);
+
+              if (error) throw error;
+
+              setConversations(prev => prev.filter(conv => conv.id !== conversationId));
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            } catch (error) {
+              console.error('Error permanently deleting conversation:', error);
+              Alert.alert('Error', 'Failed to delete conversation forever');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const toggleReadStatus = async (conversationId: string, otherUserId: string, currentUnreadCount: number) => {
     try {
       if (!user?.id) {
-        Alert.alert('Sign in required', 'Please sign in to mark messages as unread.');
+        Alert.alert('Sign in required', 'Please sign in to change message status.');
         return;
       }
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-      const { data, error: fetchError } = await supabase
-        .from('messages')
-        .select('id')
-        .eq('sender_id', otherUserId)
-        .eq('receiver_id', user?.id)
-        .order('created_at', { ascending: false })
-        .limit(1);
+      if (currentUnreadCount > 0) {
+        // Mark as Read
+        const { error } = await supabase
+          .from('messages')
+          .update({ read: true })
+          .eq('sender_id', otherUserId)
+          .eq('receiver_id', user.id)
+          .eq('read', false);
 
-      if (fetchError) throw fetchError;
-      const latestMessage = (data as any[])?.[0];
-      if (!latestMessage?.id) {
-        Alert.alert('No messages', 'No messages to mark as unread.');
-        return;
+        if (error) throw error;
+
+        setConversations(prev =>
+          prev.map(conv =>
+            conv.id === conversationId ? { ...conv, unread_count: 0 } : conv
+          )
+        );
+      } else {
+        // Mark as Unread
+        const { data, error: fetchError } = await supabase
+          .from('messages')
+          .select('id')
+          .eq('sender_id', otherUserId)
+          .eq('receiver_id', user?.id)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (fetchError) throw fetchError;
+        const latestMessage = (data as any[])?.[0];
+        if (!latestMessage?.id) {
+          Alert.alert('No messages', 'No messages to mark as unread.');
+          return;
+        }
+
+        const { error: updateError } = await supabase
+          .from('messages')
+          .update({ read: false })
+          .eq('id', latestMessage.id);
+
+        if (updateError) throw updateError;
+
+        setConversations(prev =>
+          prev.map(conv => {
+            if (conv.id !== conversationId) return conv;
+            return { ...conv, unread_count: 1 };
+          })
+        );
       }
-
-      const { error: updateError } = await supabase
-        .from('messages')
-        .update({ read: false })
-        .eq('id', latestMessage.id);
-
-      if (updateError) throw updateError;
-
-      setConversations(prev =>
-        prev.map(conv => {
-          if (conv.id !== conversationId) return conv;
-          const nextCount = conv.unread_count > 0 ? conv.unread_count : 1;
-          return { ...conv, unread_count: nextCount };
-        })
-      );
 
       handleSwipeRight(conversationId);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
-      console.error('Error marking conversation unread:', error);
-      Alert.alert('Error', 'Failed to mark conversation as unread');
+      console.error('Error toggling read status:', error);
+      Alert.alert('Error', 'Failed to update message status');
     }
   };
 
   const filteredConversations = conversations.filter(conv => {
     if (filter === 'unread') return conv.unread_count > 0 && !conv.archived && !conv.deleted;
     if (filter === 'offers') return conv.has_offer && !conv.archived && !conv.deleted;
-    if (filter === 'deleted') return conv.deleted === true;
+    if (filter === 'deleted') return conv.archived === true;
     return !conv.archived && !conv.deleted;
   });
 
@@ -354,22 +404,35 @@ export default function MessagesScreen() {
       <View style={styles.conversationWrapper}>
         {/* Action Buttons */}
         <View style={styles.actionButtons} {...panResponder.panHandlers}>
-          {item.deleted ? (
-            <TouchableOpacity
-              style={[styles.actionButton, styles.retrieveButton]}
-              onPress={() => retrieveConversation(item.id, item.other_user_id)}
-            >
-              <Text style={styles.actionButtonText}>📥</Text>
-              <Text style={styles.actionButtonLabel}>Retrieve</Text>
-            </TouchableOpacity>
+          {item.archived ? (
+            <>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.retrieveButton]}
+                onPress={() => retrieveConversation(item.id, item.other_user_id)}
+              >
+                <Text style={styles.actionButtonText}>📥</Text>
+                <Text style={styles.actionButtonLabel}>Retrieve</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.deleteButton]}
+                onPress={() => permanentlyDeleteConversation(item.id, item.other_user_id)}
+              >
+                <Text style={styles.actionButtonText}>🔥</Text>
+                <Text style={styles.actionButtonLabel}>Forever</Text>
+              </TouchableOpacity>
+            </>
           ) : (
             <>
               <TouchableOpacity
                 style={[styles.actionButton, styles.unreadButton]}
-                onPress={() => markConversationUnread(item.id, item.other_user_id)}
+                onPress={() => toggleReadStatus(item.id, item.other_user_id, item.unread_count)}
               >
-                <Text style={styles.actionButtonText}>🔵</Text>
-                <Text style={styles.actionButtonLabel}>Unread</Text>
+                <Text style={styles.actionButtonText}>
+                  {item.unread_count > 0 ? '📖' : '🔵'}
+                </Text>
+                <Text style={styles.actionButtonLabel}>
+                  {item.unread_count > 0 ? 'Read' : 'Unread'}
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.actionButton, styles.deleteButton]}
@@ -387,7 +450,7 @@ export default function MessagesScreen() {
           style={[
             styles.conversationItem,
             item.unread_count > 0 && styles.unreadConversation,
-            item.deleted && styles.deletedConversation,
+            item.archived && styles.deletedConversation,
             { transform: [{ translateX: getSwipeAnimation(item.id) }] }
           ]}
           {...panResponder.panHandlers}
@@ -395,7 +458,7 @@ export default function MessagesScreen() {
           <TouchableOpacity
             style={styles.conversationTouchable}
             onPress={() => {
-              if (item.deleted) return;
+              if (item.archived) return;
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               const otherUserId = item.other_user_id;
               navigation.navigate('Chat', {
