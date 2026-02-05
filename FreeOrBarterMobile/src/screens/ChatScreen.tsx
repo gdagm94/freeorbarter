@@ -345,9 +345,15 @@ export default function ChatScreen() {
             .eq('receiver_id', user.id)
             .eq('read', false);
 
+          // In our unified chat view, we want to mark ALL messages from this sender as read
+          // irrespective of which "thread" they technically belong to.
+          // The previous logic was too restrictive by filtering on thread_id.
+
+          /* 
           if (existingThreadId || threadId) {
             readQuery = readQuery.eq('thread_id', existingThreadId || threadId);
           }
+          */
 
           await readQuery;
         } catch { }

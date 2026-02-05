@@ -145,7 +145,11 @@ export function MessageList({
         .eq('sender_id', otherUserId)
         .eq('read', false);
 
-      if (threadId) {
+      if (conversationType === 'unified') {
+        // In unified mode, we mark ALL messages from this user as read, regardless of thread or item
+        // This matches the visual behavior where all messages are shown together
+        query = query;
+      } else if (threadId) {
         query = query.eq('thread_id', threadId);
       } else if (conversationType === 'item' && itemId) {
         query = query.eq('item_id', itemId);
