@@ -83,14 +83,35 @@ function Notifications() {
     // Mark as read if not already read
     if (!notification.read) {
       try {
-        await supabase
-          .from('notifications')
-          .update({ read: true })
-          .eq('id', notification.id);
+        if (notification.type === 'direct_message' && notification.sender_id) {
+          // Batch-dismiss all direct_message notifications from this sender
+          await supabase
+            .from('notifications')
+            .update({ read: true })
+            .eq('user_id', user!.id)
+            .eq('sender_id', notification.sender_id)
+            .eq('type', 'direct_message')
+            .eq('read', false);
+          window.dispatchEvent(new Event('notifications-updated'));
 
-        setNotifications(prev =>
-          prev.map(n => n.id === notification.id ? { ...n, read: true } : n)
-        );
+          setNotifications(prev =>
+            prev.map(n =>
+              (n.type === 'direct_message' && n.sender_id === notification.sender_id)
+                ? { ...n, read: true }
+                : n
+            )
+          );
+        } else {
+          // For non-message notifications, mark only the clicked one
+          await supabase
+            .from('notifications')
+            .update({ read: true })
+            .eq('id', notification.id);
+
+          setNotifications(prev =>
+            prev.map(n => n.id === notification.id ? { ...n, read: true } : n)
+          );
+        }
       } catch (err) {
         console.error('Error marking notification as read:', err);
       }
@@ -113,6 +134,9 @@ function Notifications() {
         break;
       case 'watchlist_update':
         path = `/items/${notification.related_id}`;
+        break;
+      case 'welcome':
+        path = '/profile';
         break;
     }
 
@@ -148,6 +172,8 @@ function Notifications() {
         return <MessageCircle className="w-6 h-6 text-indigo-500" />;
       case 'watchlist_update':
         return <Star className="w-6 h-6 text-yellow-500" />;
+      case 'welcome':
+        return <UserPlus className="w-6 h-6 text-indigo-500" />;
       default:
         return <User className="w-6 h-6 text-gray-500" />;
     }

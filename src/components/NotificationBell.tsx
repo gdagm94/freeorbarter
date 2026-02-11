@@ -36,6 +36,7 @@ export function NotificationBell() {
 
     fetchUnreadCount();
 
+    // Realtime subscription for DB changes
     const channel = supabase
       .channel(`notifications-count-${user.id}`)
       .on(
@@ -45,11 +46,16 @@ export function NotificationBell() {
       )
       .subscribe();
 
+    // Listen for custom event dispatched when notifications are batch-dismissed
+    const handleCustomUpdate = () => fetchUnreadCount();
+    window.addEventListener('notifications-updated', handleCustomUpdate);
+
     const fallbackInterval = setInterval(fetchUnreadCount, 60000);
 
     return () => {
       isMounted = false;
       channel.unsubscribe();
+      window.removeEventListener('notifications-updated', handleCustomUpdate);
       clearInterval(fallbackInterval);
     };
   }, [user]);
@@ -72,8 +78,15 @@ export function NotificationBell() {
   };
 
   const handleNotificationRead = () => {
-    // Decrease unread count when a notification is marked as read
-    setUnreadCount(prev => Math.max(0, prev - 1));
+    // Re-fetch the actual count from DB for accuracy (handles batch dismissals)
+    if (user) {
+      supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('read', false)
+        .then(({ count }) => setUnreadCount(count || 0));
+    }
   };
 
   const handleMarkAllAsRead = () => {

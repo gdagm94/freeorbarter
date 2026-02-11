@@ -93,12 +93,13 @@ export function useAuth() {
     return { error };
   };
 
-  const signUp = async (email: string, password: string, fullName: string) => {
+  const signUp = async (email: string, password: string, fullName: string, username: string) => {
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
+          username: username.toLowerCase(),
           full_name: fullName,
         },
       },

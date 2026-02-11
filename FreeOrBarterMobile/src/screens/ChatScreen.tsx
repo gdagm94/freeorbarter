@@ -356,6 +356,15 @@ export default function ChatScreen() {
           */
 
           await readQuery;
+
+          // Auto-dismiss all unread direct_message notifications from this sender
+          await supabase
+            .from('notifications')
+            .update({ read: true })
+            .eq('user_id', user.id)
+            .eq('sender_id', otherUserId)
+            .eq('type', 'direct_message')
+            .eq('read', false);
         } catch { }
       }
       setMessages(all);

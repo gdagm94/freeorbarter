@@ -126,6 +126,7 @@ export function MessageList({
   const threadChannelRef = useRef<any>(null);
 
   // Debounced function to emit typing status
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const emitTypingStatus = debounce(1000, async (_isTyping?: boolean) => {
     // Typing events not wired to room channel yet; skip for now.
   });
@@ -148,7 +149,7 @@ export function MessageList({
       if (conversationType === 'unified') {
         // In unified mode, we mark ALL messages from this user as read, regardless of thread or item
         // This matches the visual behavior where all messages are shown together
-        query = query;
+        // No additional filters needed — the base query already covers all messages from this sender
       } else if (threadId) {
         query = query.eq('thread_id', threadId);
       } else if (conversationType === 'item' && itemId) {
@@ -162,6 +163,21 @@ export function MessageList({
       if (error) {
         console.error('Error updating message read status:', error);
         return;
+      }
+
+      // Auto-dismiss all unread direct_message notifications from this sender
+      try {
+        await supabase
+          .from('notifications')
+          .update({ read: true })
+          .eq('user_id', currentUserId)
+          .eq('sender_id', otherUserId)
+          .eq('type', 'direct_message')
+          .eq('read', false);
+        // Immediately notify the bell badge to re-fetch its count
+        window.dispatchEvent(new Event('notifications-updated'));
+      } catch (notifErr) {
+        console.error('Error auto-dismissing notifications:', notifErr);
       }
 
       setMessages(prev =>

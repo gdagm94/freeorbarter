@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,25 +11,92 @@ import {
   StatusBar,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
 import { useDeviceInfo } from '../hooks/useDeviceInfo';
 import { useResponsiveStyles, getResponsivePadding } from '../utils/responsive';
+import { supabase } from '../lib/supabase';
+
+const USERNAME_REGEX = /^[a-z0-9_.]{3,20}$/;
+const PROHIBITED_USERNAMES = ['admin', 'moderator', 'system', 'support', 'freeorbarter', 'null', 'undefined'];
 
 export default function AuthScreen() {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
+  const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
 
+  // Username validation state
+  const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle');
+  const [usernameError, setUsernameError] = useState<string | null>(null);
+  const usernameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const { signIn, signUp, resetPassword } = useAuth();
   const { isTablet } = useDeviceInfo();
   const responsiveStyles = useResponsiveStyles();
   const padding = getResponsivePadding(isTablet);
+
+  const checkUsernameAvailability = useCallback(async (uname: string) => {
+    const lower = uname.toLowerCase();
+    if (!USERNAME_REGEX.test(lower)) {
+      setUsernameStatus('invalid');
+      setUsernameError('Username must be 3–20 characters: letters, numbers, _ or .');
+      return;
+    }
+    if (PROHIBITED_USERNAMES.includes(lower)) {
+      setUsernameStatus('invalid');
+      setUsernameError('This username is not allowed');
+      return;
+    }
+    setUsernameStatus('checking');
+    setUsernameError(null);
+    try {
+      const { data, error: rpcError } = await supabase.rpc('check_username_available', { p_username: lower });
+      if (rpcError) throw rpcError;
+      if (data) {
+        setUsernameStatus('available');
+        setUsernameError(null);
+      } else {
+        setUsernameStatus('taken');
+        setUsernameError('Username already taken');
+      }
+    } catch {
+      setUsernameStatus('invalid');
+      setUsernameError('Could not check availability. Please try again.');
+    }
+  }, []);
+
+  const handleUsernameChange = useCallback((value: string) => {
+    setUsername(value);
+    const lower = value.toLowerCase();
+    if (usernameTimerRef.current) clearTimeout(usernameTimerRef.current);
+    if (!lower) {
+      setUsernameStatus('idle');
+      setUsernameError(null);
+      return;
+    }
+    if (!USERNAME_REGEX.test(lower)) {
+      setUsernameStatus('invalid');
+      setUsernameError('Username must be 3–20 characters: letters, numbers, _ or .');
+      return;
+    }
+    if (PROHIBITED_USERNAMES.includes(lower)) {
+      setUsernameStatus('invalid');
+      setUsernameError('This username is not allowed');
+      return;
+    }
+    setUsernameStatus('checking');
+    setUsernameError(null);
+    usernameTimerRef.current = setTimeout(() => {
+      checkUsernameAvailability(lower);
+    }, 300);
+  }, [checkUsernameAvailability]);
 
 
   const handleSubmit = async () => {
@@ -40,6 +107,21 @@ export default function AuthScreen() {
 
     if (!isLogin && !fullName) {
       Alert.alert('Missing Information', 'Please enter your full name');
+      return;
+    }
+
+    if (!isLogin && !username) {
+      Alert.alert('Missing Information', 'Please enter a username');
+      return;
+    }
+
+    if (!isLogin && !USERNAME_REGEX.test(username.toLowerCase())) {
+      Alert.alert('Invalid Username', 'Username must be 3–20 characters: letters, numbers, _ or .');
+      return;
+    }
+
+    if (!isLogin && usernameStatus !== 'available') {
+      Alert.alert('Invalid Username', 'Please choose an available username');
       return;
     }
 
@@ -57,12 +139,12 @@ export default function AuthScreen() {
           Alert.alert('Sign In Failed', error.message);
         }
       } else {
-        const { error } = await signUp(email, password, fullName);
+        const { error } = await signUp(email, password, fullName, username);
         if (error) {
           Alert.alert('Sign Up Failed', error.message);
         } else {
           Alert.alert(
-            'Account Created!', 
+            'Account Created!',
             'Please check your email to verify your account before signing in.',
             [{ text: 'OK', onPress: () => setIsLogin(true) }]
           );
@@ -120,11 +202,11 @@ export default function AuthScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <ScrollView 
+        <ScrollView
           contentContainerStyle={[styles.scrollContent, { paddingHorizontal: padding }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
@@ -187,18 +269,53 @@ export default function AuthScreen() {
               <>
                 {/* Regular Sign In/Sign Up Form */}
                 {!isLogin && (
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Full Name</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Enter your full name"
-                      placeholderTextColor="#9CA3AF"
-                      value={fullName}
-                      onChangeText={setFullName}
-                      autoCapitalize="words"
-                      textContentType="name"
-                    />
-                  </View>
+                  <>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Username</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="e.g. jane_doe"
+                        placeholderTextColor="#9CA3AF"
+                        value={username}
+                        onChangeText={handleUsernameChange}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        textContentType="username"
+                      />
+                      {username.length > 0 && (
+                        <View style={styles.usernameStatus}>
+                          {usernameStatus === 'checking' && (
+                            <View style={styles.statusRow}>
+                              <ActivityIndicator size="small" color="#9CA3AF" />
+                              <Text style={styles.statusChecking}> Checking availability…</Text>
+                            </View>
+                          )}
+                          {usernameStatus === 'available' && (
+                            <Text style={styles.statusAvailable}>✅ Username is available</Text>
+                          )}
+                          {usernameStatus === 'taken' && (
+                            <Text style={styles.statusError}>❌ Username already taken</Text>
+                          )}
+                          {usernameStatus === 'invalid' && (
+                            <Text style={styles.statusError}>❌ {usernameError}</Text>
+                          )}
+                        </View>
+                      )}
+                    </View>
+
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Full Name</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Enter your full name"
+                        placeholderTextColor="#9CA3AF"
+                        value={fullName}
+                        onChangeText={setFullName}
+                        autoCapitalize="words"
+                        textContentType="name"
+                      />
+                    </View>
+                  </>
                 )}
 
                 <View style={styles.inputGroup}>
@@ -271,8 +388,11 @@ export default function AuthScreen() {
                 onPress={() => {
                   setIsLogin(!isLogin);
                   setFullName('');
+                  setUsername('');
                   setEmail('');
                   setPassword('');
+                  setUsernameStatus('idle');
+                  setUsernameError(null);
                 }}
                 activeOpacity={0.7}
               >
@@ -456,5 +576,27 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     textAlign: 'center',
     lineHeight: 18,
+  },
+  usernameStatus: {
+    marginTop: 6,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statusChecking: {
+    fontSize: 13,
+    color: '#9CA3AF',
+    fontWeight: '500',
+  },
+  statusAvailable: {
+    fontSize: 13,
+    color: '#16A34A',
+    fontWeight: '500',
+  },
+  statusError: {
+    fontSize: 13,
+    color: '#DC2626',
+    fontWeight: '500',
   },
 });

@@ -29,7 +29,8 @@ interface NotificationRow {
   | 'friend_request_declined'
   | 'new_listing'
   | 'direct_message'
-  | 'watchlist_update';
+  | 'watchlist_update'
+  | 'welcome';
   content: string;
   related_id: string | null;
   read: boolean;
@@ -145,6 +146,8 @@ export default function NotificationsScreen() {
         return '💬';
       case 'watchlist_update':
         return '⭐';
+      case 'welcome':
+        return '👋';
       default:
         return '🔔';
     }
@@ -164,6 +167,8 @@ export default function NotificationsScreen() {
         return 'Message';
       case 'watchlist_update':
         return 'Watchlist';
+      case 'welcome':
+        return 'Welcome';
       default:
         return 'Notification';
     }
@@ -190,9 +195,33 @@ export default function NotificationsScreen() {
     navigation.navigate('UserProfile', { userId: item.sender_id });
   };
 
-  const handleNotificationPress = (item: NotificationRow) => {
+  const handleNotificationPress = async (item: NotificationRow) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    markAsRead(item.id);
+
+    if (item.type === 'direct_message' && item.sender_id) {
+      // Batch-dismiss all direct_message notifications from this sender
+      try {
+        await supabase
+          .from('notifications')
+          .update({ read: true })
+          .eq('user_id', user?.id)
+          .eq('sender_id', item.sender_id)
+          .eq('type', 'direct_message')
+          .eq('read', false);
+
+        setNotifications(prev =>
+          prev.map(n =>
+            (n.type === 'direct_message' && n.sender_id === item.sender_id)
+              ? { ...n, read: true }
+              : n
+          )
+        );
+      } catch (err) {
+        console.error('Error batch-dismissing notifications:', err);
+      }
+    } else {
+      markAsRead(item.id);
+    }
 
     switch (item.type) {
       case 'friend_request':
@@ -209,6 +238,9 @@ export default function NotificationsScreen() {
         if (item.related_id) {
           navigation.navigate('ItemDetails', { itemId: item.related_id });
         }
+        break;
+      case 'welcome':
+        navigation.navigate('Settings');
         break;
       default:
         break;

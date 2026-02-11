@@ -1,8 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { PASSWORD_RESET_REDIRECT } from '../lib/config';
 import { X, Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
+
+const USERNAME_REGEX = /^[a-z0-9_.]{3,20}$/;
+const PROHIBITED_USERNAMES = ['admin', 'moderator', 'system', 'support', 'freeorbarter', 'null', 'undefined'];
 
 interface AuthProps {
   onClose: () => void;
@@ -19,9 +22,15 @@ export function Auth({ onClose }: AuthProps) {
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
 
+  // Username validation state
+  const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle');
+  const [usernameError, setUsernameError] = useState<string | null>(null);
+  const usernameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Form fields
   const [formData, setFormData] = useState({
     name: '',
+    username: '',
     email: '',
     password: '',
     confirmPassword: '',
@@ -41,15 +50,80 @@ export function Auth({ onClose }: AuthProps) {
     };
   }, [onClose]);
 
+  const checkUsernameAvailability = useCallback(async (username: string) => {
+    const lower = username.toLowerCase();
+    if (!USERNAME_REGEX.test(lower)) {
+      setUsernameStatus('invalid');
+      setUsernameError('Username must be 3–20 characters: letters, numbers, _ or .');
+      return;
+    }
+    if (PROHIBITED_USERNAMES.includes(lower)) {
+      setUsernameStatus('invalid');
+      setUsernameError('This username is not allowed');
+      return;
+    }
+    setUsernameStatus('checking');
+    setUsernameError(null);
+    try {
+      const { data, error: rpcError } = await supabase.rpc('check_username_available', { p_username: lower });
+      if (rpcError) throw rpcError;
+      if (data) {
+        setUsernameStatus('available');
+        setUsernameError(null);
+      } else {
+        setUsernameStatus('taken');
+        setUsernameError('Username already taken');
+      }
+    } catch {
+      setUsernameStatus('invalid');
+      setUsernameError('Could not check availability. Please try again.');
+    }
+  }, []);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+
+    if (name === 'username') {
+      const lower = value.toLowerCase();
+      if (usernameTimerRef.current) clearTimeout(usernameTimerRef.current);
+      if (!lower) {
+        setUsernameStatus('idle');
+        setUsernameError(null);
+        return;
+      }
+      if (!USERNAME_REGEX.test(lower)) {
+        setUsernameStatus('invalid');
+        setUsernameError('Username must be 3–20 characters: letters, numbers, _ or .');
+        return;
+      }
+      if (PROHIBITED_USERNAMES.includes(lower)) {
+        setUsernameStatus('invalid');
+        setUsernameError('This username is not allowed');
+        return;
+      }
+      setUsernameStatus('checking');
+      setUsernameError(null);
+      usernameTimerRef.current = setTimeout(() => {
+        checkUsernameAvailability(lower);
+      }, 300);
+    }
   };
 
   const validateForm = () => {
     if (isSignUp) {
+      if (!formData.username.trim()) {
+        setError('Username is required');
+        return false;
+      }
+      if (!USERNAME_REGEX.test(formData.username.toLowerCase())) {
+        setError('Username must be 3–20 characters: letters, numbers, _ or .');
+        return false;
+      }
+      if (usernameStatus !== 'available') {
+        setError('Please choose an available username');
+        return false;
+      }
       if (!formData.name.trim()) {
         setError('Name is required');
         return false;
@@ -73,7 +147,7 @@ export function Auth({ onClose }: AuthProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
-    
+
     setLoading(true);
     setError(null);
 
@@ -84,6 +158,7 @@ export function Auth({ onClose }: AuthProps) {
           password: formData.password,
           options: {
             data: {
+              username: formData.username.toLowerCase(),
               full_name: formData.name,
               gender: formData.gender || null,
             },
@@ -134,8 +209,11 @@ export function Auth({ onClose }: AuthProps) {
     setError(null);
     setConfirmationSent(false);
     setAcceptedTerms(false);
+    setUsernameStatus('idle');
+    setUsernameError(null);
     setFormData({
       name: '',
+      username: '',
       email: '',
       password: '',
       confirmPassword: '',
@@ -155,7 +233,7 @@ export function Auth({ onClose }: AuthProps) {
           </button>
           <h2 className="text-2xl font-bold mb-4">Check Your Email</h2>
           <p className="text-gray-600 mb-4">
-            We've sent a confirmation link to <strong>{formData.email}</strong>. 
+            We've sent a confirmation link to <strong>{formData.email}</strong>.
             Please check your email and click the link to complete your registration.
           </p>
           <p className="text-gray-500 text-sm mb-6">
@@ -242,20 +320,49 @@ export function Auth({ onClose }: AuthProps) {
             )}
             <form onSubmit={handleSubmit} className="space-y-4">
               {isSignUp && (
-                <div>
-                  <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                    Name <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    id="name"
-                    name="name"
-                    type="text"
-                    value={formData.name}
-                    onChange={handleInputChange}
-                    className={inputClasses}
-                    required
-                  />
-                </div>
+                <>
+                  <div>
+                    <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+                      Username <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      id="username"
+                      name="username"
+                      type="text"
+                      value={formData.username}
+                      onChange={handleInputChange}
+                      className={inputClasses}
+                      placeholder="e.g. jane_doe"
+                      required
+                      autoComplete="username"
+                    />
+                    {formData.username && (
+                      <p className={`mt-1 text-sm ${usernameStatus === 'available' ? 'text-green-600' :
+                          usernameStatus === 'checking' ? 'text-gray-500' :
+                            'text-red-600'
+                        }`}>
+                        {usernameStatus === 'checking' && '⏳ Checking availability…'}
+                        {usernameStatus === 'available' && '✅ Username is available'}
+                        {usernameStatus === 'taken' && '❌ Username already taken'}
+                        {usernameStatus === 'invalid' && `❌ ${usernameError}`}
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+                      Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      id="name"
+                      name="name"
+                      type="text"
+                      value={formData.name}
+                      onChange={handleInputChange}
+                      className={inputClasses}
+                      required
+                    />
+                  </div>
+                </>
               )}
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700">

@@ -1321,6 +1321,10 @@ export type Database = {
         Args: { ban_reason?: string; user_id_to_ban: string }
         Returns: undefined
       }
+      check_username_available: {
+        Args: { p_username: string }
+        Returns: boolean
+      }
       cleanup_friend_request_pair: {
         Args: { p_receiver: string; p_sender: string }
         Returns: string

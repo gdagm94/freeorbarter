@@ -74,15 +74,44 @@ export function NotificationDropdown({ onClose, onNotificationRead, onMarkAllAsR
     // Mark as read if not already read
     if (!notification.read) {
       try {
-        await supabase
-          .from('notifications')
-          .update({ read: true })
-          .eq('id', notification.id);
+        if (notification.type === 'direct_message' && notification.sender_id) {
+          // Batch-dismiss all direct_message notifications from this sender
+          await supabase
+            .from('notifications')
+            .update({ read: true })
+            .eq('user_id', user!.id)
+            .eq('sender_id', notification.sender_id)
+            .eq('type', 'direct_message')
+            .eq('read', false);
+          window.dispatchEvent(new Event('notifications-updated'));
 
-        setNotifications(prev =>
-          prev.map(n => n.id === notification.id ? { ...n, read: true } : n)
-        );
-        onNotificationRead();
+          const dismissedCount = notifications.filter(
+            n => n.type === 'direct_message' && n.sender_id === notification.sender_id && !n.read
+          ).length;
+
+          setNotifications(prev =>
+            prev.map(n =>
+              (n.type === 'direct_message' && n.sender_id === notification.sender_id)
+                ? { ...n, read: true }
+                : n
+            )
+          );
+          // Notify parent about all dismissed notifications
+          for (let i = 0; i < dismissedCount; i++) {
+            onNotificationRead();
+          }
+        } else {
+          // For non-message notifications, mark only the clicked one
+          await supabase
+            .from('notifications')
+            .update({ read: true })
+            .eq('id', notification.id);
+
+          setNotifications(prev =>
+            prev.map(n => n.id === notification.id ? { ...n, read: true } : n)
+          );
+          onNotificationRead();
+        }
       } catch (err) {
         console.error('Error marking notification as read:', err);
       }
@@ -105,6 +134,9 @@ export function NotificationDropdown({ onClose, onNotificationRead, onMarkAllAsR
         break;
       case 'watchlist_update':
         path = `/items/${notification.related_id}`;
+        break;
+      case 'welcome':
+        path = '/profile';
         break;
     }
 
@@ -143,6 +175,8 @@ export function NotificationDropdown({ onClose, onNotificationRead, onMarkAllAsR
         return <MessageCircle className="w-5 h-5 text-indigo-500" />;
       case 'watchlist_update':
         return <Star className="w-5 h-5 text-yellow-500" />;
+      case 'welcome':
+        return <UserPlus className="w-5 h-5 text-indigo-500" />;
       default:
         return <User className="w-5 h-5 text-gray-500" />;
     }
