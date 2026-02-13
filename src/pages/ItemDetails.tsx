@@ -122,9 +122,9 @@ function ItemDetails() {
       .subscribe();
 
     return () => {
-      subscription.unsubscribe();
+      supabase.removeChannel(subscription);
     };
-  }, [id, user]);
+  }, [id]);
 
   const handleStatusUpdate = async () => {
     if (!item || !user || user.id !== item.user_id) return;

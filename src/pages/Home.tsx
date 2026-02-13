@@ -196,36 +196,24 @@ function Home() {
 
     fetchItems();
 
-    // Subscribe to new items
+    // Subscribe to new items only — updates/deletes are handled by periodic data fetches.
+    // No row-level filter since this is the global home feed and we want all new items.
     const subscription = supabase
       .channel('public:items')
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: 'INSERT',
           schema: 'public',
           table: 'items'
         },
         (payload) => {
-          if (payload.eventType === 'INSERT') {
-            const newItem = payload.new as Item;
-            if (newItem.status === 'available') {
-              setItems(prev => [newItem, ...prev]);
-            } else if (newItem.status === 'traded') {
-              if (newItem.type === 'barter') {
-                setBarteredItems(prev => [newItem, ...prev.slice(0, 5)]);
-              }
-            }
-          } else if (payload.eventType === 'UPDATE') {
-            const updatedItem = payload.new as Item;
-            if (updatedItem.status === 'available') {
-              setItems(prev => [updatedItem, ...prev.filter(item => item.id !== updatedItem.id)]);
-              setBarteredItems(prev => prev.filter(item => item.id !== updatedItem.id));
-            } else if (updatedItem.status === 'traded') {
-              setItems(prev => prev.filter(item => item.id !== updatedItem.id));
-              if (updatedItem.type === 'barter') {
-                setBarteredItems(prev => [updatedItem, ...prev.filter(item => item.id !== updatedItem.id).slice(0, 5)]);
-              }
+          const newItem = payload.new as Item;
+          if (newItem.status === 'available') {
+            setItems(prev => [newItem, ...prev]);
+          } else if (newItem.status === 'traded') {
+            if (newItem.type === 'barter') {
+              setBarteredItems(prev => [newItem, ...prev.slice(0, 5)]);
             }
           }
         }
@@ -233,7 +221,7 @@ function Home() {
       .subscribe();
 
     return () => {
-      subscription.unsubscribe();
+      supabase.removeChannel(subscription);
     };
   }, [filters.latitude, filters.longitude, filters.radius]);
 

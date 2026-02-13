@@ -54,7 +54,7 @@ export function NotificationBell() {
 
     return () => {
       isMounted = false;
-      channel.unsubscribe();
+      supabase.removeChannel(channel);
       window.removeEventListener('notifications-updated', handleCustomUpdate);
       clearInterval(fallbackInterval);
     };

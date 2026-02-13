@@ -332,7 +332,7 @@ function Messages({ onUnreadCountChange, onUnreadOffersChange }: MessagesProps) 
       .subscribe();
 
     return () => {
-      subscription.unsubscribe();
+      supabase.removeChannel(subscription);
     };
   }, [user, onUnreadCountChange, onUnreadOffersChange]);
 

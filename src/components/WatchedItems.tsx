@@ -60,7 +60,7 @@ export function WatchedItems({ userId }: WatchedItemsProps) {
       .subscribe();
 
     return () => {
-      subscription.unsubscribe();
+      supabase.removeChannel(subscription);
     };
   }, [userId]);
 

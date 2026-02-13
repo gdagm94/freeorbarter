@@ -52,20 +52,16 @@ export function NotificationDropdown({ onClose, onNotificationRead, onMarkAllAsR
 
     fetchNotifications();
 
-    const channel = supabase
-      .channel(`notifications-dropdown-${user.id}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
-        () => fetchNotifications({ skipLoading: true })
-      )
-      .subscribe();
+    // Listen for the 'notifications-updated' DOM event dispatched by NotificationBell
+    // and other components instead of creating a duplicate Realtime subscription.
+    const handleUpdate = () => fetchNotifications({ skipLoading: true });
+    window.addEventListener('notifications-updated', handleUpdate);
 
     const fallbackInterval = setInterval(() => fetchNotifications({ skipLoading: true }), 60000);
 
     return () => {
       isMounted = false;
-      channel.unsubscribe();
+      window.removeEventListener('notifications-updated', handleUpdate);
       clearInterval(fallbackInterval);
     };
   }, [user]);

@@ -74,7 +74,7 @@ function Notifications() {
 
     return () => {
       isMounted = false;
-      channel.unsubscribe();
+      supabase.removeChannel(channel);
       clearInterval(fallbackInterval);
     };
   }, [user, authLoading, navigate, filter]);

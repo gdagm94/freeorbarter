@@ -79,7 +79,7 @@ export function useBlockStatus(currentUserId?: string, otherUserId?: string) {
       .subscribe();
 
     return () => {
-      channel.unsubscribe();
+      supabase.removeChannel(channel);
     };
   }, [currentUserId, otherUserId, refresh]);
 

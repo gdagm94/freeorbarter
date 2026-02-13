@@ -88,7 +88,7 @@ function App() {
 
     return () => {
       isMounted = false;
-      channel.unsubscribe();
+      supabase.removeChannel(channel);
       clearInterval(fallbackInterval);
     };
   }, [user]);
@@ -136,14 +136,14 @@ function App() {
             <Route path="/items/:id" element={<ItemDetails />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/users/:id" element={<UserProfile />} />
-            <Route 
-              path="/messages" 
+            <Route
+              path="/messages"
               element={
-                <Messages 
+                <Messages
                   onUnreadCountChange={setUnreadCount}
                   onUnreadOffersChange={setUnreadOffers}
                 />
-              } 
+              }
             />
             <Route path="/new-listing" element={<NewListing />} />
             <Route path="/history" element={<History />} />

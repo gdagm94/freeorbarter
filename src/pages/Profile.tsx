@@ -131,7 +131,7 @@ function Profile() {
 
     // Subscribe to changes in items
     const subscription = supabase
-      .channel('items')
+      .channel(`profile-items-${user?.id}`)
       .on(
         'postgres_changes',
         {
@@ -155,7 +155,7 @@ function Profile() {
       .subscribe();
 
     return () => {
-      subscription.unsubscribe();
+      supabase.removeChannel(subscription);
     };
   }, [user]);
 
