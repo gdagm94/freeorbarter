@@ -17,6 +17,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useDeviceInfo } from '../hooks/useDeviceInfo';
 import { useResponsiveStyles, getResponsivePadding } from '../utils/responsive';
 import { supabase } from '../lib/supabase';
+import HCaptcha, { HCaptchaHandle } from '../components/HCaptcha';
 
 const USERNAME_REGEX = /^[a-z0-9_.]{3,20}$/;
 const PROHIBITED_USERNAMES = ['admin', 'moderator', 'system', 'support', 'freeorbarter', 'null', 'undefined'];
@@ -31,6 +32,7 @@ export default function AuthScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
+  const captchaRef = useRef<HCaptchaHandle>(null);
 
   // Username validation state
   const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle');
@@ -133,13 +135,26 @@ export default function AuthScreen() {
     setLoading(true);
 
     try {
+      // Obtain CAPTCHA token (if sitekey is configured)
+      let captchaToken: string | undefined;
+      try {
+        captchaToken = await captchaRef.current?.show();
+      } catch {
+        // User cancelled or CAPTCHA failed — only block if sitekey is configured
+        if (process.env.EXPO_PUBLIC_HCAPTCHA_SITEKEY) {
+          Alert.alert('CAPTCHA Required', 'Please complete the CAPTCHA challenge to continue.');
+          setLoading(false);
+          return;
+        }
+      }
+
       if (isLogin) {
-        const { error } = await signIn(email, password);
+        const { error } = await signIn(email, password, captchaToken);
         if (error) {
           Alert.alert('Sign In Failed', error.message);
         }
       } else {
-        const { error } = await signUp(email, password, fullName, username);
+        const { error } = await signUp(email, password, fullName, username, captchaToken);
         if (error) {
           Alert.alert('Sign Up Failed', error.message);
         } else {
@@ -414,6 +429,7 @@ export default function AuthScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <HCaptcha ref={captchaRef} />
     </SafeAreaView>
   );
 }

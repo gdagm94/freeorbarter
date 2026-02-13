@@ -1,8 +1,11 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import HCaptcha from '@hcaptcha/react-hcaptcha';
 import { supabase } from '../lib/supabase';
 import { PASSWORD_RESET_REDIRECT } from '../lib/config';
 import { X, Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
+
+const HCAPTCHA_SITEKEY = import.meta.env.VITE_HCAPTCHA_SITEKEY as string;
 
 const USERNAME_REGEX = /^[a-z0-9_.]{3,20}$/;
 const PROHIBITED_USERNAMES = ['admin', 'moderator', 'system', 'support', 'freeorbarter', 'null', 'undefined'];
@@ -20,7 +23,9 @@ export function Auth({ onClose }: AuthProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [confirmationSent, setConfirmationSent] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
+  const captchaRef = useRef<HCaptcha>(null);
 
   // Username validation state
   const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle');
@@ -157,6 +162,7 @@ export function Auth({ onClose }: AuthProps) {
           email: formData.email,
           password: formData.password,
           options: {
+            captchaToken: captchaToken ?? undefined,
             data: {
               username: formData.username.toLowerCase(),
               full_name: formData.name,
@@ -172,6 +178,7 @@ export function Auth({ onClose }: AuthProps) {
         const { error: signInError } = await supabase.auth.signInWithPassword({
           email: formData.email,
           password: formData.password,
+          options: { captchaToken: captchaToken ?? undefined },
         });
         if (signInError) throw signInError;
         onClose();
@@ -180,6 +187,8 @@ export function Auth({ onClose }: AuthProps) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
+      setCaptchaToken(null);
+      captchaRef.current?.resetCaptcha();
     }
   };
 
@@ -338,8 +347,8 @@ export function Auth({ onClose }: AuthProps) {
                     />
                     {formData.username && (
                       <p className={`mt-1 text-sm ${usernameStatus === 'available' ? 'text-green-600' :
-                          usernameStatus === 'checking' ? 'text-gray-500' :
-                            'text-red-600'
+                        usernameStatus === 'checking' ? 'text-gray-500' :
+                          'text-red-600'
                         }`}>
                         {usernameStatus === 'checking' && '⏳ Checking availability…'}
                         {usernameStatus === 'available' && '✅ Username is available'}
@@ -470,10 +479,21 @@ export function Auth({ onClose }: AuthProps) {
                   </div>
                 </>
               )}
+              {HCAPTCHA_SITEKEY && (
+                <div className="flex justify-center my-3">
+                  <HCaptcha
+                    ref={captchaRef}
+                    sitekey={HCAPTCHA_SITEKEY}
+                    onVerify={(token) => setCaptchaToken(token)}
+                    onExpire={() => setCaptchaToken(null)}
+                    onError={() => setCaptchaToken(null)}
+                  />
+                </div>
+              )}
               <button
                 type="submit"
                 className="w-full btn-primary"
-                disabled={loading}
+                disabled={loading || (!!HCAPTCHA_SITEKEY && !captchaToken)}
               >
                 {loading ? 'Loading...' : isSignUp ? 'Sign Up' : 'Sign In'}
               </button>

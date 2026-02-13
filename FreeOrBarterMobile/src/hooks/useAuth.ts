@@ -85,19 +85,21 @@ export function useAuth() {
     };
   }, []);
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = async (email: string, password: string, captchaToken?: string) => {
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
+      options: captchaToken ? { captchaToken } : undefined,
     });
     return { error };
   };
 
-  const signUp = async (email: string, password: string, fullName: string, username: string) => {
+  const signUp = async (email: string, password: string, fullName: string, username: string, captchaToken?: string) => {
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
+        ...(captchaToken ? { captchaToken } : {}),
         data: {
           username: username.toLowerCase(),
           full_name: fullName,
