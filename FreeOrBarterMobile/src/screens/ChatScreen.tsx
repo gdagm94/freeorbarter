@@ -865,13 +865,12 @@ export default function ChatScreen() {
 
       // Create a unique filename
       const fileName = `voice_${Date.now()}.m4a`;
-      const filePath = `message-files/${fileName}`;
 
       // Upload to Supabase Storage
       const { data, error } = await supabase.storage
         .from('message-files')
-        .upload(filePath, arrayBuffer, {
-          contentType: 'audio/m4a',
+        .upload(fileName, arrayBuffer, {
+          contentType: 'audio/mp4',
         });
 
       if (error) {
@@ -883,7 +882,7 @@ export default function ChatScreen() {
       // Get public URL
       const { data: urlData } = supabase.storage
         .from('message-files')
-        .getPublicUrl(filePath);
+        .getPublicUrl(fileName);
 
       // Insert message
       const { error: messageError } = await supabase
@@ -894,7 +893,7 @@ export default function ChatScreen() {
           content: `🎤 Voice message (${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')})`,
           file_url: urlData.publicUrl,
           file_name: fileName,
-          file_type: 'audio/m4a',
+          file_type: 'audio/mp4',
           voice_duration: duration,
           item_id: itemId || null,
           read: false,

@@ -386,17 +386,17 @@ export function FriendMessageDialog({ friendId, friendName, friendAvatar, onClos
     setSending(true);
     try {
 
-      const fileExt = 'm4a';
+      const fileExt = 'webm';
       const fileName = `voice_${Date.now()}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
-        .from('voice-messages')
+        .from('message-files')
         .upload(fileName, audioBlob);
 
       if (uploadError) throw uploadError;
 
       const { data: { publicUrl } } = supabase.storage
-        .from('voice-messages')
+        .from('message-files')
         .getPublicUrl(fileName);
 
       const { data, error } = await supabase
@@ -405,7 +405,8 @@ export function FriendMessageDialog({ friendId, friendName, friendAvatar, onClos
           content: `🎤 Voice message (${Math.round(duration)}s)`,
           file_url: publicUrl,
           file_name: fileName,
-          file_type: 'audio/m4a',
+          file_type: 'audio/webm',
+          voice_duration: duration,
           sender_id: user.id,
           receiver_id: friendId,
           item_id: null,
@@ -426,10 +427,12 @@ export function FriendMessageDialog({ friendId, friendName, friendAvatar, onClos
 
       setMessages(prev => [...prev, data]);
       clearDrafts();
+      setShowVoiceMessage(false);
 
       // Pusher trigger removed
     } catch (err) {
       console.error('Error sending voice message:', err);
+      alert('Failed to send voice message. Please try again.');
     } finally {
       setSending(false);
     }
